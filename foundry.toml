@@ -1,6 +1,47 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+libs = ["dependencies"]
+gas_reports = ['*']
+
+
+[fuzz]
+runs = 1000
+max_test_rejects = 65536
+seed = '0x1'
+dictionary_weight = 40
+include_storage = true
+include_push_bytes = true
+extra_output = ["storageLayout", "metadata"]
+
+[invariant]
+runs = 256
+depth = 16
+fail_on_revert = true
+
+[fmt]
+bracket_spacing = true
+int_types = "long"
+line_length = 120
+multiline_func_header = "all"
+number_underscore = "thousands"
+quote_style = "double"
+tab_width = 4
+wrap_comments = true
+
+[rpc_endpoints]
+mainnet = "${RPC_MAINNET}"
+goerli = "${RPC_GOERLI}"
+polygon = "${RPC_POLYGON}"
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_MAINNET_KEY}" }
+goerli = { key = "${ETHERSCAN_API_KEY}" }
+polygon = { key = "${ETHERSCAN_API_KEY}" }
+
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config
+[dependencies]
+forge-std = { version = "1.9.2", url = "https://soldeer-revisions.s3.amazonaws.com/forge-std/1_9_2_06-08-2024_17:31:25_forge-std-1.9.2.zip" }
+solady = "0.0.236"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
