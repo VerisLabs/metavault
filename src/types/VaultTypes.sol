@@ -9,6 +9,4 @@ struct VaultData {
     uint256 totalAssetsWithdrawable;
     uint256 debtRatio;
     uint256 totalDebt;
-    uint256 totalGain;
-    uint256 shareBalance;
 }
