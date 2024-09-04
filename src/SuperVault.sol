@@ -1,7 +1,15 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.21;
 
-import {ERC4626, OwnableRoles, FixedPointMathLib, VaultData, ISuperPositions, IBaseRouter, ISuperformFactory} from "./lib/Index.sol";
+import {
+    ERC4626,
+    OwnableRoles,
+    FixedPointMathLib,
+    VaultData,
+    ISuperPositions,
+    IBaseRouter,
+    ISuperformFactory
+} from "./lib/Index.sol";
 
 /// @title SuperVault
 /// @author Unlockd
@@ -64,35 +72,18 @@ contract SuperVault is ERC4626, OwnableRoles {
     /// Note: Any unfavorable discrepancy between `convertToShares` and `previewWithdraw` SHOULD
     /// be considered slippage in share price or some other type of condition,
     /// meaning the depositor will lose assets by depositing.
-    function previewWithdraw(
-        uint256 assets
-    ) public view override returns (uint256 shares) {
+    function previewWithdraw(uint256 assets) public view override returns (uint256 shares) {
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
-            return
-                _eitherIsZero_(assets, supply)
-                    ? _initialConvertToShares(assets)
-                    : FixedPointMathLib.fullMulDivUp(
-                        assets,
-                        supply,
-                        totalAssetsWithdrawable()
-                    );
+            return _eitherIsZero_(assets, supply)
+                ? _initialConvertToShares(assets)
+                : FixedPointMathLib.fullMulDivUp(assets, supply, totalAssetsWithdrawable());
         }
         uint256 o = _decimalsOffset();
         if (o == uint256(0)) {
-            return
-                FixedPointMathLib.fullMulDivUp(
-                    assets,
-                    totalSupply() + 1,
-                    _inc_(totalAssetsWithdrawable())
-                );
+            return FixedPointMathLib.fullMulDivUp(assets, totalSupply() + 1, _inc_(totalAssetsWithdrawable()));
         }
-        return
-            FixedPointMathLib.fullMulDivUp(
-                assets,
-                totalSupply() + 10 ** o,
-                _inc_(totalAssetsWithdrawable())
-            );
+        return FixedPointMathLib.fullMulDivUp(assets, totalSupply() + 10 ** o, _inc_(totalAssetsWithdrawable()));
     }
 
     /// @dev Allows an on-chain or off-chain user to simulate the effects of their redemption
@@ -109,72 +100,36 @@ contract SuperVault is ERC4626, OwnableRoles {
     /// Note: Any unfavorable discrepancy between `convertToAssets` and `previewRedeem` SHOULD
     /// be considered slippage in share price or some other type of condition,
     /// meaning the depositor will lose assets by depositing.
-    function previewRedeem(
-        uint256 shares
-    ) public view override returns (uint256 assets) {
+    function previewRedeem(uint256 shares) public view override returns (uint256 assets) {
         assets = _convertToAssetsWithdrawable(shares);
     }
 
-    function _convertToAssetsWithdrawable(
-        uint256 shares
-    ) private view returns (uint256) {
+    function _convertToAssetsWithdrawable(uint256 shares) private view returns (uint256) {
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
-            return
-                supply == uint256(0)
-                    ? _initialConvertToAssets(shares)
-                    : FixedPointMathLib.fullMulDiv(
-                        shares,
-                        totalAssetsWithdrawable(),
-                        supply
-                    );
+            return supply == uint256(0)
+                ? _initialConvertToAssets(shares)
+                : FixedPointMathLib.fullMulDiv(shares, totalAssetsWithdrawable(), supply);
         }
         uint256 o = _decimalsOffset();
         if (o == uint256(0)) {
-            return
-                FixedPointMathLib.fullMulDiv(
-                    shares,
-                    totalAssetsWithdrawable() + 1,
-                    _inc_(totalSupply())
-                );
+            return FixedPointMathLib.fullMulDiv(shares, totalAssetsWithdrawable() + 1, _inc_(totalSupply()));
         }
-        return
-            FixedPointMathLib.fullMulDiv(
-                shares,
-                totalAssetsWithdrawable() + 1,
-                totalSupply() + 10 ** o
-            );
+        return FixedPointMathLib.fullMulDiv(shares, totalAssetsWithdrawable() + 1, totalSupply() + 10 ** o);
     }
 
-    function _convertToSharesWithdrawable(
-        uint256 assets
-    ) private view returns (uint256) {
+    function _convertToSharesWithdrawable(uint256 assets) private view returns (uint256) {
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
-            return
-                _eitherIsZero_(assets, supply)
-                    ? _initialConvertToShares(assets)
-                    : FixedPointMathLib.fullMulDiv(
-                        assets,
-                        supply,
-                        totalAssetsWithdrawable()
-                    );
+            return _eitherIsZero_(assets, supply)
+                ? _initialConvertToShares(assets)
+                : FixedPointMathLib.fullMulDiv(assets, supply, totalAssetsWithdrawable());
         }
         uint256 o = _decimalsOffset();
         if (o == uint256(0)) {
-            return
-                FixedPointMathLib.fullMulDiv(
-                    assets,
-                    totalSupply() + 1,
-                    _inc_(totalAssetsWithdrawable())
-                );
+            return FixedPointMathLib.fullMulDiv(assets, totalSupply() + 1, _inc_(totalAssetsWithdrawable()));
         }
-        return
-            FixedPointMathLib.fullMulDiv(
-                assets,
-                totalSupply() + 10 ** o,
-                _inc_(totalAssetsWithdrawable())
-            );
+        return FixedPointMathLib.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(totalAssetsWithdrawable()));
     }
 
     function totalAssets() public view override returns (uint256 assets) {
@@ -183,7 +138,7 @@ contract SuperVault is ERC4626, OwnableRoles {
 
     // TODO: loop through the vaults to move the money
     function invest() external onlyRoles(INVESTOR_ROLE) {
-        for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) {}
+        for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) { }
     }
 
     struct Report {
@@ -198,11 +153,9 @@ contract SuperVault is ERC4626, OwnableRoles {
         for (uint256 i = 0; i < reports.length; i++) {
             Report memory _report = reports[i];
             VaultData memory data = vaults[_report.vault];
-            int256 totalAssetsDelta = int256(_report.totalAssets) -
-                int256(data.totalAssets);
-            int256 totalAssetsWithdrawableDelta = int256(
-                _report.totalAssetsWithdrawable
-            ) - int256(data.totalAssetsWithdrawable);
+            int256 totalAssetsDelta = int256(_report.totalAssets) - int256(data.totalAssets);
+            int256 totalAssetsWithdrawableDelta =
+                int256(_report.totalAssetsWithdrawable) - int256(data.totalAssetsWithdrawable);
 
             if (totalAssetsDelta > 0) {
                 _totalAssets += uint256(totalAssetsDelta);
@@ -211,13 +164,9 @@ contract SuperVault is ERC4626, OwnableRoles {
             }
 
             if (totalAssetsWithdrawableDelta > 0) {
-                _totalAssetsWithdrawable += uint256(
-                    totalAssetsWithdrawableDelta
-                );
+                _totalAssetsWithdrawable += uint256(totalAssetsWithdrawableDelta);
             } else {
-                _totalAssetsWithdrawable -= uint256(
-                    -totalAssetsWithdrawableDelta
-                );
+                _totalAssetsWithdrawable -= uint256(-totalAssetsWithdrawableDelta);
             }
             vaults[_report.vault].totalAssets = _report.totalAssets;
             vaults[_report.vault].totalAssets = _report.totalAssets;
@@ -225,12 +174,7 @@ contract SuperVault is ERC4626, OwnableRoles {
     }
 
     // TODO: add vault to withdrawal queue
-    function addVault(
-        uint16 chain,
-        uint256 superformId,
-        uint256 debtRatio,
-        address vault
-    ) external {
+    function addVault(uint16 chain, uint256 superformId, uint256 debtRatio, address vault) external {
         if (vaults[vault].vaultAddress == address(0)) revert();
         if (_totalDebt / (_totalDebt + _totalIdle) + debtRatio > MAX_BPS) {
             revert();
@@ -260,17 +204,14 @@ contract SuperVault is ERC4626, OwnableRoles {
     }
 
     // TODO: set the oracle for a chain
-    function setOracle(uint16 chain, address oracle) external {}
+    function setOracle(uint16 chain, address oracle) external { }
 
     function totalAssetsWithdrawable() public view returns (uint256) {
         return _totalAssetsWithdrawable;
     }
 
     /// @dev Hook that is called after any deposit or mint.
-    function _afterDeposit(
-        uint256 assets,
-        uint256 /*uint256 shares*/
-    ) internal override {
+    function _afterDeposit(uint256 assets, uint256 /*uint256 shares*/ ) internal override {
         _totalIdle += assets;
         _totalAssets += assets;
         _totalAssetsWithdrawable += assets;
@@ -287,10 +228,7 @@ contract SuperVault is ERC4626, OwnableRoles {
     }
 
     /// @dev Private helper to return if either value is zero.
-    function _eitherIsZero_(
-        uint256 a,
-        uint256 b
-    ) private pure returns (bool result) {
+    function _eitherIsZero_(uint256 a, uint256 b) private pure returns (bool result) {
         /// @solidity memory-safe-assembly
         assembly {
             result := or(iszero(a), iszero(b))
