@@ -1,29 +1,29 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.21;
 
-import {
-    ERC7540,
-    SafeTransferLib,
-    OwnableRoles,
-    ReentrancyGuard,
-    FixedPointMathLib,
-    VaultData,
-    VaultReport,
-    ISuperPositions,
-    IBaseRouter,
-    ISuperformFactory
-} from "./lib/Index.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
+import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { ERC7540, ReentrancyGuard } from "./lib/Lib.sol";
+import { ISuperPositions, IBaseRouter, ISuperformFactory } from "./interfaces/Lib.sol";
+import { VaultData, VaultReport } from "./types/Lib.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
 /// notice description
 contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
-    // EVENTS
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           EVENTS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /// @dev `keccak256(bytes("Withdraw(address,address,address,uint256,uint256)"))`.
     uint256 private constant _WITHDRAW_EVENT_SIGNATURE =
         0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db;
 
-    //  CONSTANTS
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           CONSTANTS                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     uint256 public constant WITHDRAWAL_QUEUE_SIZE = 30;
     uint256 public constant MAX_BPS = 10_000;
     uint256 public constant ADMIN_ROLE = _ROLE_0;
@@ -31,22 +31,44 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     uint256 public constant ORACLE_ROLE = _ROLE_2;
     uint256 public constant INVESTOR_ROLE = _ROLE_3;
 
-    // STORAGE
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           STORAGE                          */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice maps the assets and data of each allocated vault
     mapping(address vaultAddress => VaultData) public vaults;
+    /// @notice the ERC4626 oracle of each chain
     mapping(uint16 chain => address) public oracles;
+    /// @notice Maximum number of vaults the vault can invest in
     address[WITHDRAWAL_QUEUE_SIZE] public withdrawalQueue;
+    /// @notice Cached value of total assets managed by the vault
     uint256 private _totalAssets;
+    /// @notice Underlying asset
     address private immutable _asset;
+    /// @notice ERC20 name
     string private _name;
+    /// @notice ERC20 symbol
     string private _symbol;
+    /// @notice Cached value of total assets in this vault
     uint256 private _totalIdle;
+    /// @notice Cached value of total allocated assets
     uint256 private _totalDebt;
+    /// @notice Protocol fee
     uint256 managementFee;
+    /// @notice Fee receiver
     address treasury;
+    /// @notice Superform ERC1155 Superpositions
     ISuperPositions superPositions;
+    /// @notice Superform Router
     IBaseRouter vaultRouter;
+    /// @notice Superform Factory to validate superforms
     ISuperformFactory factory;
+    /// @notice Wether the vault is paused
     bool emergencyShutdown;
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           MODIFIERS                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     modifier noEmergencyShutdown() {
         if (emergencyShutdown) {
@@ -73,65 +95,34 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return _asset;
     }
 
-    function deposit(uint256 assets, address to) public override noEmergencyShutdown returns (uint256 shares) {
-        return super.deposit(assets, to);
-    }
-
-    function mint(uint256 shares, address to) public override noEmergencyShutdown returns (uint256 assets) {
-        return super.mint(shares, to);
-    }
-
-    /// @dev Burns `shares` from `owner` and sends exactly `assets` of underlying tokens to `to`.
-    ///
-    /// - MUST emit the {Withdraw} event.
-    /// - MAY support an additional flow in which the underlying tokens are owned by the Vault
-    ///   contract before the withdraw execution, and are accounted for during withdraw.
-    /// - MUST revert if all of `assets` cannot be withdrawn, such as due to withdrawal limit,
-    ///   slippage, insufficient balance, etc.
-    ///
-    /// Note: Some implementations will require pre-requesting to the Vault before a withdrawal
-    /// may be performed. Those methods should be performed separately.
-    function withdraw(
+    function requestDeposit(
         uint256 assets,
-        address to,
+        address controller,
         address owner
     )
         public
         override
-        nonReentrant
-        returns (uint256 shares)
+        noEmergencyShutdown
+        returns (uint256 requestId)
     {
-        if (assets > maxWithdraw(owner)) revert WithdrawMoreThanMax();
-        shares = previewWithdraw(assets);
-        _withdraw(msg.sender, to, owner, assets, shares);
+        requestId = super.requestDeposit(assets, controller, owner);
+        _fulfillDepositRequest(controller, assets, convertToShares(assets));
     }
 
-    /// @dev Burns exactly `shares` from `owner` and sends `assets` of underlying tokens to `to`.
-    ///
-    /// - MUST emit the {Withdraw} event.
-    /// - MAY support an additional flow in which the underlying tokens are owned by the Vault
-    ///   contract before the redeem execution, and are accounted for during redeem.
-    /// - MUST revert if all of shares cannot be redeemed, such as due to withdrawal limit,
-    ///   slippage, insufficient balance, etc.
-    ///
-    /// Note: Some implementations will require pre-requesting to the Vault before a redeem
-    /// may be performed. Those methods should be performed separately.
-    function redeem(uint256 shares, address to, address owner) public override nonReentrant returns (uint256 assets) {
-        // TODO: revert function
-        if (shares > maxRedeem(owner)) revert RedeemMoreThanMax();
-        return _redeem(msg.sender, to, owner, shares);
+    function deposit(uint256 assets, address to) public override returns (uint256 shares) {
+        return deposit(assets, to , msg.sender);
     }
 
-    function _redeem(address by, address to, address owner, uint256 shares) private returns (uint256 assets) {
-        if (shares == type(uint256).max) shares = maxRedeem(owner);
-        if (shares > maxRedeem(owner)) {
-            assembly ("memory-safe") {
-                mstore(0x00, 0x4656425a) // `RedeemMoreThanMax()`.
-                revert(0x1c, 0x04)
-            }
-        }
-        // substract losses to the total assets
-        assets = _redeem(msg.sender, to, owner, shares);
+    function deposit(uint256 assets, address to, address controller) public override noEmergencyShutdown returns (uint256 shares) {
+        return super.deposit(assets, to, controller);
+    }
+
+    function mint(uint256 shares, address to) public override returns (uint256 assets) {
+        return mint(shares, to , msg.sender);
+    }
+
+    function mint(uint256 shares, address to, address controller) public override noEmergencyShutdown returns (uint256 assets) {
+        return super.mint(shares, to , controller);
     }
 
     /// @dev returns the total assets held by the vault
@@ -196,7 +187,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     // TODO: set the oracle for a chain
-    function setOracle(uint16 chain, address oracle) external { }
+    function setOracle(uint16 chain, address oracle) external onlyRoles(ADMIN_ROLE) {
+        oracles[chain] = oracle;
+    }
 
     /// @dev Hook that is called after any deposit or mint.
     function _afterDeposit(uint256 assets, uint256 /*uint256 shares*/ ) internal override {

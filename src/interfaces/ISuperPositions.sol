@@ -2,7 +2,7 @@
 pragma solidity 0.8.21;
 
 import { IERC1155A } from "./IERC1155A.sol";
-import { AMBMessage } from "../types/SuperformTypes.sol";
+import { AMBMessage } from "../types/Lib.sol";
 
 /// @title ISuperPositions
 /// @dev Interface for SuperPositions
