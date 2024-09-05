@@ -10,3 +10,10 @@ struct VaultData {
     uint256 debtRatio;
     uint256 totalDebt;
 }
+
+struct VaultReport {
+    uint16 chainId;
+    address vault;
+    uint256 totalAssets;
+    uint256 totalAssetsWithdrawable;
+}
