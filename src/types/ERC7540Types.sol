@@ -31,4 +31,8 @@ library ERC7540Lib {
     function sub(ERC7540_Request self, uint256 x) internal pure returns (ERC7540_Request) {
         return ERC7540_Request.wrap(ERC7540_Request.unwrap(self) - x);
     }
+
+    function unwrap(ERC7540_Request self) internal pure returns (uint256) {
+        return ERC7540_Request.unwrap(self);
+    }
 }

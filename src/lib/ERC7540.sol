@@ -176,7 +176,6 @@ abstract contract ERC7540 is ERC4626 {
         return _deposit(assets, receiver, controller);
     }
 
-
     /// @dev Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
     ///
     /// - MUST emit the Deposit event.
@@ -214,6 +213,22 @@ abstract contract ERC7540 is ERC4626 {
         if (shares > maxWithdraw(controller)) revert WithdrawMoreThanMax();
         _validateController(controller);
         return _withdraw(assets, to, controller);
+    }
+
+    function pendingRedeemRequest(address controller) public view returns (uint256) {
+        return _pendingRedeemRequest[controller].unwrap();
+    }
+
+    function pendingDepositRequest(address controller) public view returns (uint256) {
+        return _pendingDepositRequest[controller].unwrap();
+    }
+
+    function claimableDepositRequest(address controller) public view returns (uint256) {
+        return maxDeposit(controller);
+    }
+
+    function claimableRedeemRequest(address controller) public view returns (uint256) {
+        return maxRedeem(controller);
     }
 
     function _deposit(uint256 assets, address receiver, address controller) internal virtual returns (uint256 shares) {
@@ -276,7 +291,7 @@ abstract contract ERC7540 is ERC4626 {
         returns (uint256 requestId)
     {
         source;
-        _burn(owner, shares);
+        _transfer(owner, address(this), shares);
         _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].add(shares);
         emit RedeemRequest(controller, owner, requestId, source, shares);
         return 0;
@@ -315,10 +330,10 @@ abstract contract ERC7540 is ERC4626 {
         _pendingDepositRequest[controller] = _pendingDepositRequest[controller].sub(assetsFulfilled);
         _claimableDepositRequest[controller].assets += assetsFulfilled;
         _claimableDepositRequest[controller].shares += sharesMinted;
-
     }
 
     /// @dev Hook that is called when processing a redeem request and make it claimable.
+    /// @dev It assumes user transferred its shares to the contract when requesting a redeem
     function _fulfillRedeemRequest(
         address controller,
         uint256 sharesFulfilled,
@@ -327,6 +342,7 @@ abstract contract ERC7540 is ERC4626 {
         internal
         virtual
     {
+        _burn(address(this), sharesFulfilled);
         _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
         _claimableRedeemRequest[controller].assets += assetsWithdrawn;
         _claimableRedeemRequest[controller].shares += sharesFulfilled;
