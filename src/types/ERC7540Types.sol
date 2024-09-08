@@ -1,3 +1,6 @@
+/// SPDX-License-Identifer: MIT
+pragma solidity 0.8.21;
+
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 
 type ERC7540_Request is uint256;

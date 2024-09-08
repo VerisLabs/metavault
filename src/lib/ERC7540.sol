@@ -102,7 +102,7 @@ abstract contract ERC7540 is ERC4626 {
 
     /// @dev The redeem amount is limited by the claimable redeem requests of the user
     function maxRedeem(address owner) public view virtual override returns (uint256 shares) {
-        return _claimableDepositRequest[owner].shares;
+        return _claimableRedeemRequest[owner].shares;
     }
 
     /// @dev Transfers assets from sender into the Vault and submits a Request for asynchronous deposit.
@@ -251,7 +251,15 @@ abstract contract ERC7540 is ERC4626 {
         _mint(receiver, shares);
     }
 
-    function _redeem(uint256 shares, address receiver, address controller) internal virtual returns (uint256 assets) { }
+    function _redeem(uint256 shares, address receiver, address controller) internal virtual returns (uint256 assets) {
+        ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
+        assets = claimable.convertToAssets(shares);
+        unchecked {
+            _claimableRedeemRequest[controller].assets -= assets;
+            _claimableRedeemRequest[controller].shares -= shares;
+        }
+        asset().safeTransfer(receiver, assets);
+    }
 
     function _withdraw(
         uint256 assets,
@@ -261,7 +269,15 @@ abstract contract ERC7540 is ERC4626 {
         internal
         virtual
         returns (uint256 shares)
-    { }
+    {
+        ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
+        shares = claimable.convertToSharesUp(assets);
+        unchecked {
+            _claimableRedeemRequest[controller].assets -= assets;
+            _claimableRedeemRequest[controller].shares -= shares;
+        }
+        asset().safeTransfer(receiver, assets);
+    }
 
     function _requestDeposit(
         uint256 assets,
@@ -333,11 +349,12 @@ abstract contract ERC7540 is ERC4626 {
     }
 
     /// @dev Hook that is called when processing a redeem request and make it claimable.
+    /// @dev Hook that is called when processing a redeem request and make it claimable.
     /// @dev It assumes user transferred its shares to the contract when requesting a redeem
     function _fulfillRedeemRequest(
-        address controller,
         uint256 sharesFulfilled,
-        uint256 assetsWithdrawn
+        uint256 assetsWithdrawn,
+        address controller
     )
         internal
         virtual
