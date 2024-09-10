@@ -356,6 +356,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     // TODO: loop through the vaults to move the money
+    // Do both needed deposits and withdrawals
     function allocateFunds() external onlyRoles(INVESTOR_ROLE) {
         AllocateCache memory cache;
         _prepareAllocationRoute(cache);
@@ -674,8 +675,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             _burn(address(this), shares);
             _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, controller);
         } else {
-            _burn(owner, shares);
-            asset().safeTransfer(receiver, cache.totalClaimableWithdraw);
+          //  _burn(owner, shares);
+           // asset().safeTransfer(receiver, cache.totalClaimableWithdraw);
         }
     }
 
@@ -904,7 +905,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         address receiver
     )
         internal
-        returns (uint256 withdrawn)
     {
         // Request
         SingleDirectSingleVaultStateReq memory params = SingleDirectSingleVaultStateReq({
@@ -931,7 +931,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         address receiver
     )
         internal
-        returns (uint256 withdrawn)
     {
         uint256 len = superformIds.length;
         uint256[] memory emptyUint256Array = _getEmptyUint256Array(len);

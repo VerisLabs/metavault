@@ -359,7 +359,6 @@ abstract contract ERC7540 is ERC4626 {
         internal
         virtual
     {
-        _burn(address(this), sharesFulfilled);
         _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
         _claimableRedeemRequest[controller].assets += assetsWithdrawn;
         _claimableRedeemRequest[controller].shares += sharesFulfilled;
