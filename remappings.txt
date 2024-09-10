@@ -1,3 +1,6 @@
 forge-std/=dependencies/forge-std-1.9.2/src
 solady/=dependencies/solady-0.0.236/src
-types/=types/Lib.sol
+types/=src/types/
+crosschain/=src/crosschain/
+lib/=src/lib/
+interfaces/=src/interfaces/

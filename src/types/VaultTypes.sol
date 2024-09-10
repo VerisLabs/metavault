@@ -24,5 +24,5 @@ library VaultLib {
 struct VaultReport {
     uint64 chainId;
     uint192 sharePrice;
-    uint256 superformId;
+    address vaultAddress;
 }

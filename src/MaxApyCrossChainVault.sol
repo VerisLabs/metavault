@@ -5,9 +5,11 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
-import { ERC7540, ReentrancyGuard } from "./lib/Lib.sol";
-import { ISuperPositions, IBaseRouter, ISuperformFactory } from "./interfaces/Lib.sol";
-import "./types/Lib.sol";
+import { LibClone } from "solady/utils/LibClone.sol";
+import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
+import { ISuperPositions, IBaseRouter, ISuperformFactory } from "interfaces/Lib.sol";
+import { ERC20Receiver } from "crosschain/Lib.sol";
+import "types/Lib.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
@@ -35,12 +37,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     uint256 public constant ORACLE_ROLE = _ROLE_2;
     uint256 public constant INVESTOR_ROLE = _ROLE_3;
     uint256 public constant RELAYER_ROLE = _ROLE_4;
-
-    uint64 public constant THIS_CHAIN_ID = 137;
+    uint24 public constant REQUEST_REDEEM_DELAY = 1 days;
+    uint64 public immutable THIS_CHAIN_ID;
     uint256 public constant N_CHAINS = 7;
     uint64[N_CHAINS] public DST_CHAINS = [
         1, // Ethereum Mainnet
-        THIS_CHAIN_ID, // Polygon
+        137, // Polygon
         56, // Bnb
         10, // Optimism
         8453, // Base
@@ -76,11 +78,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Underlying asset
     address private immutable _asset;
     /// @notice Superform ERC1155 Superpositions
-    ISuperPositions private _superPositions;
+    ISuperPositions private immutable _superPositions;
     /// @notice Superform Router
-    IBaseRouter private _vaultRouter;
+    IBaseRouter private immutable _vaultRouter;
     /// @notice Superform Factory to validate superforms
-    ISuperformFactory private _factory;
+    ISuperformFactory private immutable _factory;
     /// @notice ERC20 name
     string private _name;
     /// @notice ERC20 symbol
@@ -92,8 +94,17 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Maximum number of vaults the vault can invest in
     uint256[WITHDRAWAL_QUEUE_SIZE] public withdrawalQueue;
     /// @notice Timestamp of deposit lock
-    mapping(address => uint256) lockCheckpoint;
-
+    mapping(address => uint256) depositLockCheckPoint;
+    /// @notice Receiver delegation for withdrawals
+    mapping(address => address) private _receivers;
+    /// @notice Implementation contract of the receiver contract
+    address public receiverImplementation;
+    /// @notice Timestamp of deposit lock
+    mapping(address => uint256) private _requestRedeemLockCheckPoint;
+    /// @notice Default config for redeem requests
+    uint8[] public defaultAmbIds;
+    /// @notice Inverse mapping vault => superformId
+    mapping(address => uint256) _vaultToSuperformId;
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -110,19 +121,27 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         string memory _name_,
         string memory _symbol_,
         uint16 _managementFee,
-        uint24 _sharesLockTime
+        uint24 _sharesLockTime,
+        ISuperPositions _superPositions_,
+        IBaseRouter _vaultRouter_,
+        ISuperformFactory _factory_
     ) {
         _asset = _asset_;
         _name = _name_;
         _symbol = _symbol_;
         managementFee = _managementFee;
         sharesLockTime = _sharesLockTime;
+        _factory = _factory_;
+        _superPositions = _superPositions_;
+        _vaultRouter = _vaultRouter_;
         (bool success, uint8 result) = _tryGetAssetDecimals(_asset_);
         _decimals = success ? result : _DEFAULT_UNDERLYING_DECIMALS;
+        THIS_CHAIN_ID = uint64(block.chainid);
         for (uint256 i = 0; i != N_CHAINS; i++) {
             chainIndexes[DST_CHAINS[i]] = i;
         }
         _grantRoles(msg.sender, ADMIN_ROLE);
+        receiverImplementation = address(new ERC20Receiver(_asset_));
     }
 
     function name() public view override returns (string memory) {
@@ -218,10 +237,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     function _lockShares(address to, uint256 sharesBalance, uint256 newShares) internal {
         uint256 newBalance = sharesBalance + newShares;
         if (sharesBalance == 0) {
-            lockCheckpoint[to] = block.timestamp;
+            depositLockCheckPoint[to] = block.timestamp;
         } else {
-            lockCheckpoint[to] =
-                (lockCheckpoint[to] * sharesBalance / newBalance) + (block.timestamp * newShares / newBalance);
+            depositLockCheckPoint[to] =
+                (depositLockCheckPoint[to] * sharesBalance / newBalance) + (block.timestamp * newShares / newBalance);
         }
     }
 
@@ -237,7 +256,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _checkSharesLocked(controller);
         requestId = super.requestRedeem(shares, controller, owner);
         if (autoPilot) {
-            _processRedeemRequest(shares, controller, owner, owner, true);
+            _processRedeemRequest(shares, controller, owner, _receiver(controller), true);
         }
     }
 
@@ -251,11 +270,32 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         nonReentrant
         returns (uint256 assets)
     {
+        ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
+        uint256 claimableXChain = receiverContract.balance();
+        receiverContract.pull(claimableXChain);
+        _fulfillRedeemRequest(pendingRedeemRequest(controller), claimableXChain, controller);
         return super.redeem(shares, receiver, controller);
     }
 
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address controller
+    )
+        public
+        override
+        nonReentrant
+        returns (uint256 shares)
+    {
+        ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
+        uint256 claimableXChain = receiverContract.balance();
+        receiverContract.pull(claimableXChain);
+        _fulfillRedeemRequest(pendingRedeemRequest(controller), claimableXChain, controller);
+        return super.withdraw(assets, receiver, controller);
+    }
+
     function _checkSharesLocked(address owner) private view {
-        if (block.timestamp < lockCheckpoint[owner] + sharesLockTime) revert();
+        if (block.timestamp < depositLockCheckPoint[owner] + sharesLockTime) revert();
     }
 
     function redeemAtomic(uint256 shares, address controller, address owner, address receiver) public nonReentrant {
@@ -263,16 +303,108 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _processRedeemRequest(shares, controller, owner, receiver, false);
     }
 
-    // TODO: loop through the vaults to move the money
-    function invest() external onlyRoles(INVESTOR_ROLE) {
-        for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) { }
+    function _prepareAllocationRoute(AllocateCache memory cache) private view {
+        // Cache how many chains we need and how many vaults in each chain
+        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+            // Cache next vault from the withdrawal queue
+            VaultData memory vault = vaults[withdrawalQueue[i]];
+            // SuperformId
+            uint256 superformId = vault.superformId;
+            // Cache chain index
+            uint256 chainIndex = chainIndexes[vault.chainId];
+            // Cache chain length
+            uint256 lenDeposit = cache.lensDeposit[chainIndex];
+            uint256 lenWithdraw = cache.lensWithdraw[chainIndex];
+
+            // Save wether is a deposit or a withdraw
+            uint256 _creditAvailable = creditAvailable(superformId);
+            bool isDeposit = _creditAvailable > 0;
+            if (isDeposit) {
+                // Push the superformId to the last index of the array
+                cache.dstVaultsDeposit[chainIndex][lenDeposit] = vault.superformId;
+                cache.assetsPerVaultDeposit[chainIndex][lenDeposit] = _creditAvailable;
+                // Increase index for iteration
+                unchecked {
+                    cache.lensDeposit[chainIndex]++;
+                }
+            } else {
+                // Push the superformId to the last index of the array
+                cache.dstVaultsWithdraw[chainIndex][lenDeposit] = vault.superformId;
+                cache.sharesPerVaultWithdraw[chainIndex][lenWithdraw] =
+                    vault.convertToShares(debtOutstanding(superformId));
+                // Increase index for iteration
+                unchecked {
+                    cache.lensWithdraw[chainIndex]++;
+                }
+            }
+        }
     }
+
+    struct AllocateCache {
+        // List of vaults to withdraw from on each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] dstVaultsDeposit;
+        // List of vaults to withdraw from on each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] dstVaultsWithdraw;
+        // List of shares to redeem on each vault in each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] assetsPerVaultDeposit;
+        // List of shares to redeem on each vault in each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] sharesPerVaultWithdraw;
+        // Cache length of list of each chain
+        uint256[N_CHAINS] lensDeposit;
+        // Cache length of list of each chain
+        uint256[N_CHAINS] lensWithdraw;
+    }
+
+    // TODO: loop through the vaults to move the money
+    function allocateFunds() external onlyRoles(INVESTOR_ROLE) {
+        AllocateCache memory cache;
+        _prepareAllocationRoute(cache);
+        address receiver = address(this);
+        // Process deposits
+
+        // Cache chain index
+        uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
+        uint256 len = cache.lensWithdraw[chainIndex];
+        // Process withdrawals
+        if (len > 0) {
+            if (len == 1) {
+                // shares to redeem
+                uint256 sharesAmount = cache.sharesPerVaultWithdraw[chainIndex][0];
+                // superformId(take first element fo the array)
+                uint256 superformId = cache.dstVaultsWithdraw[chainIndex][0];
+                // get actual withdrawn amount
+                uint256 withdrawn = _singleDirectSingleVaultWithdraw(superformId, sharesAmount, receiver);
+                // Increase idle funds
+                _totalIdle += withdrawn.toUint128();
+                // Reduce vault debt
+                vaults[superformId].totalDebt -= vaults[superformId].convertToAssets(sharesAmount).toUint128();
+            } else {
+                // Prepare arguments for request using dynamic arrays
+                uint256[] memory superformIds = new uint256[](len);
+                uint256[] memory amounts = new uint256[](len);
+                // Cast fixed arrays to dynamic ones
+                for (uint256 i = 0; i != len; i++) {
+                    superformIds[i] = cache.dstVaultsWithdraw[chainIndex][i];
+                    amounts[i] = cache.sharesPerVaultWithdraw[chainIndex][i];
+                    // Reduce vault debt individually
+                    uint256 superformId = superformIds[i];
+                    vaults[superformId].totalDebt -= vaults[superformId].convertToAssets(amounts[i]).toUint128();
+                }
+                uint256 withdrawn = _singleDirectMultiVaultWithdraw(superformIds, amounts, receiver);
+                _totalIdle += withdrawn.toUint128();
+            }
+        }
+    }
+
+    function creditAvailable(uint256 superformId) public view returns (uint256) { }
+
+    function debtOutstanding(uint256 superformId) public view returns (uint256) { }
 
     function processRedeemRequest(uint256 shares, address controller) external onlyRoles(RELAYER_ROLE) {
         _processRedeemRequest(shares, controller, controller, address(this), true);
     }
 
-    function _prepareWithdralRoute(ProcessRequestCache memory cache) internal view {
+    function _prepareWithdralRoute(ProcessRedeemRequestCache memory cache) internal view {
         // Cache how many chains we need and how many vaults in each chain
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
             // If its fulfilled stop
@@ -289,7 +421,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             uint256 withdrawAssets = Math.min(maxWithdraw, cache.amountToWithdraw);
             // Cache chain index
             uint256 chainIndex = chainIndexes[vault.chainId];
-            // Cache chain lenght
+            // Cache chain length
             uint256 len = cache.lens[chainIndex];
             // Push the superformId to the last index of the array
             cache.dstVaults[chainIndex][len] = vault.superformId;
@@ -301,6 +433,26 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             }
             // Reduce needed assets
             cache.amountToWithdraw -= withdrawAssets;
+
+            // Cache wether is single chain or multichain
+            if (vault.chainId != THIS_CHAIN_ID) {
+                uint256 numberOfVaults = cache.lens[chainIndex];
+                if (numberOfVaults == 0) {
+                    continue;
+                } else {
+                    if (!cache.isSingleChain) {
+                        cache.isSingleChain = true;
+                    }
+
+                    if (cache.isSingleChain && !cache.isMultiChain) {
+                        cache.isMultiChain = true;
+                    }
+
+                    if (numberOfVaults > 1) {
+                        cache.isMultiVault = true;
+                    }
+                }
+            }
             // Increase index for iteration
             unchecked {
                 cache.lens[chainIndex]++;
@@ -308,7 +460,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
     }
 
-    struct ProcessRequestCache {
+    struct ProcessRedeemRequestCache {
         // List of vauts to withdraw from on each chain
         uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] dstVaults;
         // List of shares to redeem on each vault in each chain
@@ -321,10 +473,15 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256 sharesFulfilled;
         // Save assets that were withdrawn instantly
         uint256 totalClaimableWithdraw;
-        // cache totalIdle
+        // Cache totalIdle
         uint256 totalIdle;
-        // convert shares to assets at current price
+        // Convert shares to assets at current price
         uint256 assets;
+        // Wether is a single chain or multichain withdrawal
+        bool isSingleChain;
+        bool isMultiChain;
+        // Wether is a single or multivault withdrawal
+        bool isMultiVault;
     }
 
     function _processRedeemRequest(
@@ -337,7 +494,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         internal
     {
         // Use struct to avoid stack too deep
-        ProcessRequestCache memory cache;
+        ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
         cache.assets = convertToShares(shares);
         // If totalIdle can covers the amount fulfill directly
@@ -358,6 +515,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             _prepareWithdralRoute(cache);
             ////////////////////////////////////// REDEEM FROM THIS CHAIN /////////////////////////////////////
             if (cache.lens[THIS_CHAIN_ID] > 0) {
+                address directWithdrawalReceiver = retainAssets ? address(this) : receiver;
                 // Cache chain index
                 uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
                 if (cache.lens[THIS_CHAIN_ID] == 1) {
@@ -366,7 +524,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                     // superformId(take first element fo the array)
                     uint256 superformId = cache.dstVaults[chainIndex][0];
                     // get actual withdrawn amount
-                    uint256 withdrawn = _singleDirectSingleVaultWithdraw(superformId, sharesAmount, receiver);
+                    uint256 withdrawn =
+                        _singleDirectSingleVaultWithdraw(superformId, sharesAmount, directWithdrawalReceiver);
                     // cache instant total withdraw
                     cache.totalClaimableWithdraw += withdrawn;
                     // cache shares to burn
@@ -377,7 +536,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                     vaults[superformId].totalDebt -= vaults[superformId].convertToAssets(sharesAmount).toUint128();
                 } else {
                     uint256 len = cache.lens[chainIndex];
-
                     // Prepare arguments for request using dynamic arrays
                     uint256[] memory superformIds = new uint256[](len);
                     uint256[] memory amounts = new uint256[](len);
@@ -389,142 +547,134 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                         uint256 superformId = superformIds[i];
                         vaults[superformId].totalDebt -= vaults[superformId].convertToAssets(amounts[i]).toUint128();
                     }
-                    uint256 withdrawn = _singleDirectMultiVaultWithdraw(superformIds, amounts, receiver);
+                    uint256 withdrawn = _singleDirectMultiVaultWithdraw(superformIds, amounts, directWithdrawalReceiver);
                     cache.totalClaimableWithdraw += withdrawn;
                     cache.sharesFulfilled += convertToShares(withdrawn);
                     _totalIdle += withdrawn.toUint128();
                 }
             }
 
-            ////////////////////////////////////// REDEEM FROM OTHER CHAINS /////////////////////////////////////
+            ////////////////////////////////////// REDEEM FROM EXTERNAL CHAINS /////////////////////////////////////
+            if (!cache.isMultiChain) {
+                if (!cache.isMultiVault) {
+                    uint256 superformId;
+                    uint256 amount;
+                    uint64 chainId;
 
-            // Calculations to pick best withdraw type
-            bool isSingleChain;
-            bool isMultiChain;
-            bool isMultiVault;
-            for (uint256 i = 0; i != N_CHAINS; i++) {
-                uint64 chainId = DST_CHAINS[i];
-                // Skip the withdrawals in this chain[already happened]
-                if (chainId == THIS_CHAIN_ID) {
-                    continue;
-                }
-                uint256 chainIndex = chainIndexes[chainId];
-                uint256 numberOfVaults = cache.lens[chainIndex];
-                if (numberOfVaults == 0) {
-                    continue;
+                    for (uint256 i = 0; i < cache.dstVaults.length; ++i) {
+                        if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
+                        if (cache.dstVaults[i].length > 0) {
+                            chainId = DST_CHAINS[i];
+                            superformId = cache.dstVaults[i][0];
+                            amount = cache.sharesPerVault[i][0];
+                            break;
+                        }
+                    }
+                    _singleXChainSingleVaultWithdraw(chainId, superformId, amount, receiver);
                 } else {
-                    if (!isSingleChain) {
-                        isSingleChain = true;
+                    uint256[] memory superformIds;
+                    uint256[] memory amounts;
+                    uint64 chainId;
+
+                    for (uint256 i = 0; i < cache.dstVaults.length; ++i) {
+                        if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
+                        if (cache.dstVaults[i].length > 0) {
+                            chainId = DST_CHAINS[i];
+                            superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
+                            amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
+                            break;
+                        }
+                    }
+                    _singleXChainMultiVaultWithdraw(chainId, superformIds, amounts, receiver);
+                }
+            } else {
+                if (!cache.isMultiVault) {
+                    uint256 chainsLen;
+                    for (uint256 i = 0; i < cache.lens.length; i++) {
+                        if (cache.lens[i] > 0) chainsLen++;
+                    }
+                    uint8[] memory defaultAmbIds = _getDefaultAmbIds();
+                    uint8[][] memory ambIds = new uint8[][](chainsLen);
+                    uint64[] memory dstChainIds = new uint64[](chainsLen);
+                    SingleVaultSFData[] memory singleVaultDatas = new SingleVaultSFData[](chainsLen);
+                    uint256 lastChainsIndex;
+
+                    for (uint256 i = 0; i < N_CHAINS; i++) {
+                        if (cache.lens[DST_CHAINS[i]] > 0) {
+                            dstChainIds[lastChainsIndex] = DST_CHAINS[i];
+                            ++lastChainsIndex;
+                        }
                     }
 
-                    if (isSingleChain && !isMultiChain) {
-                        isMultiChain = true;
+                    for (uint256 i = 0; i < chainsLen; i++) {
+                        uint256[] memory emptyUint256Array = _getEmptyUint256Array(cache.lens[i]);
+                        bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
+                        singleVaultDatas[i] = SingleVaultSFData({
+                            superformId: cache.dstVaults[i][0],
+                            amount: cache.sharesPerVault[i][0],
+                            outputAmount: 0,
+                            maxSlippage: 0,
+                            liqRequest: _getDefaultLiqRequest(),
+                            permit2data: _getEmptyBytes(),
+                            hasDstSwap: false,
+                            retain4626: false,
+                            receiverAddress: receiver,
+                            receiverAddressSP: address(0),
+                            extraFormData: _getEmptyBytes()
+                        });
+                        ambIds[i] = defaultAmbIds;
+                    }
+                    _multiDstSingleVaultWithdraw(ambIds, dstChainIds, singleVaultDatas);
+                } else {
+                    uint256 chainsLen;
+                    for (uint256 i = 0; i < cache.lens.length; i++) {
+                        if (cache.lens[i] > 0) chainsLen++;
+                    }
+                    uint8[] memory defaultAmbIds = _getDefaultAmbIds();
+                    uint8[][] memory ambIds = new uint8[][](chainsLen);
+                    uint64[] memory dstChainIds = new uint64[](chainsLen);
+                    MultiVaultSFData[] memory multiVaultDatas = new MultiVaultSFData[](chainsLen);
+                    uint256 lastChainsIndex;
+
+                    for (uint256 i = 0; i < N_CHAINS; i++) {
+                        if (cache.lens[DST_CHAINS[i]] > 0) {
+                            dstChainIds[lastChainsIndex] = DST_CHAINS[i];
+                            ++lastChainsIndex;
+                        }
                     }
 
-                    if (numberOfVaults > 1) {
-                        isMultiVault = true;
+                    for (uint256 i = 0; i < chainsLen; i++) {
+                        uint256[] memory emptyUint256Array = _getEmptyUint256Array(cache.lens[i]);
+                        bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
+                        multiVaultDatas[i] = MultiVaultSFData({
+                            superformIds: _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]),
+                            amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
+                            outputAmounts: emptyUint256Array,
+                            maxSlippages: emptyUint256Array,
+                            liqRequests: _getDefaultLiqRequestsArray(cache.lens[i]),
+                            permit2data: _getEmptyBytes(),
+                            hasDstSwaps: emptyBoolArray,
+                            retain4626s: emptyBoolArray,
+                            receiverAddress: receiver,
+                            receiverAddressSP: address(0),
+                            extraFormData: _getEmptyBytes()
+                        });
+                        ambIds[i] = defaultAmbIds;
                     }
+                    _multiDstMultiVaultWithdraw(ambIds, dstChainIds, multiVaultDatas);
                 }
             }
-
-            // if(!isMultiChain) {
-            //     if(!isMultiVault) {
-            //         SingleXChainSingleVaultStateReq memory params = SingleXChainSingleVaultStateReq({
-            //             // TODO: emptyAmbIds
-            //             ambIds,
-            //             dastChainId: THIS_CHAIN_ID,
-            //             superformData: SingleVaultSFData({
-            //                     superformId: superformId,
-            //                     amount: sharesToRedeem,
-            //                     outputAmount: 0,
-            //                     maxSlippage: 0,
-            //                     liqRequest: _getDefaultLiqRequest(),
-            //                     permit2data: _getEmptyBytes(),
-            //                     hasDstSwap: false,
-            //                     retain4626: false,
-            //                     receiverAddress: receiver,
-            //                     receiverAddressSP: address(0),
-            //                     extraFormData: _getEmptyBytes()
-            //                 })
-            //         });
-            //         _vaultRouter.singleXChainMultiVaultWithdraw();
-            //     }
-            //     else {
-            //         SingleXChainMultiVaultStateReq memory params = SingleXChainMultiVaultStateReq({
-            //             ambIds,
-            //             dastChainId: THIS_CHAIN_ID,
-            //             superformData: MultiVaultSFData({
-            //                 superformIds: superformIds,
-            //                 amounts: amounts,
-            //                 outputAmounts: emptyUint256Array,
-            //                 maxSlippages: emptyUint256Array,
-            //                 liqRequests: _getDefaultLiqRequestsArray(len),
-            //                 permit2data: _getEmptyBytes(),
-            //                 hasDstSwaps: emptyBoolArray,
-            //                 retain4626s: emptyBoolArray,
-            //                 receiverAddress: receiver,
-            //                 receiverAddressSP: address(0),
-            //                 extraFormData: _getEmptyBytes()
-            //             })
-            //         );
-            //         _vaultRouter.singleXChainMultiVaultWithdraw(params);
-            //     }
-            // }
-            // else {
-            //     if(!isMultiVault) {
-            //         MultiDstSingleVaultStateReq memory params = MultiDstSingleVaultStateReq({
-            //             ambIds,
-            //             dstChainIds,
-            //             // TODO: ARRAY
-            //             superformData: SingleVaultSFData({
-            //                     superformId: superformId,
-            //                     amount: sharesToRedeem,
-            //                     outputAmount: 0,
-            //                     maxSlippage: 0,
-            //                     liqRequest: _getDefaultLiqRequest(),
-            //                     permit2data: _getEmptyBytes(),
-            //                     hasDstSwap: false,
-            //                     retain4626: false,
-            //                     receiverAddress: receiver,
-            //                     receiverAddressSP: address(0),
-            //                     extraFormData: _getEmptyBytes()
-            //                 })
-            //         });
-            //         _vaultRouter.multiDstSingleVaultWithdraw();
-            //     }
-            //     else {
-            //         MultiDstMultiVaultStateReq memory params = MultiDstMultiVaultStateReq({
-            //             ambIds,
-            //             dstChainIds,
-            //             // TODO: ARRAY
-            //             superformsData : MultiVaultSFData({
-            //                 MultiVaultSFData({
-            //                     superformIds: superformIds,
-            //                     amounts: amounts,
-            //                     outputAmounts: emptyUint256Array,
-            //                     maxSlippages: emptyUint256Array,
-            //                     liqRequests: _getDefaultLiqRequestsArray(len),
-            //                     permit2data: _getEmptyBytes(),
-            //                     hasDstSwaps: emptyBoolArray,
-            //                     retain4626s: emptyBoolArray,
-            //                     receiverAddress: receiver,
-            //                     receiverAddressSP: address(0),
-            //                     extraFormData: _getEmptyBytes()
-            //                 })
-            //             })
-            //         });
-            //         _vaultRouter.multiDstMultiVaultWithdraw();
-            //     }
-            // }
         }
 
         // EFECTS
         _totalAssets -= cache.totalClaimableWithdraw.toUint128();
         _totalIdle -= cache.totalClaimableWithdraw.toUint128();
+        // INTERACTIONS
         if (retainAssets) {
+            _burn(address(this), shares);
             _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, controller);
         } else {
-            _burn(owner, cache.sharesFulfilled);
+            _burn(owner, shares);
             asset().safeTransfer(receiver, cache.totalClaimableWithdraw);
         }
     }
@@ -534,13 +684,15 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         for (uint256 i = 0; i < reports.length; i++) {
             // Cache report
             VaultReport memory _report = reports[i];
+            // Get superform id
+            uint256 superformId = _vaultToSuperformId[_report.vaultAddress];
             // Cache vault
-            VaultData memory vault = vaults[_report.superformId];
+            VaultData memory vault = vaults[superformId];
             // Cache vault shares
             uint256 sharesBalance = _superPositions.balanceOf(address(this), vault.superformId);
             // Calculate totalAssets before the report
             uint256 totalAssetsBefore = vault.convertToAssets(sharesBalance);
-            vaults[_report.superformId].sharePrice = _report.sharePrice;
+            vaults[superformId].sharePrice = _report.sharePrice;
             // Calculate totalAssets after the report
             uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance);
             // Calculat the profit/loss
@@ -575,13 +727,16 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256 superformId,
         uint128 debtRatio,
         address vault,
-        uint8 vaultDecimals
+        uint8 vaultDecimals,
+        uint192 sharePrice
     )
         external
         onlyRoles(ADMIN_ROLE)
     {
-        if (vaults[superformId].vaultAddress == address(0)) revert();
-        if (_totalDebt / (_totalDebt + _totalIdle) + debtRatio > MAX_BPS) {
+        if (vaults[superformId].vaultAddress != address(0)) revert();
+        if (_totalDebt == 0) {
+            if (debtRatio > MAX_BPS) revert();
+        } else if (_totalDebt / (_totalDebt + _totalIdle) + debtRatio > MAX_BPS) {
             revert();
         }
         if (!_factory.isSuperform(superformId)) revert();
@@ -590,6 +745,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         vaults[superformId].debtRatio = debtRatio;
         vaults[superformId].vaultAddress = vault;
         vaults[superformId].decimals = vaultDecimals;
+        vaults[superformId].sharePrice = sharePrice;
+        _vaultToSuperformId[vault] = superformId;
 
         uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = withdrawalQueue;
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
@@ -638,6 +795,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             liqDstChainId: THIS_CHAIN_ID,
             nativeAmount: 0
         });
+    }
+
+    function setDefaultAmbIds(uint8[] memory _ambIds) external onlyRoles(ADMIN_ROLE) {
+        defaultAmbIds = _ambIds;
     }
 
     function _getDefaultLiqRequestsArray(uint256 len) internal view returns (LiqRequest[] memory) {
@@ -735,5 +896,173 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256 balanceBefore = asset().balanceOf(address(this));
         _vaultRouter.singleDirectMultiVaultWithdraw(params);
         return asset().balanceOf(address(this)) - balanceBefore;
+    }
+
+    function _singleDirectSingleVaultDeposit(
+        uint256 superformId,
+        uint256 amount,
+        address receiver
+    )
+        internal
+        returns (uint256 withdrawn)
+    {
+        // Request
+        SingleDirectSingleVaultStateReq memory params = SingleDirectSingleVaultStateReq({
+            superformData: SingleVaultSFData({
+                superformId: superformId,
+                amount: amount,
+                outputAmount: 0,
+                maxSlippage: 0,
+                liqRequest: _getDefaultLiqRequest(),
+                permit2data: _getEmptyBytes(),
+                hasDstSwap: false,
+                retain4626: false,
+                receiverAddress: receiver,
+                receiverAddressSP: address(0),
+                extraFormData: _getEmptyBytes()
+            })
+        });
+        _vaultRouter.singleDirectSingleVaultDeposit(params);
+    }
+
+    function _singleDirectMultiVaultDeposit(
+        uint256[] memory superformIds,
+        uint256[] memory amounts,
+        address receiver
+    )
+        internal
+        returns (uint256 withdrawn)
+    {
+        uint256 len = superformIds.length;
+        uint256[] memory emptyUint256Array = _getEmptyUint256Array(len);
+        bool[] memory emptyBoolArray = _getEmptyBoolArray(len);
+        SingleDirectMultiVaultStateReq memory params = SingleDirectMultiVaultStateReq({
+            superformData: MultiVaultSFData({
+                superformIds: superformIds,
+                amounts: amounts,
+                outputAmounts: emptyUint256Array,
+                maxSlippages: emptyUint256Array,
+                liqRequests: _getDefaultLiqRequestsArray(len),
+                permit2data: _getEmptyBytes(),
+                hasDstSwaps: emptyBoolArray,
+                retain4626s: emptyBoolArray,
+                receiverAddress: receiver,
+                receiverAddressSP: address(0),
+                extraFormData: _getEmptyBytes()
+            })
+        });
+        _vaultRouter.singleDirectMultiVaultDeposit(params);
+    }
+
+    function _singleXChainSingleVaultWithdraw(
+        uint64 chainId,
+        uint256 superformId,
+        uint256 amount,
+        address receiver
+    )
+        internal
+    {
+        SingleXChainSingleVaultStateReq memory params = SingleXChainSingleVaultStateReq({
+            ambIds: _getDefaultAmbIds(),
+            dstChainId: chainId,
+            superformData: SingleVaultSFData({
+                superformId: superformId,
+                amount: amount,
+                outputAmount: 0,
+                maxSlippage: 0,
+                liqRequest: _getDefaultLiqRequest(),
+                permit2data: _getEmptyBytes(),
+                hasDstSwap: false,
+                retain4626: false,
+                receiverAddress: receiver,
+                receiverAddressSP: address(0),
+                extraFormData: _getEmptyBytes()
+            })
+        });
+        _vaultRouter.singleXChainSingleVaultWithdraw(params);
+    }
+
+    function _singleXChainMultiVaultWithdraw(
+        uint64 chainId,
+        uint256[] memory superformIds,
+        uint256[] memory amounts,
+        address receiver
+    )
+        internal
+    {
+        uint256 len = superformIds.length;
+        uint256[] memory emptyUint256Array = _getEmptyUint256Array(len);
+        bool[] memory emptyBoolArray = _getEmptyBoolArray(len);
+        SingleXChainMultiVaultStateReq memory params = SingleXChainMultiVaultStateReq({
+            ambIds: _getDefaultAmbIds(),
+            dstChainId: THIS_CHAIN_ID,
+            superformsData: MultiVaultSFData({
+                superformIds: superformIds,
+                amounts: amounts,
+                outputAmounts: emptyUint256Array,
+                maxSlippages: emptyUint256Array,
+                liqRequests: _getDefaultLiqRequestsArray(len),
+                permit2data: _getEmptyBytes(),
+                hasDstSwaps: emptyBoolArray,
+                retain4626s: emptyBoolArray,
+                receiverAddress: receiver,
+                receiverAddressSP: address(0),
+                extraFormData: _getEmptyBytes()
+            })
+        });
+        _vaultRouter.singleXChainMultiVaultWithdraw(params);
+    }
+
+    function _multiDstSingleVaultWithdraw(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        SingleVaultSFData[] memory singleVaultDatas
+    )
+        internal
+    {
+        MultiDstSingleVaultStateReq memory params =
+            MultiDstSingleVaultStateReq({ ambIds: ambIds, dstChainIds: dstChainIds, superformsData: singleVaultDatas });
+        _vaultRouter.multiDstSingleVaultWithdraw(params);
+    }
+
+    function _multiDstMultiVaultWithdraw(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        MultiVaultSFData[] memory multiVaultDatas
+    )
+        private
+    {
+        MultiDstMultiVaultStateReq memory params =
+            MultiDstMultiVaultStateReq({ ambIds: ambIds, dstChainIds: dstChainIds, superformsData: multiVaultDatas });
+        _vaultRouter.multiDstMultiVaultWithdraw(params);
+    }
+
+    function _getDefaultAmbIds() private view returns (uint8[] memory) {
+        return defaultAmbIds;
+    }
+
+    function _toDynamicUint256Array(
+        uint256[WITHDRAWAL_QUEUE_SIZE] memory arr,
+        uint256 len
+    )
+        private
+        view
+        returns (uint256[] memory)
+    {
+        uint256[] memory dynArr = new uint256[](len);
+        for (uint256 i = 0; i < len; ++i) {
+            dynArr[i] = arr[i];
+        }
+    }
+
+    function _receiver(address owner) private returns (address receiverAddress) {
+        address current = _receivers[owner];
+        if (current != address(0)) {
+            return current;
+        } else {
+            receiverAddress =
+                LibClone.clone(receiverImplementation, abi.encodeWithSignature("initialize(address)", owner));
+            _receivers[owner] = receiverAddress;
+        }
     }
 }

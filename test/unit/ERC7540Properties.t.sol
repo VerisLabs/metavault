@@ -4,17 +4,26 @@ import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { BaseTest } from "../base/BaseTest.t.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { IBaseRouter as ISuperformRouter, ISuperformFactory, ISuperPositions } from "src/interfaces/Lib.sol";
 import "src/helpers/AddressBook.sol";
 
 contract ERC7540PropertiesTest is BaseTest {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
+    ISuperPositions superPositions;
+    ISuperformRouter vaultRouter;
+    ISuperformFactory factory;
     uint24 sharesLockTime = 30 days;
 
     function setUp() public {
         super._setUp("POLYGON", 61_032_901);
-        vault = new MaxApyCrossChainVault(USDCE_POLYGON, "maxCrossUSDCE", "maxCrossUSDCE", 2000, sharesLockTime);
+        superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
+        vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
+        factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
+        vault = new MaxApyCrossChainVault(
+            USDCE_POLYGON, "maxCrossUSDCE", "maxCrossUSDCE", 2000, sharesLockTime, superPositions, vaultRouter, factory
+        );
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
     }
 

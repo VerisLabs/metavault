@@ -3,6 +3,7 @@ src = "src"
 out = "out"
 libs = ["dependencies"]
 gas_reports = ['*']
+evm_version =  "shanghai"
 
 [fuzz]
 runs = 1000
