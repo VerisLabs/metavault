@@ -30,7 +30,7 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         );
 
         (uint256 superformId,) = factory.createSuperform(1, address(maxUsdce));
-        vault.addVault(137, superformId, 8000, address(maxUsdce), 12, uint192(_1_USDCE));
+        vault.addVault(137, superformId, address(maxUsdce), 12, uint192(_1_USDCE));
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
     }
 

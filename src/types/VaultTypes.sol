@@ -5,7 +5,6 @@ struct VaultData {
     uint64 chainId;
     uint192 sharePrice;
     uint256 superformId;
-    uint128 debtRatio;
     uint128 totalDebt;
     address vaultAddress;
     uint8 decimals;
