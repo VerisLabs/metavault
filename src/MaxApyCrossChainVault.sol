@@ -1,15 +1,14 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.19;
 
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
-import { ERC4626 } from "solady/tokens/ERC4626.sol";
-import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
-import { ISuperPositions, IBaseRouter, ISuperformFactory } from "interfaces/Lib.sol";
+import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
+import { ISuperPositions, IBaseRouter, ISuperformFactory } from "interfaces/Lib.sol";
+import { ERC7540, ERC4626, ReentrancyGuard } from "lib/Lib.sol";
 import {
     VaultData,
     VaultReport,
@@ -27,7 +26,7 @@ import {
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
-/// notice description
+/// @notice description
 contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
@@ -89,7 +88,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Protocol fee
     uint16 public oracleFee;
     /// @notice Minimum time users must wait to redeem shares
-    uint24 public sharesLockTime;
+    uint24 public immutable sharesLockTime;
+    /// @notice Delay from processing a redeem till its claimed
+    uint24 public processRedeemDelay;
     /// @notice Wether the vault is paused
     bool public emergencyShutdown;
     /// @notice AutoPilot
@@ -129,6 +130,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     mapping(address => uint256) _vaultToSuperformId;
     /// @notice Timestamp of last report
     uint256 public lastReport;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -169,6 +171,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         receiverImplementation = address(new ERC20Receiver(_asset_));
     }
 
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       PUBLIC GETTERS                       */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /// @notice Returns the name of the vault shares token.
     function name() public view override returns (string memory) {
         return _name;
@@ -194,6 +200,32 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return convertToAssets(10 ** decimals());
     }
 
+    /// @notice returns the assets that are sitting idle in this contract
+    /// @return assets amount of idle assets
+    function totalIdle() public view returns (uint256 assets) {
+        return _totalIdle;
+    }
+
+    /// @notice returns the total issued debt of underlying vaulrs
+    /// @return assets amount assets that are invested in vaults
+    function totalDebt() public view returns (uint256 assets) {
+        return _totalDebt;
+    }
+
+    /// @notice helper function to see if a vault is listed
+    function isVaultListed(address vaultAddress) public view returns (bool) {
+        return _vaultToSuperformId[vaultAddress] != 0;
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       ERC7540 ACTIONS                      */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Transfers assets from sender into the Vault and submits a Request for asynchronous deposit.
+    /// @param assets the amount of deposit assets to transfer from owner
+    /// @param controller the controller of the request who will be able to operate the request
+    /// @param owner the source of the deposit assets
+    /// @return requestId
     function requestDeposit(
         uint256 assets,
         address controller,
@@ -205,24 +237,43 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         returns (uint256 requestId)
     {
         requestId = super.requestDeposit(assets, controller, owner);
+        // fulfill the request directlys
         _fulfillDepositRequest(controller, assets, convertToShares(assets));
     }
 
+    /// @notice Same as calling `requestDeposit` & `deposit`
+    /// @param assets amount to deposit
+    /// @param to shares receiver
+    /// @return shares minted shares
     function depositAtomic(uint256 assets, address to) public returns (uint256 shares) {
         requestDeposit(assets, msg.sender, msg.sender);
         shares = deposit(assets, to, msg.sender);
     }
 
+    /// @notice Same as calling `requestDeposit` & `mint`
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @return assets deposited assets
     function mintAtomic(uint256 shares, address to) public returns (uint256 assets) {
         assets = convertToAssets(shares);
         requestDeposit(assets, msg.sender, msg.sender);
         assets = mint(shares, to, msg.sender);
     }
 
+    /// @notice Mints shares Vault shares to receiver by claiming the Request of the controller.
+    /// @dev uses msg.sender as controller
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @return shares minted shares
     function deposit(uint256 assets, address to) public override returns (uint256 shares) {
         return deposit(assets, to, msg.sender);
     }
 
+    /// @notice Mints shares Vault shares to receiver by claiming the Request of the controller.
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @param controller controller address
+    /// @return shares minted shares
     function deposit(
         uint256 assets,
         address to,
@@ -239,10 +290,20 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _afterDeposit(assets, shares);
     }
 
+    /// @notice Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
+    /// @dev uses msg.sender as controller
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @return assets deposited assets
     function mint(uint256 shares, address to) public override returns (uint256 assets) {
         return mint(shares, to, msg.sender);
     }
 
+    /// @notice Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @param controller controller address
+    /// @return assets deposited assets
     function mint(
         uint256 shares,
         address to,
@@ -259,6 +320,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _afterDeposit(assets, shares);
     }
 
+    /// @notice Assumes control of shares from sender into the Vault and submits a Request for asynchronous redeem.
+    /// @param shares the amount of shares to be redeemed to transfer from owner
+    /// @param controller the controller of the request who will be able to operate the request
+    /// @param owner the source of the shares to be redeemed
+    /// @return requestId id
     function requestRedeem(
         uint256 shares,
         address controller,
@@ -268,8 +334,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         override
         returns (uint256 requestId)
     {
+        // Require deposited shares arent locked
         _checkSharesLocked(controller);
         requestId = super.requestRedeem(shares, controller, owner);
+        // If autopilot is enabled process it directly
         if (autoPilot) {
             _processRedeemRequest(shares, controller, owner, _receiver(controller), true);
         }
@@ -285,6 +353,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         nonReentrant
         returns (uint256 assets)
     {
+        // Fulfill the request if theres any pending assets
         ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
         uint256 claimableXChain = receiverContract.balance();
         receiverContract.pull(claimableXChain);
@@ -302,6 +371,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         nonReentrant
         returns (uint256 shares)
     {
+        // Fulfill the request if theres any pending assets
         ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
         uint256 claimableXChain = receiverContract.balance();
         receiverContract.pull(claimableXChain);
@@ -317,6 +387,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     function processRedeemRequest(uint256 shares, address controller) external onlyRoles(RELAYER_ROLE) {
         _processRedeemRequest(shares, controller, controller, address(this), true);
     }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       VAULT MANAGEMENT                     */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     function investSingleDirectSingleVault(
         address vaultAddress,
@@ -337,18 +411,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _totalIdle -= amountUint128;
         _totalDebt += amountUint128;
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt += amountUint128;
-    }
-
-    /// @notice returns the assets that are sitting idle in this contract
-    /// @return assets amount of idle assets
-    function totalIdle() public view returns (uint256 assets) {
-        return _totalIdle;
-    }
-
-    /// @notice returns the total issued debt of underlying vaulrs
-    /// @return assets amount assets that are invested in vaults
-    function totalDebt() public view returns (uint256 assets) {
-        return _totalDebt;
     }
 
     function investSingleDirectMultiVault(
@@ -403,11 +465,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
         // Assess management fees
         _assessFees();
-    }
-
-    /// @notice helper function to see if a vault is listed
-    function isVaultListed(address vaultAddress) public view returns (bool) {
-        return _vaultToSuperformId[vaultAddress] != 0;
     }
 
     /// @notice Add a new vault to the portfolio
@@ -475,6 +532,15 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         autoPilot = set;
     }
 
+    /// @notice set default AMBs config for the withdrawals
+    function setDefaultAmbIds(uint8[] memory _ambIds) external onlyRoles(ADMIN_ROLE) {
+        defaultAmbIds = _ambIds;
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       PRIVATE FUNCTIONS                    */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /// @dev Internal cache struct to allocate in memory
     struct ProcessRedeemRequestCache {
         // List of vauts to withdraw from on each chain
@@ -508,7 +574,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// Note: First it willc try to fulfill the request with idle assets, after that it will
     /// loop through the withdrawal queue and compute the destination chains and vaults on each
     /// destionation chain, plus the shaes to redeem on each vault
-    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) internal view {
+    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
         // Cache how many chains we need and how many vaults in each chain
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
             // If its fulfilled stop
@@ -576,7 +642,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         address receiver,
         bool retainAssets
     )
-        internal
+        private
     {
         // Use struct to avoid stack too deep
         ProcessRedeemRequestCache memory cache;
@@ -814,7 +880,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
     /// @dev Get a default liquidity request
     /// @return request the LiqRequest struct
-    function _getDefaultLiqRequest() internal view returns (LiqRequest memory request) {
+    function _getDefaultLiqRequest() private view returns (LiqRequest memory request) {
         return LiqRequest({
             txData: _getEmptyBytes(),
             token: _asset,
@@ -825,13 +891,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         });
     }
 
-    /// @notice set default AMBs config for the withdrawals
-    function setDefaultAmbIds(uint8[] memory _ambIds) external onlyRoles(ADMIN_ROLE) {
-        defaultAmbIds = _ambIds;
-    }
-
     /// @dev get liquidity requests
-    function _getDefaultLiqRequestsArray(uint256 len) internal view returns (LiqRequest[] memory) {
+    function _getDefaultLiqRequestsArray(uint256 len) private view returns (LiqRequest[] memory) {
         LiqRequest[] memory arr = new LiqRequest[](len);
         for (uint256 i = 0; i != len; ++i) {
             arr[i] = LiqRequest({
@@ -856,7 +917,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @param to shares receiver
     /// @param sharesBalance current shares balance
     /// @param newShares newly minted shares
-    function _lockShares(address to, uint256 sharesBalance, uint256 newShares) internal {
+    function _lockShares(address to, uint256 sharesBalance, uint256 newShares) private {
         uint256 newBalance = sharesBalance + newShares;
         if (sharesBalance == 0) {
             depositLockCheckPoint[to] = block.timestamp;
@@ -867,12 +928,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     /// @dev Helper function to get a empty bytes
-    function _getEmptyBytes() internal pure returns (bytes memory) {
+    function _getEmptyBytes() private pure returns (bytes memory) {
         return new bytes(0);
     }
 
     /// @dev Private helper to substract a - b or return 0 if it underflows
-    function _sub0(uint256 a, uint256 b) internal pure virtual returns (uint256) {
+    function _sub0(uint256 a, uint256 b) private pure virtual returns (uint256) {
         unchecked {
             return a - b > a ? 0 : a - b;
         }
@@ -881,12 +942,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @dev Private helper get an array uint256 full of zeros
     /// @param len array length
     /// @return
-    function _getEmptyUint256Array(uint256 len) internal pure returns (uint256[] memory) {
+    function _getEmptyUint256Array(uint256 len) private pure returns (uint256[] memory) {
         return new uint256[](len);
     }
 
     /// @dev Helper function to get a empty bools array
-    function _getEmptyBoolArray(uint256 len) internal pure returns (bool[] memory) {
+    function _getEmptyBoolArray(uint256 len) private pure returns (bool[] memory) {
         return new bool[](len);
     }
 
@@ -896,7 +957,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256 minAmountOut,
         address receiver
     )
-        internal
+        private
         returns (uint256 withdrawn)
     {
         uint256 balanceBefore = asset().balanceOf(address(this));
@@ -913,7 +974,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256[] memory minAmountsOut,
         address receiver
     )
-        internal
+        private
         returns (uint256 withdrawn)
     {
         for (uint256 i = 0; i < vaults.length; ++i) {
@@ -921,7 +982,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
     }
 
-    function _singleDirectSingleVaultDeposit(uint256 superformId, uint256 amount, address receiver) internal {
+    function _singleDirectSingleVaultDeposit(uint256 superformId, uint256 amount, address receiver) private {
         // Request
         SingleDirectSingleVaultStateReq memory params = SingleDirectSingleVaultStateReq({
             superformData: SingleVaultSFData({
@@ -946,7 +1007,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256[] memory amounts,
         address receiver
     )
-        internal
+        private
     {
         uint256 len = superformIds.length;
         uint256[] memory emptyUint256Array = _getEmptyUint256Array(len);
@@ -975,7 +1036,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256 amount,
         address receiver
     )
-        internal
+        private
     {
         SingleXChainSingleVaultStateReq memory params = SingleXChainSingleVaultStateReq({
             ambIds: _getDefaultAmbIds(),
@@ -1003,7 +1064,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256[] memory amounts,
         address receiver
     )
-        internal
+        private
     {
         uint256 len = superformIds.length;
         uint256[] memory emptyUint256Array = _getEmptyUint256Array(len);
