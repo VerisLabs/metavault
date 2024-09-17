@@ -1,6 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.19;
 
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
@@ -8,7 +9,7 @@ import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
 import { ISuperPositions, IBaseRouter, ISuperformFactory } from "interfaces/Lib.sol";
-import { ERC7540, ERC4626, ReentrancyGuard } from "lib/Lib.sol";
+import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import {
     VaultData,
     VaultReport,
@@ -90,7 +91,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Minimum time users must wait to redeem shares
     uint24 public immutable sharesLockTime;
     /// @notice Delay from processing a redeem till its claimed
-    uint24 public processRedeemDelay;
+    uint24 public processRedeemSettlement;
     /// @notice Wether the vault is paused
     bool public emergencyShutdown;
     /// @notice AutoPilot
@@ -117,13 +118,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Maximum number of vaults the vault can invest in
     uint256[WITHDRAWAL_QUEUE_SIZE] public withdrawalQueue;
     /// @notice Timestamp of deposit lock
-    mapping(address => uint256) depositLockCheckPoint;
+    mapping(address => uint256) private _depositLockCheckPoint;
     /// @notice Receiver delegation for withdrawals
     mapping(address => address) private _receivers;
     /// @notice Implementation contract of the receiver contract
     address public receiverImplementation;
-    /// @notice Timestamp of deposit lock
-    mapping(address => uint256) private _requestRedeemLockCheckPoint;
+    /// @notice Timestamp of request redeem lock
+    mapping(address => uint256) private _requestRedeemSettlementCheckpoint;
     /// @notice Default config for redeem requests
     uint8[] public defaultAmbIds;
     /// @notice Inverse mapping vault => superformId
@@ -147,7 +148,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         string memory _name_,
         string memory _symbol_,
         uint16 _managementFee,
+        uint16 _oracleFee,
         uint24 _sharesLockTime,
+        uint24 _processRedeemSettlement,
         ISuperPositions _superPositions_,
         IBaseRouter _vaultRouter_,
         ISuperformFactory _factory_
@@ -155,11 +158,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _asset = _asset_;
         _name = _name_;
         _symbol = _symbol_;
-        managementFee = _managementFee;
-        sharesLockTime = _sharesLockTime;
         _factory = _factory_;
         _superPositions = _superPositions_;
         _vaultRouter = _vaultRouter_;
+        managementFee = _managementFee;
+        oracleFee = _oracleFee;
+        sharesLockTime = _sharesLockTime;
+        processRedeemSettlement = _processRedeemSettlement;
+
         (bool success, uint8 result) = _tryGetAssetDecimals(_asset_);
         _decimals = success ? result : _DEFAULT_UNDERLYING_DECIMALS;
         THIS_CHAIN_ID = uint64(block.chainid);
@@ -353,11 +359,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         nonReentrant
         returns (uint256 assets)
     {
+        // Require a settlement from the last redem request
+        _checkRequestsSettled(controller);
         // Fulfill the request if theres any pending assets
-        ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
-        uint256 claimableXChain = receiverContract.balance();
-        receiverContract.pull(claimableXChain);
-        _fulfillRedeemRequest(pendingRedeemRequest(controller), claimableXChain, controller);
+        _fulfillSettledRequests(controller);
         return super.redeem(shares, receiver, controller);
     }
 
@@ -371,11 +376,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         nonReentrant
         returns (uint256 shares)
     {
+        // Require a settlement from the last redem request
+        _checkRequestsSettled(controller);
         // Fulfill the request if theres any pending assets
-        ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
-        uint256 claimableXChain = receiverContract.balance();
-        receiverContract.pull(claimableXChain);
-        _fulfillRedeemRequest(pendingRedeemRequest(controller), claimableXChain, controller);
+        _fulfillSettledRequests(controller);
         return super.withdraw(assets, receiver, controller);
     }
 
@@ -484,7 +488,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         onlyRoles(ADMIN_ROLE)
     {
         // If its already listed revert
-        if (!isVaultListed(vault)) revert();
+        if (isVaultListed(vault)) revert();
         // If its a crosschain vault check that the superform id exists
         if (chainId != THIS_CHAIN_ID && !_factory.isSuperform(superformId)) {
             revert();
@@ -520,9 +524,15 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     /// @notice sets the annually management fee
-    /// @notice _managementFee
+    /// @param _managementFee new BPS management fee
     function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
         managementFee = _managementFee;
+    }
+
+    /// @notice sets the annually oracle fee
+    /// @param _oracleFee new BPS oracle fee
+    function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
+        oracleFee = _oracleFee;
     }
 
     /// @notice Set or unset the autopilot function
@@ -648,6 +658,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
         cache.assets = convertToShares(shares);
+        bool settle;
+
         // If totalIdle can covers the amount fulfill directly
         if (cache.totalIdle >= cache.assets) {
             cache.sharesFulfilled = shares;
@@ -729,6 +741,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                             amount = cache.sharesPerVault[i][0];
                             // Withdraw from one vault asynchronously(crosschain)
                             _singleXChainSingleVaultWithdraw(chainId, superformId, amount, receiver);
+                            settle = true;
                             break;
                         }
                     }
@@ -745,6 +758,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                             amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
                             // Withdraw from multiple vaults asynchronously(crosschain)
                             _singleXChainMultiVaultWithdraw(chainId, superformIds, amounts, receiver);
+                            settle = true;
                             break;
                         }
                     }
@@ -788,6 +802,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                         ambIds[i] = _defaultAmbIds;
                     }
                     _multiDstSingleVaultWithdraw(ambIds, dstChainIds, singleVaultDatas);
+                    settle = true;
                 }
                 // If its multi-vault
                 else {
@@ -832,6 +847,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                     }
                     // Withdraw from multiple vaults and chains asynchronously
                     _multiDstMultiVaultWithdraw(ambIds, dstChainIds, multiVaultDatas);
+                    settle = true;
                 }
             }
         }
@@ -854,6 +870,20 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             // Transfer instant withdrawal to receiver
             asset().safeTransfer(receiver, cache.totalClaimableWithdraw);
         }
+
+        // If there's any crosschain redeem going on start settlement
+        if (settle) {
+            _requestRedeemSettlementCheckpoint[controller] = block.timestamp;
+        }
+    }
+    /// @notice fulfills the already settled redeem requests
+    /// @param controller controller address
+
+    function _fulfillSettledRequests(address controller) private {
+        ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
+        uint256 claimableXChain = receiverContract.balance();
+        receiverContract.pull(claimableXChain);
+        _fulfillRedeemRequest(pendingRedeemRequest(controller), claimableXChain, controller);
     }
 
     /// @notice the number of decimals of the underlying token
@@ -907,10 +937,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return arr;
     }
 
+    function _checkRequestsSettled(address controller) private view {
+        if (block.timestamp < _requestRedeemSettlementCheckpoint[controller] + processRedeemSettlement) revert();
+    }
+
     /// @dev Reverts if deposited shares are locked
     /// @param controller shares controller
     function _checkSharesLocked(address controller) private view {
-        if (block.timestamp < depositLockCheckPoint[controller] + sharesLockTime) revert();
+        if (block.timestamp < _depositLockCheckPoint[controller] + sharesLockTime) revert();
     }
 
     /// @dev Locks the deposited shares for a fixed period
@@ -920,10 +954,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     function _lockShares(address to, uint256 sharesBalance, uint256 newShares) private {
         uint256 newBalance = sharesBalance + newShares;
         if (sharesBalance == 0) {
-            depositLockCheckPoint[to] = block.timestamp;
+            _depositLockCheckPoint[to] = block.timestamp;
         } else {
-            depositLockCheckPoint[to] =
-                (depositLockCheckPoint[to] * sharesBalance / newBalance) + (block.timestamp * newShares / newBalance);
+            _depositLockCheckPoint[to] =
+                (_depositLockCheckPoint[to] * sharesBalance / newBalance) + (block.timestamp * newShares / newBalance);
         }
     }
 
@@ -933,7 +967,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     /// @dev Private helper to substract a - b or return 0 if it underflows
-    function _sub0(uint256 a, uint256 b) private pure virtual returns (uint256) {
+    function _sub0(uint256 a, uint256 b) private pure returns (uint256) {
         unchecked {
             return a - b > a ? 0 : a - b;
         }

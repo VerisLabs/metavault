@@ -21,9 +21,18 @@ contract ERC7540PropertiesTest is BaseTest {
         superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
-        vault = new MaxApyCrossChainVault(
-            USDCE_POLYGON, "maxCrossUSDCE", "maxCrossUSDCE", 2000, sharesLockTime, superPositions, vaultRouter, factory
-        );
+        vault = new MaxApyCrossChainVault({
+            _asset_: USDCE_POLYGON,
+            _name_: "maxCrossUSDCE",
+            _symbol_: "maxCrossUSDCE",
+            _managementFee: 2000,
+            _oracleFee: 2000,
+            _sharesLockTime: sharesLockTime,
+            _processRedeemSettlement: 1 days,
+            _superPositions_: superPositions,
+            _vaultRouter_: vaultRouter,
+            _factory_: factory
+        });
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
     }
 

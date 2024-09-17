@@ -26,11 +26,26 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
-        vault = new MaxApyCrossChainVault(
-            USDCE_POLYGON, "maxCrossUSDCE", "maxCrossUSDCE", 2000, sharesLockTime, superPositions, vaultRouter, factory
-        );
+        vault = new MaxApyCrossChainVault({
+            _asset_: USDCE_POLYGON,
+            _name_: "maxCrossUSDCE",
+            _symbol_: "maxCrossUSDCE",
+            _managementFee: 2000,
+            _oracleFee: 2000,
+            _sharesLockTime: sharesLockTime,
+            _processRedeemSettlement: 1 days,
+            _superPositions_: superPositions,
+            _vaultRouter_: vaultRouter,
+            _factory_: factory
+        });
         yUsdceSharePrice = yUsdce.convertToAssets(10 ** yUsdce.decimals());
-        vault.addVault(137, 1, address(yUsdce), yUsdce.decimals(), uint192(yUsdceSharePrice));
+        vault.addVault(        {
+            chainId : 137,
+            superformId : 1 ,
+            vault : address(yUsdce),
+            vaultDecimals : yUsdce.decimals(),
+            sharePrice :uint192(yUsdceSharePrice)
+        });
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
     }
