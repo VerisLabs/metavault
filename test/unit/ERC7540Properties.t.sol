@@ -15,6 +15,7 @@ contract ERC7540PropertiesTest is BaseTest {
     ISuperformRouter vaultRouter;
     ISuperformFactory factory;
     uint24 sharesLockTime = 30 days;
+    address treasury = makeAddr("treasury");
 
     function setUp() public {
         super._setUp("POLYGON", 61_032_901);
@@ -31,7 +32,8 @@ contract ERC7540PropertiesTest is BaseTest {
             _processRedeemSettlement: 1 days,
             _superPositions_: superPositions,
             _vaultRouter_: vaultRouter,
-            _factory_: factory
+            _factory_: factory,
+            _treasury: treasury
         });
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
     }
