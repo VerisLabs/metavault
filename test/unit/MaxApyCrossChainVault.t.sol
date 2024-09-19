@@ -9,7 +9,7 @@ import {
     IBaseRouter as ISuperformRouter, ISuperformFactory, ISuperPositions, IERC4626Oracle
 } from "src/interfaces/Lib.sol";
 import "src/helpers/AddressBook.sol";
-import {VaultReport} from "src/types/Lib.sol";
+import { VaultReport, SingleVaultSFData, LiqRequest } from "src/types/Lib.sol";
 
 contract MaxApyCrossChainVaultTest is BaseTest {
     using SafeTransferLib for address;
@@ -133,6 +133,43 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         assertEq(yUsdceLender.balanceOf(address(vault)), minAmountsOut[1]);
     }
 
+    function test_MaxApyCrossChainVault_investSingleXChainSingleVault() public {
+        address vaultAddress = MORPHO_EUSD_VAULT_BASE;
+        uint256 superformId = MORPHO_EUSD_VAULT_BASE_ID;
+        uint64 baseChainId = 8453;
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: 18,
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        oracle.setValues(vaultAddress, _1_USDCE, block.timestamp);
+        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        vault.setAutopilot(true);
+
+        uint8[] memory ambIds = new uint8[](2);
+        ambIds[0] = 1;
+        ambIds[1] = 6;
+
+        SingleVaultSFData memory superformData = SingleVaultSFData({
+            superformId: superformId,
+            amount: 600 * _1_USDCE,
+            outputAmount: 1,
+            maxSlippage: 300,
+            liqRequest: LiqRequest("", USDCE_POLYGON, address(0), 101, 137, 0),
+            permit2data: "",
+            hasDstSwap: false,
+            retain4626: false,
+            receiverAddress: address(vault),
+            receiverAddressSP: address(vault),
+            extraFormData: ""
+        });
+
+         vault.investSingleXChainSingleVault(ambIds, baseChainId, superformData);
+    }
+
     function test_MaxApyCrossChainVault_processRedeemRequest_from_idle() public {
         uint256 sharesBalance = vault.depositAtomic(1000 * _1_USDCE, users.alice);
         vault.setAutopilot(true);
@@ -176,7 +213,7 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         skip(vault.SECS_PER_YEAR());
         VaultReport[] memory mockReport = new VaultReport[](0);
         vault.report(mockReport, users.bob);
-        assertEq(vault.balanceOf(treasury) , 200 * _1_USDCE);
-        assertEq(vault.balanceOf(users.bob) ,  200 * _1_USDCE);
+        assertEq(vault.balanceOf(treasury), 200 * _1_USDCE);
+        assertEq(vault.balanceOf(users.bob), 200 * _1_USDCE);
     }
 }

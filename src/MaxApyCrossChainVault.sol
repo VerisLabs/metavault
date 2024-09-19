@@ -443,7 +443,18 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
     }
 
-    function investSingleXChainSingleVault() external onlyRoles(MANAGER_ROLE) { }
+    function investSingleXChainSingleVault(
+        uint8[] memory ambIds,
+        uint64 dstChainId,
+        SingleVaultSFData memory superformData
+    )
+        external
+        onlyRoles(MANAGER_ROLE)
+    {
+        SingleXChainSingleVaultStateReq memory params =
+            SingleXChainSingleVaultStateReq(ambIds, dstChainId, superformData);
+        _vaultRouter.singleXChainSingleVaultDeposit(params);
+    }
 
     function investSingleXChainMultiVault() external onlyRoles(MANAGER_ROLE) { }
 
@@ -494,10 +505,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     {
         // If its already listed revert
         if (isVaultListed(vault)) revert();
-        // If its a crosschain vault check that the superform id exists
-        if (chainId != THIS_CHAIN_ID && !_factory.isSuperform(superformId)) {
-            revert();
-        }
+
         // Save it into storage
         vaults[superformId].chainId = chainId;
         vaults[superformId].superformId = superformId;
@@ -1272,4 +1280,28 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
         return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
     }
+
+    function supportsInterface(bytes4 interfaceId) public view returns(bool) {
+        if (interfaceId == 0x4e2312e0) return true;
+    }
+
+    function onERC1155Received(
+           address,
+           address,
+           uint256,
+           uint256,
+           bytes memory
+       ) public returns (bytes4) {
+           return this.onERC1155Received.selector;
+       }
+
+       function onERC1155BatchReceived(
+           address,
+           address,
+           uint256[] memory,
+           uint256[] memory,
+           bytes memory
+       ) public returns (bytes4) {
+           return this.onERC1155BatchReceived.selector;
+       }
 }
