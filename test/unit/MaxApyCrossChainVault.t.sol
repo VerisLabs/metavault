@@ -10,8 +10,9 @@ import {
 } from "src/interfaces/Lib.sol";
 import "src/helpers/AddressBook.sol";
 import { VaultReport, SingleVaultSFData, LiqRequest } from "src/types/Lib.sol";
+import {SuperformHelper} from "../superform/SuperformHelper.sol";
 
-contract MaxApyCrossChainVaultTest is BaseTest {
+contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
@@ -30,6 +31,7 @@ contract MaxApyCrossChainVaultTest is BaseTest {
 
     function setUp() public {
         super._setUp("POLYGON", 61_032_901);
+        _setUpSuperform(users.alice);
         superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
@@ -160,7 +162,8 @@ contract MaxApyCrossChainVaultTest is BaseTest {
             amount: 600 * _1_USDCE,
             outputAmount: 1,
             maxSlippage: 300,
-            liqRequest: LiqRequest(liqData, USDCE_POLYGON, address(0), 6, baseChainId, 0),
+            // TODO
+            liqRequest: _build(),
             permit2data: "",
             hasDstSwap: false,
             retain4626: false,

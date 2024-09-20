@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.19;
 
 import { ILiFi } from "./vendor/lifi/ILiFi.sol";
@@ -18,7 +17,7 @@ interface IUniswapFactory {
     function getPair(address tokenA, address tokenB) external view returns (address pair);
 }
 
-abstract contract CommonProtocolActions is Test {
+abstract contract SuperformHelper is Test {
     uint64[] public chainIds = [1, 56, 43_114, 137, 42_161, 10, 8453, 250];
 
     // chainID => FORK
@@ -409,7 +408,7 @@ abstract contract CommonProtocolActions is Test {
             );
 
             txData = abi.encodeWithSelector(
-                DeBridgeForwarderMock.strictlySwapAndCall.selector,
+                0x4d8160ba, // DeBridgeForwarderMock.strictlySwapAndCall.selector
                 args.externalToken,
                 args.amount,
                 bytes(""),
@@ -435,7 +434,7 @@ abstract contract CommonProtocolActions is Test {
 
             require(dex != address(0), "1inch unavailable");
             txData = abi.encodeWithSelector(
-                OneInchMock.unoswapTo.selector,
+                0xe2c95c82, // OneInchMock.unoswapTo.selector
                 uint256(uint160(args.toDst)),
                 uint256(uint160(args.externalToken)),
                 args.amount,
@@ -498,7 +497,7 @@ abstract contract CommonProtocolActions is Test {
             );
 
             txData = abi.encodeWithSelector(
-                LiFiMock.swapTokensGeneric.selector,
+                0x4630a0d8, //LiFiMock.swapTokensGeneric.selector
                 bytes32(0),
                 "",
                 "",
@@ -545,7 +544,7 @@ abstract contract CommonProtocolActions is Test {
             );
 
             txData = abi.encodeWithSelector(
-                LiFiMockSwapToAttacker.swapTokensGeneric.selector,
+                0x4630a0d8, // LiFiMockSwapToAttacker.swapTokensGeneric.selector,
                 bytes32(0),
                 "",
                 "",
@@ -562,7 +561,7 @@ abstract contract CommonProtocolActions is Test {
             require(dex != address(0), "1inch unavailable");
 
             txData = abi.encodeWithSelector(
-                OneInchMock.unoswapTo.selector,
+               0xe2c95c82,// OneInchMock.unoswapTo.selector
                 uint256(uint160(getContract(toChainId_, "CoreStateRegistry"))),
                 uint256(uint160(sendingTokenDst_)),
                 amount_,
