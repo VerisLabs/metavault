@@ -62,7 +62,7 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
     }
 
-    function test_MaxApyCrossChainVault_initialization() public {
+    function test_MaxApyCrossChainVault_initialization() public view {
         assertTrue(vault.isVaultListed(address(yUsdce)));
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.asset(), USDCE_POLYGON);
@@ -133,6 +133,8 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         assertEq(yUsdceLender.balanceOf(address(vault)), minAmountsOut[1]);
     }
 
+    bytes constant liqData = hex"34";
+
     function test_MaxApyCrossChainVault_investSingleXChainSingleVault() public {
         address vaultAddress = MORPHO_EUSD_VAULT_BASE;
         uint256 superformId = MORPHO_EUSD_VAULT_BASE_ID;
@@ -150,15 +152,15 @@ contract MaxApyCrossChainVaultTest is BaseTest {
         vault.setAutopilot(true);
 
         uint8[] memory ambIds = new uint8[](2);
-        ambIds[0] = 1;
-        ambIds[1] = 6;
+        ambIds[0] = 5;
+        ambIds[1] = 9;
 
         SingleVaultSFData memory superformData = SingleVaultSFData({
             superformId: superformId,
             amount: 600 * _1_USDCE,
             outputAmount: 1,
             maxSlippage: 300,
-            liqRequest: LiqRequest("", USDCE_POLYGON, address(0), 101, 137, 0),
+            liqRequest: LiqRequest(liqData, USDCE_POLYGON, address(0), 6, baseChainId, 0),
             permit2data: "",
             hasDstSwap: false,
             retain4626: false,
@@ -167,7 +169,7 @@ contract MaxApyCrossChainVaultTest is BaseTest {
             extraFormData: ""
         });
 
-         vault.investSingleXChainSingleVault(ambIds, baseChainId, superformData);
+        vault.investSingleXChainSingleVault(ambIds, baseChainId, superformData);
     }
 
     function test_MaxApyCrossChainVault_processRedeemRequest_from_idle() public {

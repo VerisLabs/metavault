@@ -60,6 +60,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     uint24 public constant REQUEST_REDEEM_DELAY = 1 days;
     uint64 public immutable THIS_CHAIN_ID;
     uint256 public constant N_CHAINS = 7;
+
     uint64[N_CHAINS] public DST_CHAINS = [
         1, // Ethereum Mainnet
         137, // Polygon
@@ -1281,27 +1282,24 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
     }
 
-    function supportsInterface(bytes4 interfaceId) public view returns(bool) {
+    function supportsInterface(bytes4 interfaceId) public view returns (bool) {
         if (interfaceId == 0x4e2312e0) return true;
     }
 
-    function onERC1155Received(
-           address,
-           address,
-           uint256,
-           uint256,
-           bytes memory
-       ) public returns (bytes4) {
-           return this.onERC1155Received.selector;
-       }
+    function onERC1155Received(address, address, uint256, uint256, bytes memory) public returns (bytes4) {
+        return this.onERC1155Received.selector;
+    }
 
-       function onERC1155BatchReceived(
-           address,
-           address,
-           uint256[] memory,
-           uint256[] memory,
-           bytes memory
-       ) public returns (bytes4) {
-           return this.onERC1155BatchReceived.selector;
-       }
+    function onERC1155BatchReceived(
+        address,
+        address,
+        uint256[] memory,
+        uint256[] memory,
+        bytes memory
+    )
+        public
+        returns (bytes4)
+    {
+        return this.onERC1155BatchReceived.selector;
+    }
 }
