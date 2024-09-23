@@ -160,7 +160,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
             uint256 maxSlippage,
             LiqRequest memory liqRequest,
             bool hasDstSwap
-        ) = _buildInvestSingleXChainSingleVaultParams(superformId,investAmount);
+        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
         vault.investSingleXChainSingleVault{ value: 2_019_272_528_089_399_502 }(
             superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
         );
