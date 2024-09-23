@@ -1,3 +1,5 @@
+pragma solidity 0.8.19;
+
 contract MaxApyCrossChainVaultEvents {
     /// @dev Emitted when `assets` tokens are deposited into the vault
     event DepositRequest(

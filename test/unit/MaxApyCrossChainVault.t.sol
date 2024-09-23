@@ -9,10 +9,10 @@ import {
     IBaseRouter as ISuperformRouter, ISuperformFactory, ISuperPositions, IERC4626Oracle
 } from "src/interfaces/Lib.sol";
 import "src/helpers/AddressBook.sol";
-import { VaultReport, SingleVaultSFData, LiqRequest } from "src/types/Lib.sol";
-import {SuperformHelper} from "../superform/SuperformHelper.sol";
+import { VaultReport, SingleVaultSFData, LiqRequest, SingleXChainSingleVaultStateReq } from "src/types/Lib.sol";
+import { SuperformActions } from "../helpers/SuperformActions.sol";
 
-contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
+contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
@@ -29,9 +29,9 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
     uint24 processRedeemSettlement;
     address treasury = makeAddr("treasury");
 
-    function setUp() public {
-        super._setUp("POLYGON", 61_032_901);
-        _setUpSuperform(users.alice);
+    function setUp() public override {
+        super._setUp("POLYGON", 62_182_591);
+        super.setUp();
         superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
@@ -87,7 +87,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
 
         uint256 shares = vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
         assertEq(shares, depositPreview);
-        assertEq(vault.totalAssets(), 1000 * _1_USDCE - 1);
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE - 2);
         assertEq(vault.totalIdle(), 600 * _1_USDCE);
         assertEq(vault.totalDebt(), 400 * _1_USDCE);
         assertEq(yUsdce.balanceOf(address(vault)), depositPreview);
@@ -135,14 +135,12 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
         assertEq(yUsdceLender.balanceOf(address(vault)), minAmountsOut[1]);
     }
 
-    bytes constant liqData = hex"34";
-
     function test_MaxApyCrossChainVault_investSingleXChainSingleVault() public {
-        address vaultAddress = MORPHO_EUSD_VAULT_BASE;
-        uint256 superformId = MORPHO_EUSD_VAULT_BASE_ID;
-        uint64 baseChainId = 8453;
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
         vault.addVault({
-            chainId: baseChainId,
+            chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: 18,
@@ -153,26 +151,19 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
         vault.depositAtomic(1000 * _1_USDCE, users.alice);
         vault.setAutopilot(true);
 
-        uint8[] memory ambIds = new uint8[](2);
-        ambIds[0] = 5;
-        ambIds[1] = 9;
-
-        SingleVaultSFData memory superformData = SingleVaultSFData({
-            superformId: superformId,
-            amount: 600 * _1_USDCE,
-            outputAmount: 1,
-            maxSlippage: 300,
-            // TODO
-            liqRequest: _build(),
-            permit2data: "",
-            hasDstSwap: false,
-            retain4626: false,
-            receiverAddress: address(vault),
-            receiverAddressSP: address(vault),
-            extraFormData: ""
-        });
-
-        vault.investSingleXChainSingleVault(ambIds, baseChainId, superformData);
+        uint256 investAmount = 600 * _1_USDCE;
+        (
+            ,
+            uint8[] memory ambIds,
+            ,
+            uint256 outputAmount,
+            uint256 maxSlippage,
+            LiqRequest memory liqRequest,
+            bool hasDstSwap
+        ) = _buildInvestSingleXChainSingleVaultParams(superformId,investAmount);
+        vault.investSingleXChainSingleVault{ value: 2_019_272_528_089_399_502 }(
+            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+        );
     }
 
     function test_MaxApyCrossChainVault_processRedeemRequest_from_idle() public {
@@ -204,7 +195,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformHelper{
         assertGt(sharePriceAfterLock, sharePriceBeforeLock);
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
         assertEq(vault.totalSupply(), 0);
-        assertEq(vault.totalAssets(), 1);
+        assertEq(vault.totalAssets(), 2);
         assertEq(vault.totalIdle(), 0);
         assertEq(vault.totalDebt(), 0);
         assertEq(vault.claimableRedeemRequest(users.alice), sharesBalance);

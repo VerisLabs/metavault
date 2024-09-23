@@ -176,6 +176,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         for (uint256 i = 0; i != N_CHAINS; i++) {
             chainIndexes[DST_CHAINS[i]] = i;
         }
+        asset().safeApprove(address(_vaultRouter_), type(uint256).max);
         _initializeOwner(msg.sender);
         _grantRoles(msg.sender, ADMIN_ROLE);
         receiverImplementation = address(new ERC20Receiver(_asset_));
@@ -445,16 +446,37 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     function investSingleXChainSingleVault(
+        uint256 superformId,
         uint8[] memory ambIds,
-        uint64 dstChainId,
-        SingleVaultSFData memory superformData
+        uint256 amount,
+        uint256 outputAmount,
+        uint256 maxSlippage,
+        LiqRequest memory liqRequest,
+        bool hasDstSwap
     )
         external
+        payable
         onlyRoles(MANAGER_ROLE)
     {
-        SingleXChainSingleVaultStateReq memory params =
-            SingleXChainSingleVaultStateReq(ambIds, dstChainId, superformData);
-        _vaultRouter.singleXChainSingleVaultDeposit(params);
+        VaultData memory vault = vaults[superformId];
+        SingleXChainSingleVaultStateReq memory req = SingleXChainSingleVaultStateReq({
+            ambIds: ambIds,
+            dstChainId: vault.chainId,
+            superformData: SingleVaultSFData({
+                superformId: superformId,
+                amount: amount,
+                outputAmount: outputAmount,
+                maxSlippage: maxSlippage,
+                liqRequest: liqRequest,
+                permit2data: "",
+                hasDstSwap: hasDstSwap,
+                retain4626: false,
+                receiverAddress: address(this),
+                receiverAddressSP: address(this),
+                extraFormData: ""
+            })
+        });
+        _vaultRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
     }
 
     function investSingleXChainMultiVault() external onlyRoles(MANAGER_ROLE) { }
