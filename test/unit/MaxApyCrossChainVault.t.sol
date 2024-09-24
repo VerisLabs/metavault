@@ -5,20 +5,15 @@ import { MockERC4626Oracle } from "../helpers/mock/MockERC4626Oracle.sol";
 import { BaseTest } from "../base/BaseTest.t.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import {
-    IBaseRouter as ISuperformRouter, ISuperformFactory, ISuperPositions, IERC4626Oracle
-} from "src/interfaces/Lib.sol";
-import "src/helpers/AddressBook.sol";
+import { IERC4626Oracle } from "src/interfaces/Lib.sol";
 import { VaultReport, SingleVaultSFData, LiqRequest, SingleXChainSingleVaultStateReq } from "src/types/Lib.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
+import "src/helpers/AddressBook.sol";
 
 contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
-    ISuperPositions public superPositions;
-    ISuperformRouter public vaultRouter;
-    ISuperformFactory public factory;
     ERC4626 public yUsdce;
     uint64 public constant POLYGON_CHAIN_ID = 137;
     uint24 public sharesLockTime = 30 days;
@@ -32,9 +27,6 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
     function setUp() public override {
         super._setUp("POLYGON", 62_182_591);
         super.setUp();
-        superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
-        vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
-        factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
         vault = new MaxApyCrossChainVault({
             _asset_: USDCE_POLYGON,
@@ -143,11 +135,11 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
-            vaultDecimals: 18,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             oracle: IERC4626Oracle(address(oracle))
         });
 
-        oracle.setValues(vaultAddress, _1_USDCE, block.timestamp);
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
         vault.depositAtomic(1000 * _1_USDCE, users.alice);
         vault.setAutopilot(true);
 
@@ -161,9 +153,18 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
             LiqRequest memory liqRequest,
             bool hasDstSwap
         ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-        vault.investSingleXChainSingleVault{ value: 2_019_272_528_089_399_502 }(
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+
+        vault.investSingleXChainSingleVault{ value: 1_253_949_103_335_563_405 }(
             superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
         );
+        assertEq(USDCE_POLYGON.balanceOf(address(vault)), 400 * _1_USDCE);
+        assertEq(vault.totalAssets(), 400 * _1_USDCE);
+        _mintSuperpositions(address(vault), superformId, shares);
+        assertEq(vault.totalAssets(), 999_999_482);
+        assertEq(vault.totalIdle(), 400 * _1_USDCE);
+        assertEq(superPositions.balanceOf(address(vault), superformId), shares);
     }
 
     function test_MaxApyCrossChainVault_processRedeemRequest_from_idle() public {

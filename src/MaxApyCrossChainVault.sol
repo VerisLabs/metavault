@@ -210,6 +210,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             assets += vault.convertToAssets(_sharesBalance(vault), false);
             ++i;
         }
+        return assets;
     }
 
     /// @notice Returns the estimate price of 1 vault share
@@ -477,6 +478,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             })
         });
         _vaultRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
+        uint128 amountUint128 = amount.toUint128();
+        _totalIdle -= amountUint128;
+        _totalDebt += amountUint128;
+        vaults[superformId].totalDebt += amountUint128;
     }
 
     function investSingleXChainMultiVault() external onlyRoles(MANAGER_ROLE) { }
