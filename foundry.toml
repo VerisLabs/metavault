@@ -5,8 +5,8 @@ libs = ["dependencies"]
 gas_reports = ['*']
 evm_version =  "paris"
 
-# [profile.fork]
-# evm_version =  "shanghai"
+[profile.fork]
+evm_version =  "shanghai"
 
 [profile.deployment]
 optimizer = true
