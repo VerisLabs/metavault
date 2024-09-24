@@ -27,14 +27,20 @@ import {
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
-/// @notice description
+/// @notice A ERC750 vault implementation for cross-chain yield
+/// aggregation
 contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @dev Safe casting operations for uint256
     using SafeCastLib for uint256;
+
+    /// @dev Safe transfer operations for ERC20 tokens
     using SafeTransferLib for address;
+
+    /// @dev Library for vault-related operations
     using VaultLib for VaultData;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -49,27 +55,51 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /*                           CONSTANTS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @notice Maximum size of the withdrawal queue
     uint256 public constant WITHDRAWAL_QUEUE_SIZE = 30;
+
+    /// @notice Number of seconds in a year, used for APY calculations
     uint256 public constant SECS_PER_YEAR = 31_556_952;
+
+    /// @notice Maximum basis points (100%)
     uint256 public constant MAX_BPS = 10_000;
+
+    /// @notice Role identifier for admin privileges
     uint256 public constant ADMIN_ROLE = _ROLE_0;
+
+    /// @notice Role identifier for emergency admin privileges
     uint256 public constant EMERGENCY_ADMIN_ROLE = _ROLE_1;
+
+    /// @notice Role identifier for oracle privileges
     uint256 public constant ORACLE_ROLE = _ROLE_2;
+
+    /// @notice Role identifier for manager privileges
     uint256 public constant MANAGER_ROLE = _ROLE_3;
+
+    /// @notice Role identifier for relayer privileges
     uint256 public constant RELAYER_ROLE = _ROLE_4;
+
+    /// @notice Delay period for redeem requests
     uint24 public constant REQUEST_REDEEM_DELAY = 1 days;
+
+    /// @notice Chain ID of the current network
     uint64 public immutable THIS_CHAIN_ID;
+
+    /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
+    /// @notice Array of destination chain IDs
+    /// @dev Includes Ethereum Mainnet, Polygon, BNB Chain, Optimism, Base, Arbitrum One, and Avalanche
     uint64[N_CHAINS] public DST_CHAINS = [
         1, // Ethereum Mainnet
         137, // Polygon
-        56, // Bnb
+        56, // BNB Chain
         10, // Optimism
         8453, // Base
         42_161, // Arbitrum One
         43_114 // Avalanche
     ];
+    /// @notice Mapping of chain IDs to their respective indexes
     mapping(uint64 => uint256) chainIndexes;
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           STORAGE                          */
@@ -137,6 +167,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @notice Modifier to prevent execution during emergency shutdown
+    /// @dev Reverts the transaction if emergencyShutdown is true
     modifier noEmergencyShutdown() {
         if (emergencyShutdown) {
             revert();
@@ -144,6 +176,18 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _;
     }
 
+    /// @notice Initializes the MaxApyCrossChainVault contract
+    /// @param _asset_ Address of the underlying asset token
+    /// @param _name_ Name of the vault token
+    /// @param _symbol_ Symbol of the vault token
+    /// @param _managementFee Management fee in basis points
+    /// @param _oracleFee Oracle fee in basis points
+    /// @param _sharesLockTime Duration for which shares are locked after minting
+    /// @param _processRedeemSettlement Time allowed for processing redeem settlements
+    /// @param _superPositions_ Address of the SuperPositions contract
+    /// @param _vaultRouter_ Address of the BaseRouter contract
+    /// @param _factory_ Address of the SuperformFactory contract
+    /// @param _treasury Address of the treasury to receive fees
     constructor(
         address _asset_,
         string memory _name_,
@@ -170,15 +214,23 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         processRedeemSettlement = _processRedeemSettlement;
         lastReport = block.timestamp;
 
+        // Try to get asset decimals, fallback to default if unsuccessful
         (bool success, uint8 result) = _tryGetAssetDecimals(_asset_);
         _decimals = success ? result : _DEFAULT_UNDERLYING_DECIMALS;
+        // Set the chain ID for the current network
         THIS_CHAIN_ID = uint64(block.chainid);
+        // Initialize chainIndexes mapping
         for (uint256 i = 0; i != N_CHAINS; i++) {
             chainIndexes[DST_CHAINS[i]] = i;
         }
+        // Approve vault router to spend the asset
         asset().safeApprove(address(_vaultRouter_), type(uint256).max);
+
+        // Initialize ownership and grant admin role
         _initializeOwner(msg.sender);
         _grantRoles(msg.sender, ADMIN_ROLE);
+
+        // Deploy and set the receiver implementation
         receiverImplementation = address(new ERC20Receiver(_asset_));
     }
 
@@ -304,6 +356,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     {
         uint256 sharesBalance = balanceOf(to);
         shares = super.deposit(assets, to, controller);
+        // Start shares lock time
         _lockShares(to, sharesBalance, shares);
         _afterDeposit(assets, shares);
     }
@@ -400,14 +453,35 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _processRedeemRequest(shares, controller, owner, receiver, false);
     }
 
+    /// @notice Processes a redemption request for a given controller
+    /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
+    /// including cross-chain withdrawals
+    /// @param controller The address of the controller initiating the redemption
     function processRedeemRequest(address controller) external onlyRoles(RELAYER_ROLE) {
+        // Retrieve the pending redeem request for the specified controller
+        // This request may involve cross-chain withdrawals from various ERC4626 vaults
+
+        // Process the redemption request asynchronously
+        // Parameters:
+        // 1. pendingRedeemRequest(controller): Fetches the pending shares
+        // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
+        // 3. address(this): The vault itself as the receiver of the redeemed assets
+        // 4. true: Retain the assets, dont send them directly to the controller
         _processRedeemRequest(pendingRedeemRequest(controller), controller, controller, address(this), true);
+        // Note: After processing, the redeemed assets are held by this contract
+        // The user can later claim these assets using `redeem` or `withdraw`
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       VAULT MANAGEMENT                     */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @notice Invests assets from this vault into a single target vault within the same chain
+    /// @dev Only callable by addresses with the MANAGER_ROLE
+    /// @param vaultAddress The address of the target vault to invest in
+    /// @param amount The amount of assets to invest
+    /// @param minAmountOut The minimum amount of shares expected to receive from the investment
+    /// @return shares The number of shares received from the target vault
     function investSingleDirectSingleVault(
         address vaultAddress,
         uint256 amount,
@@ -417,20 +491,38 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         onlyRoles(MANAGER_ROLE)
         returns (uint256 shares)
     {
+        // Ensure the target vault is in the approved list
         if (!isVaultListed(vaultAddress)) revert();
+
+        // Record the balance before deposit to calculate received shares
         uint256 balanceBefore = vaultAddress.balanceOf(address(this));
+
+        // Deposit assets into the target vault
         ERC4626(vaultAddress).deposit(amount, address(this));
+
+        // Calculate the number of shares received
         shares = vaultAddress.balanceOf(address(this)) - balanceBefore;
+
+        // Ensure the received shares meet the minimum expected amount
         if (shares < minAmountOut) {
             revert();
         }
+
+        // Update the vault's internal accounting
         uint128 amountUint128 = amount.toUint128();
         _totalIdle -= amountUint128;
         _totalDebt += amountUint128;
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt += amountUint128;
+
         return shares;
     }
 
+    /// @notice Invests assets from this vault into multiple target vaults within the same chain
+    /// @dev Calls investSingleDirectSingleVault for each target vault
+    /// @param vaultAddresses An array of addresses of the target vaults to invest in
+    /// @param amounts An array of amounts to invest in each corresponding vault
+    /// @param minAmountOuts An array of minimum amounts of shares expected from each investment
+    /// @return shares An array of the number of shares received from each target vault
     function investSingleDirectMultiVault(
         address[] calldata vaultAddresses,
         uint256[] calldata amounts,
@@ -440,12 +532,20 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         returns (uint256[] memory shares)
     {
         shares = new uint256[](vaultAddresses.length);
-
         for (uint256 i = 0; i < vaultAddresses.length; ++i) {
             shares[i] = investSingleDirectSingleVault(vaultAddresses[i], amounts[i], minAmountOuts[i]);
         }
     }
 
+    /// @notice Invests assets from this vault into a single target vault on a different chain
+    /// @dev Only callable by addresses with the MANAGER_ROLE
+    /// @param superformId The identifier of the target vault in the Superform system
+    /// @param ambIds An array of AMB (Asset Management Bridge) identifiers for cross-chain communication
+    /// @param amount The amount of assets to invest
+    /// @param outputAmount The expected amount of shares to receive
+    /// @param maxSlippage The maximum acceptable slippage for the cross-chain transaction
+    /// @param liqRequest Liquidity request parameters for the cross-chain transaction
+    /// @param hasDstSwap Boolean indicating if a swap is needed on the destination chain
     function investSingleXChainSingleVault(
         uint256 superformId,
         uint8[] memory ambIds,
@@ -459,7 +559,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        // Retrieve the vault data for the target vault
         VaultData memory vault = vaults[superformId];
+
+        // Prepare the cross-chain deposit request
         SingleXChainSingleVaultStateReq memory req = SingleXChainSingleVaultStateReq({
             ambIds: ambIds,
             dstChainId: vault.chainId,
@@ -477,41 +580,66 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                 extraFormData: ""
             })
         });
+
+        // Initiate the cross-chain deposit via the vault router
         _vaultRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
+
+        // Update the vault's internal accounting
         uint128 amountUint128 = amount.toUint128();
         _totalIdle -= amountUint128;
         _totalDebt += amountUint128;
         vaults[superformId].totalDebt += amountUint128;
     }
 
+    /// @notice Placeholder for investing in multiple vaults across chains
+    /// @dev Not implemented yet
     function investSingleXChainMultiVault() external onlyRoles(MANAGER_ROLE) { }
 
+    /// @notice Placeholder for investing multiple assets in a single vault across chains
+    /// @dev Not implemented yet
     function investMultiXChainSingleVault() external onlyRoles(MANAGER_ROLE) { }
 
+    /// @notice Placeholder for investing multiple assets in multiple vaults across chains
+    /// @dev Not implemented yet
     function investMultiXChainMultiVault() external onlyRoles(MANAGER_ROLE) { }
 
+    /// @notice Updates the share prices of vaults based on oracle reports
+    /// @dev This function can only be called by addresses with the ORACLE_ROLE
+    /// @param reports An array of VaultReport structures containing updated share prices
+    /// @param source The address of the oracle providing the report
     function report(VaultReport[] calldata reports, address source) external onlyRoles(ORACLE_ROLE) {
         int256 totalAssetsDelta;
+
         for (uint256 i = 0; i < reports.length; i++) {
-            // Cache report
+            // Cache the current report for efficiency
             VaultReport memory _report = reports[i];
-            // Revert if the vault is not listed
+
+            // Ensure the reported vault is in the approved list
             if (!isVaultListed(_report.vaultAddress)) revert();
-            // Get superform id
-            uint256 superformId = _vaultToSuperformId[_report.vaultAddress];
-            // Cache vault
+
+            // Retrieve the superform ID for the vault
+            uint256 superformId = vaultToSuperformId[_report.vaultAddress];
+
+            // Cache the vault data for easier access
             VaultData memory vault = vaults[superformId];
-            // Cache vault shares
+
+            // Get the current balance of vault shares
             uint256 sharesBalance = _sharesBalance(vault);
-            // Calculate totalAssets before the report
+
+            // Calculate the total assets value before applying the new share price
             uint256 totalAssetsBefore = vault.convertToAssetsCachedSharePrice(sharesBalance);
+
+            // Update the vault's share price with the new reported value
             vaults[superformId].lastReportedSharePrice = _report.sharePrice;
-            // Calculate totalAssets after the report
+
+            // Calculate the total assets value after applying the new share price
             uint256 totalAssetsAfter = vault.convertToAssetsCachedSharePrice(sharesBalance);
-            // Calculat the profit/loss
+
+            // Calculate the change in total assets (profit or loss)
             totalAssetsDelta += int256(totalAssetsAfter) - int256(totalAssetsBefore);
         }
-        // Assess management fees
+
+        // Calculate and distribute management fees based on the change in total assets
         _assessFees(treasury, source);
     }
 
