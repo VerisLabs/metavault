@@ -618,7 +618,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             if (!isVaultListed(_report.vaultAddress)) revert();
 
             // Retrieve the superform ID for the vault
-            uint256 superformId = vaultToSuperformId[_report.vaultAddress];
+            uint256 superformId = _vaultToSuperformId[_report.vaultAddress];
 
             // Cache the vault data for easier access
             VaultData memory vault = vaults[superformId];

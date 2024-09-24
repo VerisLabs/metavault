@@ -1,35 +1,39 @@
-// SPDX-License-Identifer: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { IERC4626Oracle } from "../interfaces/IERC4626Oracle.sol";
 
+/// @dev The maximum allowable staleness for oracle data before being considered outdated
 uint256 constant ORACLE_STALENESS_TOLERANCE = 8 hours;
 
-/// @notice A struct describing the status of a underlying vault
+/// @notice A struct describing the status of an underlying vault
+/// @dev Contains data about a vault's chain ID, share price, oracle, and more
 struct VaultData {
-    /// @dev id of chain where vault is deployed
+    /// @dev The ID of the chain where the vault is deployed
     uint64 chainId;
-    /// @dev last reported share price
+    /// @dev The last reported share price of the vault
     uint192 lastReportedSharePrice;
-    /// @dev superform id of that vault in Superform
+    /// @dev The superform ID of the vault in the Superform protocol
     uint256 superformId;
-    /// @dev share price oracle
+    /// @dev The oracle that provides the share price for the vault
     IERC4626Oracle oracle;
-    /// @dev decimals of the ERC4626 shares
+    /// @dev The number of decimals used in the ERC4626 shares
     uint8 decimals;
-    /// @dev assets invested in that vault
+    /// @dev The total assets invested in the vault
     uint128 totalDebt;
-    /// @dev address of the vault
+    /// @dev The address of the vault
     address vaultAddress;
 }
 
-/// @notice helper library to define {VaultData} methods
+/// @notice A helper library to define methods for handling VaultData
+/// @dev Provides methods to simulate conversions between shares and assets for a vault
 library VaultLib {
-    /// @notice simulates the ERC4626 {convertToAssets} frunction given a vault data
-    /// @param self vault data
-    /// @param shares amount of shares to convert
-    /// @return assets
+    /// @notice Simulates the ERC4626 {convertToAssets} function using vault data
+    /// @param self The vault data to operate on
+    /// @param shares The number of shares to convert to assets
+    /// @param revertIfStale Whether to revert the transaction if the oracle data is stale
+    /// @return assets The equivalent amount of assets for the given shares
     function convertToAssets(
         VaultData memory self,
         uint256 shares,
@@ -46,15 +50,15 @@ library VaultLib {
             }
             return sharePrice * shares / 10 ** self.decimals;
         } else {
-            // If its on this chain fetch share price directly
+            // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToAssets(shares);
         }
     }
 
-    /// @notice simulates the ERC4626 {convertToAssets} frunction given a vault data
-    /// @param self vault data
-    /// @param shares amount of shares to convert
-    /// @return assets
+    /// @notice Simulates the ERC4626 {convertToAssets} function using cached share price
+    /// @param self The vault data to operate on
+    /// @param shares The number of shares to convert to assets
+    /// @return assets The equivalent amount of assets for the given shares using cached share price
     function convertToAssetsCachedSharePrice(
         VaultData memory self,
         uint256 shares
@@ -66,10 +70,11 @@ library VaultLib {
         return self.lastReportedSharePrice * shares / 10 ** self.decimals;
     }
 
-    /// @notice simulates the ERC4626 {convertToShares} frunction given a vault data
-    /// @param self vault data
-    /// @param assets amount of assets to convert
-    /// @return shares
+    /// @notice Simulates the ERC4626 {convertToShares} function using vault data
+    /// @param self The vault data to operate on
+    /// @param assets The number of assets to convert to shares
+    /// @param revertIfStale Whether to revert the transaction if the oracle data is stale
+    /// @return shares The equivalent amount of shares for the given assets
     function convertToShares(
         VaultData memory self,
         uint256 assets,
@@ -86,25 +91,28 @@ library VaultLib {
             }
             return assets * 10 ** self.decimals / sharePrice;
         } else {
-            // If its on this chain fetch share price directly
+            // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToShares(assets);
         }
     }
 
+    /// @notice Retrieves the current share price of the vault
+    /// @param self The vault data to operate on
+    /// @return The current share price
     function sharePrice(VaultData memory self) internal view returns (uint256) {
         if (self.chainId != _chainId()) {
             (uint256 sharePrice,) = self.oracle.getSharePrice(self.vaultAddress);
             return sharePrice;
         } else {
-            // If its on this chain fetch share price directly
+            // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToAssets(10 ** self.decimals);
         }
     }
 
-    /// @notice simulates the ERC4626 {convertToShares} frunction given a vault data
-    /// @param self vault data
-    /// @param assets amount of assets to convert
-    /// @return shares
+    /// @notice Simulates the ERC4626 {convertToShares} function using cached share price
+    /// @param self The vault data to operate on
+    /// @param assets The number of assets to convert to shares
+    /// @return shares The equivalent amount of shares for the given assets using cached share price
     function convertToSharesCachedSharePrice(
         VaultData memory self,
         uint256 assets
@@ -116,20 +124,20 @@ library VaultLib {
         return assets * 10 ** self.decimals / self.lastReportedSharePrice;
     }
 
-    /// @dev get chain id
-    /// @return chainId
+    /// @notice Retrieves the current chain ID
+    /// @return chainId The current chain ID
     function _chainId() internal view returns (uint64 chainId) {
         return uint64(block.chainid);
     }
 }
 
-/// @notice A struct passed to the vault aggregator
-/// to report new data about some vault
+/// @notice A struct passed to the vault aggregator to report new data about a vault
+/// @dev Used to provide updates about vault share prices and other data
 struct VaultReport {
-    /// @dev source chain id
+    /// @dev The ID of the source chain
     uint64 chainId;
-    /// @dev last fetched share price
+    /// @dev The last fetched share price of the vault
     uint192 sharePrice;
-    /// @dev vault address
+    /// @dev The address of the vault
     address vaultAddress;
 }
