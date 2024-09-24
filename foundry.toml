@@ -3,7 +3,14 @@ src = "src"
 out = "out"
 libs = ["dependencies"]
 gas_reports = ['*']
+evm_version =  "paris"
 
+[profile.fork]
+evm_version =  "shanghai"
+
+[profile.deployment]
+optimizer = true
+optimizer_runs = 200
 
 [fuzz]
 runs = 1000
