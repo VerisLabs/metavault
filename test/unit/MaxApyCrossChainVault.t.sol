@@ -131,6 +131,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
+
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -160,9 +161,15 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
             superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
         );
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), 400 * _1_USDCE);
-        assertEq(vault.totalAssets(), 400 * _1_USDCE);
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalXChainAssets(), 0);
+        assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
+        assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         _mintSuperpositions(address(vault), superformId, shares);
         assertEq(vault.totalAssets(), 999_999_482);
+        assertEq(vault.totalWithdrawableAssets(), 999_999_482);
+        assertEq(vault.totalXChainAssets(), 599_999_482);
+        assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalIdle(), 400 * _1_USDCE);
         assertEq(superPositions.balanceOf(address(vault), superformId), shares);
     }
