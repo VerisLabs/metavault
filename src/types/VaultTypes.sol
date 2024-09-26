@@ -3,6 +3,7 @@ pragma solidity 0.8.19;
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { IERC4626Oracle } from "../interfaces/IERC4626Oracle.sol";
+import { LiqRequest } from "./SuperformTypes.sol";
 
 /// @dev The maximum allowable staleness for oracle data before being considered outdated
 uint256 constant ORACLE_STALENESS_TOLERANCE = 8 hours;
@@ -140,4 +141,40 @@ struct VaultReport {
     uint192 sharePrice;
     /// @dev The address of the vault
     address vaultAddress;
+}
+
+struct SingleXChainSingleVaultWithdraw {
+    uint8[] ambIds;
+    uint256 outputAmount;
+    uint256 maxSlippage;
+    LiqRequest liqRequest;
+    bool hasDstSwap;
+    uint256 value;
+}
+
+struct SingleXChainMultiVaultWithdraw {
+    uint8[] ambIds;
+    uint256[] outputAmounts;
+    uint256[] maxSlippages;
+    LiqRequest[] liqRequests;
+    bool[] hasDstSwaps;
+    uint256 value;
+}
+
+struct MultiXChainSingleVaultWithdraw {
+    uint8[][] ambIds;
+    uint256[] outputAmounts;
+    uint256[] maxSlippages;
+    LiqRequest[] liqRequests;
+    bool[] hasDstSwaps;
+    uint256 value;
+}
+
+struct MultiXChainMultiVaultWithdraw {
+    uint8[][] ambIds;
+    uint256[][] outputAmounts;
+    uint256[][] maxSlippages;
+    LiqRequest[][] liqRequests;
+    bool[][] hasDstSwaps;
+    uint256 value;
 }
