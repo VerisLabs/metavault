@@ -178,6 +178,6 @@ contract ERC7540PropertiesTest is BaseTest {
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(user, sXsV, sXmV, mXsV, mXmV);
     }
 }

@@ -28,7 +28,6 @@ import {
     MultiXChainSingleVaultWithdraw,
     MultiXChainMultiVaultWithdraw
 } from "types/Lib.sol";
-import "forge-std/Test.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
@@ -505,7 +504,15 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // 4. true: Retain the assets, dont send them directly to the controller
         _processRedeemRequest(
             ProcessRedeemRequestConfig(
-                pendingRedeemRequest(controller), controller, controller, address(this), true, sXsV, sXmV, mXsV, mXmV
+                pendingRedeemRequest(controller),
+                controller,
+                controller,
+                address(this),
+                true,
+                sXsV,
+                sXmV,
+                mXsV,
+                mXmV
             )
         );
         // Note: After processing, the redeemed assets are held by this contract
@@ -878,9 +885,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     {
         // Cache how many chains we need and how many vaults in each chain
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+            // If we exhausted the queue stop
+            if(queue[i] == 0) {
+                break;
+            }
             if (resetValues) {
                 // If its fulfilled stop
-                if (cache.amountToWithdraw == 0 || queue[i] == 0) {
+                if (cache.amountToWithdraw == 0) {
                     // reset values
                     cache.amountToWithdraw = cache.assets - cache.totalIdle;
                     break;
