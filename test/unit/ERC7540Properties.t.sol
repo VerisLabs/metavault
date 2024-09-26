@@ -6,6 +6,12 @@ import { _1_USDCE } from "../helpers/Tokens.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { IBaseRouter as ISuperformRouter, ISuperformFactory, ISuperPositions } from "src/interfaces/Lib.sol";
 import "src/helpers/AddressBook.sol";
+import {
+    SingleXChainSingleVaultWithdraw,
+    SingleXChainMultiVaultWithdraw,
+    MultiXChainSingleVaultWithdraw,
+    MultiXChainMultiVaultWithdraw
+} from "src/types/Lib.sol";
 
 contract ERC7540PropertiesTest is BaseTest {
     using SafeTransferLib for address;
@@ -36,6 +42,7 @@ contract ERC7540PropertiesTest is BaseTest {
             _treasury: treasury
         });
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
+        vault.grantRoles(users.alice, vault.RELAYER_ROLE());
     }
 
     function test_erc7540_requestDeposit() public {
@@ -108,17 +115,16 @@ contract ERC7540PropertiesTest is BaseTest {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
+        shares;
         skip(sharesLockTime);
 
-        uint256 snapshotId = vm.snapshot();
         vault.requestRedeem(shares, users.alice, users.alice);
         assertEq(vault.pendingRedeemRequest(users.alice), shares);
         assertEq(vault.claimableRedeemRequest(users.alice), 0);
         assertEq(vault.totalSupply(), amount);
         assertEq(vault.totalAssets(), amount);
-        vm.revertTo(snapshotId);
-        vault.setAutopilot(true);
-        vault.requestRedeem(shares, users.alice, users.alice);
+
+        _processRedeemRequest(users.alice);
         assertEq(vault.pendingRedeemRequest(users.alice), 0);
         assertEq(vault.claimableRedeemRequest(users.alice), amount);
         assertEq(vault.totalSupply(), 0);
@@ -129,9 +135,12 @@ contract ERC7540PropertiesTest is BaseTest {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
+        shares;
         skip(sharesLockTime);
-        vault.setAutopilot(true);
+
         vault.requestRedeem(shares, users.alice, users.alice);
+        _processRedeemRequest(users.alice);
+
         uint256 balanceBefore = USDCE_POLYGON.balanceOf(users.alice);
         uint256 assets = vault.redeem(shares, users.alice, users.alice);
         uint256 balanceAfter = USDCE_POLYGON.balanceOf(users.alice);
@@ -147,9 +156,12 @@ contract ERC7540PropertiesTest is BaseTest {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
+        shares;
         skip(sharesLockTime);
-        vault.setAutopilot(true);
+
         vault.requestRedeem(shares, users.alice, users.alice);
+        _processRedeemRequest(users.alice);
+
         uint256 balanceBefore = USDCE_POLYGON.balanceOf(users.alice);
         uint256 burntShares = vault.withdraw(amount, users.alice, users.alice);
         uint256 balanceAfter = USDCE_POLYGON.balanceOf(users.alice);
@@ -159,5 +171,13 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.claimableRedeemRequest(users.alice), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
+    }
+
+    function _processRedeemRequest(address user) internal {
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(user, sXsV, sXmV, mXsV, mXmV);
     }
 }
