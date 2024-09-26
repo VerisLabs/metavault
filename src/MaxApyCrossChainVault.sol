@@ -110,8 +110,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     // -- Slot 0
-    /// @notice Cached value of total assets managed by the vault
-    uint128 private _totalAssets;
     /// @notice Cached value of total assets in this vault
     uint128 private _totalIdle;
     // -- Slot 1
@@ -1237,10 +1235,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     function _assessFees(address managementFeeReceiver, address oracleFeeReceiver) private {
         uint256 duration = block.timestamp - lastReport;
 
-        uint256 managementFees = _totalAssets * duration * managementFee / SECS_PER_YEAR / MAX_BPS;
+        uint256 managementFees = totalAssets() * duration * managementFee / SECS_PER_YEAR / MAX_BPS;
         uint256 managementFeeShares = convertToShares(managementFees);
 
-        uint256 oracleFees = _totalAssets * duration * oracleFee / SECS_PER_YEAR / MAX_BPS;
+        uint256 oracleFees = totalAssets() * duration * oracleFee / SECS_PER_YEAR / MAX_BPS;
         uint256 oracleFeeShares = convertToShares(oracleFees);
         _mint(managementFeeReceiver, managementFeeShares);
         _mint(oracleFeeReceiver, oracleFeeShares);
@@ -1248,38 +1246,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
     /// @dev Hook that is called after any deposit or mint.
     function _afterDeposit(uint256 assets, uint256 /*uint256 shares*/ ) internal override {
-        uint128 castedAssets = assets.toUint128();
-        _totalIdle += castedAssets;
-        _totalAssets += castedAssets;
-    }
-
-    /// @dev Get a default liquidity request
-    /// @return request the LiqRequest struct
-    function _getDefaultLiqRequest() private view returns (LiqRequest memory request) {
-        return LiqRequest({
-            txData: _getEmptyBytes(),
-            token: _asset,
-            interimToken: address(0),
-            bridgeId: 1,
-            liqDstChainId: THIS_CHAIN_ID,
-            nativeAmount: 0
-        });
-    }
-
-    /// @dev get liquidity requests
-    function _getDefaultLiqRequestsArray(uint256 len) private view returns (LiqRequest[] memory) {
-        LiqRequest[] memory arr = new LiqRequest[](len);
-        for (uint256 i = 0; i != len; ++i) {
-            arr[i] = LiqRequest({
-                txData: _getEmptyBytes(),
-                token: _asset,
-                interimToken: address(0),
-                bridgeId: 1,
-                liqDstChainId: THIS_CHAIN_ID,
-                nativeAmount: 0
-            });
-        }
-        return arr;
+        uint128 assetsUint128 = assets.toUint128();
+        _totalIdle += assetsUint128;
     }
 
     function _checkRequestsSettled(address controller) private view {
@@ -1359,54 +1327,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         for (uint256 i = 0; i < vaults.length; ++i) {
             withdrawn += _singleDirectSingleVaultWithdraw(vaults[i], amounts[i], minAmountsOut[i], receiver);
         }
-    }
-
-    function _singleDirectSingleVaultDeposit(uint256 superformId, uint256 amount, address receiver) private {
-        // Request
-        SingleDirectSingleVaultStateReq memory params = SingleDirectSingleVaultStateReq({
-            superformData: SingleVaultSFData({
-                superformId: superformId,
-                amount: amount,
-                outputAmount: 0,
-                maxSlippage: 0,
-                liqRequest: _getDefaultLiqRequest(),
-                permit2data: _getEmptyBytes(),
-                hasDstSwap: false,
-                retain4626: false,
-                receiverAddress: receiver,
-                receiverAddressSP: address(0),
-                extraFormData: _getEmptyBytes()
-            })
-        });
-        _vaultRouter.singleDirectSingleVaultDeposit(params);
-    }
-
-    function _singleDirectMultiVaultDeposit(
-        uint256[] memory superformIds,
-        uint256[] memory amounts,
-        address receiver
-    )
-        private
-    {
-        uint256 len = superformIds.length;
-        uint256[] memory emptyUint256Array = _getEmptyUint256Array(len);
-        bool[] memory emptyBoolArray = _getEmptyBoolArray(len);
-        SingleDirectMultiVaultStateReq memory params = SingleDirectMultiVaultStateReq({
-            superformData: MultiVaultSFData({
-                superformIds: superformIds,
-                amounts: amounts,
-                outputAmounts: emptyUint256Array,
-                maxSlippages: emptyUint256Array,
-                liqRequests: _getDefaultLiqRequestsArray(len),
-                permit2data: _getEmptyBytes(),
-                hasDstSwaps: emptyBoolArray,
-                retain4626s: emptyBoolArray,
-                receiverAddress: receiver,
-                receiverAddressSP: address(0),
-                extraFormData: _getEmptyBytes()
-            })
-        });
-        _vaultRouter.singleDirectMultiVaultDeposit(params);
     }
 
     function _singleXChainSingleVaultWithdraw(
@@ -1558,17 +1478,18 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     function _convertToShares(uint256 assets, uint256 _totalAssets) private view returns (uint256 shares) {
+        uint256 totalAssets = totalAssets();
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
             return _eitherIsZero_(assets, supply)
                 ? _initialConvertToShares(assets)
-                : Math.fullMulDiv(assets, supply, totalAssets());
+                : Math.fullMulDiv(assets, supply, totalAssets);
         }
         uint256 o = _decimalsOffset();
         if (o == uint256(0)) {
-            return Math.fullMulDiv(assets, totalSupply() + 1, _inc_(_totalAssets));
+            return Math.fullMulDiv(assets, totalSupply() + 1, _inc_(totalAssets));
         }
-        return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
+        return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(totalAssets));
     }
 
     function supportsInterface(bytes4 interfaceId) public view returns (bool) {
