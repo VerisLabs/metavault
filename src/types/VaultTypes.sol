@@ -30,11 +30,13 @@ struct VaultData {
 /// @notice A helper library to define methods for handling VaultData
 /// @dev Provides methods to simulate conversions between shares and assets for a vault
 library VaultLib {
+    error StaleSharePrice();
     /// @notice Simulates the ERC4626 {convertToAssets} function using vault data
     /// @param self The vault data to operate on
     /// @param shares The number of shares to convert to assets
     /// @param revertIfStale Whether to revert the transaction if the oracle data is stale
     /// @return assets The equivalent amount of assets for the given shares
+
     function convertToAssets(
         VaultData memory self,
         uint256 shares,
@@ -47,7 +49,7 @@ library VaultLib {
         if (self.chainId != _chainId()) {
             (uint256 sharePrice, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
             if (revertIfStale) {
-                if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
+                if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
             }
             return sharePrice * shares / 10 ** self.decimals;
         } else {

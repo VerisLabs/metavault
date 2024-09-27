@@ -163,9 +163,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Timestamp of last report
     uint256 public lastReport;
     /// @notice pending bridged assets for each vault
-    mapping(uint256 superformId => uint256 amount) private _pendingBridgedAssets;
+    mapping(uint256 superformId => uint256 amount) private _pendingXChainDeposits;
     /// @notice Cached value of total assets that are being bridged at the moment
-    uint256 private _totalPendingBridgedAssets;
+    uint256 private _totalPendingXChainDeposits;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -229,6 +229,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
         // Approve vault router to spend the asset
         asset().safeApprove(address(_vaultRouter_), type(uint256).max);
+        // Approve vault router to burn superpositions
+        _superPositions_.setApprovalForAll(address(_vaultRouter_), true);
 
         // Initialize ownership and grant admin role
         _initializeOwner(msg.sender);
@@ -259,7 +261,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
     /// @notice Returns the total amount of the underlying asset managed by the Vault.
     function totalAssets() public view override returns (uint256 assets) {
-        return _totalPendingBridgedAssets + totalWithdrawableAssets();
+        return _totalPendingXChainDeposits + totalWithdrawableAssets();
     }
 
     /// @notice Returns the total amount of the underlying assets that are settled.
@@ -502,15 +504,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // 4. true: Retain the assets, dont send them directly to the controller
         _processRedeemRequest(
             ProcessRedeemRequestConfig(
-                pendingRedeemRequest(controller),
-                controller,
-                controller,
-                address(this),
-                true,
-                sXsV,
-                sXmV,
-                mXsV,
-                mXmV
+                pendingRedeemRequest(controller), controller, controller, address(this), true, sXsV, sXmV, mXsV, mXmV
             )
         );
         // Note: After processing, the redeemed assets are held by this contract
@@ -531,10 +525,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         cachedRoute.totalIdle = _totalIdle;
         cachedRoute.totalDebt = _totalDebt;
         cachedRoute.totalAssets = totalAssets();
-        bool settle;
 
         // Cannot process more assets than the
-        if (cachedRoute.assets > cachedRoute.totalAssets - _totalPendingBridgedAssets) {
+        if (cachedRoute.assets > cachedRoute.totalAssets - _totalPendingXChainDeposits) {
             revert();
         }
 
@@ -673,10 +666,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint128 amountUint128 = amount.toUint128();
         _totalIdle -= amountUint128;
         // We cannot invest more till the previous investment is successfully completed
-        if (_pendingBridgedAssets[superformId] != 0) revert();
+        if (_pendingXChainDeposits[superformId] != 0) revert();
         // Account assets as pending
-        _pendingBridgedAssets[superformId] = amount;
-        _totalPendingBridgedAssets += amount;
+        _pendingXChainDeposits[superformId] = amount;
+        _totalPendingXChainDeposits += amount;
     }
 
     /// @notice Placeholder for investing in multiple vaults across chains
@@ -884,7 +877,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // Cache how many chains we need and how many vaults in each chain
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
             // If we exhausted the queue stop
-            if(queue[i] == 0) {
+            if (queue[i] == 0) {
                 break;
             }
             if (resetValues) {
@@ -924,9 +917,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             // Cache wether is single chain or multichain
             if (vault.chainId != THIS_CHAIN_ID) {
                 uint256 numberOfVaults = cache.lens[chainIndex];
-                if (numberOfVaults == 0) {
-                    continue;
-                } else {
+                if (numberOfVaults != 0) {
                     if (!cache.isSingleChain) {
                         cache.isSingleChain = true;
                     }
@@ -940,6 +931,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                     }
                 }
             }
+
             // Increase index for iteration
             unchecked {
                 cache.lens[chainIndex]++;
@@ -975,7 +967,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         bool settle;
 
         // Cannot process more assets than the
-        if (cache.assets > cache.totalAssets - _totalPendingBridgedAssets) {
+        if (cache.assets > cache.totalAssets - _totalPendingXChainDeposits) {
             revert();
         }
 
@@ -1061,10 +1053,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                     uint256 amount;
                     uint64 chainId;
 
-                    for (uint256 i = 0; i < cache.dstVaults.length; ++i) {
+                    for (uint256 i = 0; i < N_CHAINS; ++i) {
                         if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
                         // The vaults list length should be 1(single-vault)
-                        if (cache.lens[i] == 1) {
+                        if (cache.lens[i] > 0) {
                             chainId = DST_CHAINS[i];
                             superformId = cache.dstVaults[i][0];
                             amount = cache.sharesPerVault[i][0];
@@ -1478,18 +1470,17 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     function _convertToShares(uint256 assets, uint256 _totalAssets) private view returns (uint256 shares) {
-        uint256 totalAssets = totalAssets();
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
             return _eitherIsZero_(assets, supply)
                 ? _initialConvertToShares(assets)
-                : Math.fullMulDiv(assets, supply, totalAssets);
+                : Math.fullMulDiv(assets, supply, _totalAssets);
         }
         uint256 o = _decimalsOffset();
         if (o == uint256(0)) {
-            return Math.fullMulDiv(assets, totalSupply() + 1, _inc_(totalAssets));
+            return Math.fullMulDiv(assets, totalSupply() + 1, _inc_(_totalAssets));
         }
-        return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(totalAssets));
+        return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
     }
 
     function supportsInterface(bytes4 interfaceId) public view returns (bool) {
@@ -1497,9 +1488,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     function onERC1155Received(address, address, uint256 superformId, uint256, bytes memory) public returns (bytes4) {
-        uint256 bridgedAssets = _pendingBridgedAssets[superformId];
-        delete _pendingBridgedAssets[superformId];
-        _totalPendingBridgedAssets -= bridgedAssets;
+        uint256 bridgedAssets = _pendingXChainDeposits[superformId];
+        delete _pendingXChainDeposits[superformId];
+        _totalPendingXChainDeposits -= bridgedAssets;
         return this.onERC1155Received.selector;
     }
 
