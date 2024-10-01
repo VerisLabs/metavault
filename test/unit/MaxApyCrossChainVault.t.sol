@@ -34,7 +34,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
     address treasury = makeAddr("treasury");
 
     function setUp() public override {
-        super._setUp("POLYGON", 62_334_140);
+        super._setUp("POLYGON", 62495246);
         super.setUp();
         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
         vault = new MaxApyCrossChainVault({
@@ -259,13 +259,17 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
         );
+
         _mintSuperpositions(address(vault), superformId, shares);
 
-        skip(sharesLockTime);
+        vm.startPrank(users.alice);
+
+        vault.setSharesLockTime(0);
+
+        // skip(sharesLockTime);
 
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
 
-        vm.startPrank(users.alice);
         {
             oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
         }

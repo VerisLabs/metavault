@@ -28,6 +28,7 @@ import {
     MultiXChainSingleVaultWithdraw,
     MultiXChainMultiVaultWithdraw
 } from "types/Lib.sol";
+import "forge-std/Test.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
@@ -122,7 +123,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Protocol fee
     uint16 public oracleFee;
     /// @notice Minimum time users must wait to redeem shares
-    uint24 public immutable sharesLockTime;
+    uint24 public sharesLockTime;
     /// @notice Delay from processing a redeem till its claimed
     uint24 public processRedeemSettlement;
     /// @notice Wether the vault is paused
@@ -804,6 +805,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         oracles[chainId] = oracle;
     }
 
+    function setSharesLockTime(uint24 time) external onlyRoles(ADMIN_ROLE) {
+        sharesLockTime = time;
+    }
+
     /// @notice sets the annually management fee
     /// @param _managementFee new BPS management fee
     function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
@@ -874,17 +879,25 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         private
         view
     {
+        if (resetValues) {
+            console2.log("------xchain queue----");
+        } else {
+            console2.log("------local queue----");
+        }
+        console2.log("amountToWithdraw : ", cache.amountToWithdraw);
         // Cache how many chains we need and how many vaults in each chain
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
             // If we exhausted the queue stop
             if (queue[i] == 0) {
+                if (resetValues) {
+                    // reset values
+                    cache.amountToWithdraw = cache.assets - cache.totalIdle;
+                }
                 break;
             }
             if (resetValues) {
                 // If its fulfilled stop
                 if (cache.amountToWithdraw == 0) {
-                    // reset values
-                    cache.amountToWithdraw = cache.assets - cache.totalIdle;
                     break;
                 }
             }
@@ -892,6 +905,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             VaultData memory vault = vaults[queue[i]];
             // Calcualate the maxWithdraw of the vault
             uint256 maxWithdraw = vault.convertToAssets(_sharesBalance(vault), true);
+            console2.log("maxWithdraw : ", maxWithdraw);
+            console2.log("need : ", cache.amountToWithdraw);
+
             // Dont withdraw more than max
             uint256 withdrawAssets = Math.min(maxWithdraw, cache.amountToWithdraw);
             if (withdrawAssets == 0) continue;
@@ -902,6 +918,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             // Push the superformId to the last index of the array
             cache.dstVaults[chainIndex][len] = vault.superformId;
             uint256 shares = vault.convertToShares(withdrawAssets, true);
+            console2.log("4626 balance : ", _superPositions.balanceOf(address(this), vault.superformId));
+            console2.log("4626 shares : ", shares);
             if (shares == 0) continue;
             // Push the shares to redeeem of that vault
             cache.sharesPerVault[chainIndex][len] = shares;
@@ -937,6 +955,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                 cache.lens[chainIndex]++;
             }
         }
+
+        if (resetValues) {
+            console2.log("------xchain queue----");
+        } else {
+            console2.log("------local queue----");
+        }
     }
 
     /// @param shares to redeem and burn
@@ -958,6 +982,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
     /// @notice Executes the redeem request for a controller
     function _processRedeemRequest(ProcessRedeemRequestConfig memory config) private {
+        console2.log("shares : ", config.shares);
         // Use struct to avoid stack too deep
         ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
@@ -973,20 +998,26 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
         // If totalIdle can covers the amount fulfill directly
         if (cache.totalIdle >= cache.assets) {
+            console2.log("here wrong");
             cache.sharesFulfilled = config.shares;
             cache.totalClaimableWithdraw = cache.assets;
         }
         // Otherwise perform Superform withdrawals
         else {
+            console2.log("totalIdle : ", cache.totalIdle);
             // Cache amount to withdraw before reducing totalIdle
             cache.amountToWithdraw = cache.assets - cache.totalIdle;
+            console2.log("amountToWithdraw : ", cache.amountToWithdraw);
+
             // Use totalIdle to fulfill the request
             if (cache.totalIdle > 0) {
                 cache.totalClaimableWithdraw = cache.totalIdle;
                 cache.sharesFulfilled = _convertToShares(cache.totalIdle, cache.totalAssets);
             }
             ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
+            console2.log("-----prepare-----");
             _prepareWithdrawalRoute(cache);
+            console2.log("-----prepare-----");
             //////////////////////////////// WITHDRAW FROM THIS CHAIN ////////////////////////////////
             // Cache chain index
             uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
@@ -995,6 +1026,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                 if (cache.lens[chainIndex] == 1) {
                     // shares to redeem
                     uint256 sharesAmount = cache.sharesPerVault[chainIndex][0];
+                    console2.log("4626 shares direct: ", sharesAmount);
                     // assets to withdraw
                     uint256 assetsAmount = cache.assetsPerVault[chainIndex][0];
                     // superformId(take first element fo the array)
@@ -1060,6 +1092,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                             chainId = DST_CHAINS[i];
                             superformId = cache.dstVaults[i][0];
                             amount = cache.sharesPerVault[i][0];
+                            console2.log("4626 shares xchain: ", amount);
+
                             // Withdraw from one vault asynchronously(crosschain)
                             _singleXChainSingleVaultWithdraw(chainId, superformId, amount, config.receiver, config.sXsV);
                             // reduce vault debt
@@ -1227,10 +1261,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     function _assessFees(address managementFeeReceiver, address oracleFeeReceiver) private {
         uint256 duration = block.timestamp - lastReport;
 
-        uint256 managementFees = totalAssets() * duration * managementFee / SECS_PER_YEAR / MAX_BPS;
+        uint256 managementFees = (totalAssets() * duration * managementFee) / SECS_PER_YEAR / MAX_BPS;
         uint256 managementFeeShares = convertToShares(managementFees);
 
-        uint256 oracleFees = totalAssets() * duration * oracleFee / SECS_PER_YEAR / MAX_BPS;
+        uint256 oracleFees = (totalAssets() * duration * oracleFee) / SECS_PER_YEAR / MAX_BPS;
         uint256 oracleFeeShares = convertToShares(oracleFees);
         _mint(managementFeeReceiver, managementFeeShares);
         _mint(oracleFeeReceiver, oracleFeeShares);
@@ -1261,8 +1295,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         if (sharesBalance == 0) {
             _depositLockCheckPoint[to] = block.timestamp;
         } else {
-            _depositLockCheckPoint[to] =
-                (_depositLockCheckPoint[to] * sharesBalance / newBalance) + (block.timestamp * newShares / newBalance);
+            _depositLockCheckPoint[to] = ((_depositLockCheckPoint[to] * sharesBalance) / newBalance)
+                + ((block.timestamp * newShares) / newBalance);
         }
     }
 
