@@ -18,8 +18,9 @@ import {
 } from "src/types/Lib.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import "src/helpers/AddressBook.sol";
+import { MaxApyCrossChainVaultEvents } from "../helpers/MaxApyCrossChainVaultEvents.sol";
 
-contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
+contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossChainVaultEvents {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
@@ -34,7 +35,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions {
     address treasury = makeAddr("treasury");
 
     function setUp() public override {
-        super._setUp("POLYGON", 62495246);
+        super._setUp("POLYGON", 62_495_246);
         super.setUp();
         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
         vault = new MaxApyCrossChainVault({

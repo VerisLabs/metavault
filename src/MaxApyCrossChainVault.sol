@@ -52,9 +52,32 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /*                           EVENTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev `keccak256(bytes("Withdraw(address,address,address,uint256,uint256)"))`.
-    uint256 private constant _WITHDRAW_EVENT_SIGNATURE =
-        0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db;
+    /// @dev Emitted when a redeem request is processed
+    event ProcessRedeemRequest(address indexed controller, uint256 shares);
+
+    /// @dev Emitted when a redeem request is fulfilled after being processed
+    event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
+
+    /// @dev Emitted when investing vault idle assets
+    event Invest(uint256 amount);
+
+    event SettleXChainInvest(uint256 indexed superformId, uint256 assets)
+
+    /// @dev Emitted when investing vault idle assets
+    event Report(uint64 indexed chainId, address indexed vault, int256 amount);
+
+    /// @dev Emitted when adding a new vault to the portfolio
+    event AddVault(uint64 indexed chainId, address vault);
+
+    /// @dev 
+    event SetOracle(uint64 indexed chainId, address oracle);
+    event SetSharesLockTime(uint24 time);
+    event SetManagementFee(uint16 time);
+    event SetOracleFee(uint16 time);
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           ERRORS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           CONSTANTS                        */
@@ -337,7 +360,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         returns (uint256 requestId)
     {
         requestId = super.requestDeposit(assets, controller, owner);
-        // fulfill the request directlys
+        // fulfill the request directly
         _fulfillDepositRequest(controller, assets, convertToShares(assets));
     }
 
@@ -527,7 +550,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         cachedRoute.totalDebt = _totalDebt;
         cachedRoute.totalAssets = totalAssets();
 
-        // Cannot process more assets than the
+        // Cannot process more assets than the available
         if (cachedRoute.assets > cachedRoute.totalAssets - _totalPendingXChainDeposits) {
             revert();
         }
@@ -671,6 +694,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // Account assets as pending
         _pendingXChainDeposits[superformId] = amount;
         _totalPendingXChainDeposits += amount;
+        emit Invest(amount);
     }
 
     /// @notice Placeholder for investing in multiple vaults across chains
@@ -686,6 +710,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     )
         external
     {
+        uint256 totalAmount;
         for (uint256 i = 0; i < superformIds.length; ++i) {
             investSingleXChainSingleVault(
                 superformIds[i],
@@ -696,7 +721,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                 liqRequests[i],
                 hasDstSwaps[i]
             );
+            totalAmount += amounts[i];
         }
+        emit Invest(totalAmount);
     }
 
     /// @notice Placeholder for investing multiple assets in a single vault across chains
@@ -741,6 +768,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
             // Calculate the change in total assets (profit or loss)
             totalAssetsDelta += int256(totalAssetsAfter) - int256(totalAssetsBefore);
+
+            emit Report(vault.chainId, vault.vaultAddress, totalAssetsDelta);
         }
 
         // Calculate and distribute management fees based on the change in total assets
@@ -796,6 +825,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
                 }
             }
         }
+
+        emit AddVault(chainId, vault);
     }
 
     /// @notice set the oracle for one chain
@@ -803,22 +834,26 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @param oracle for that chain
     function setOracle(uint64 chainId, address oracle) external onlyRoles(ADMIN_ROLE) {
         oracles[chainId] = oracle;
+        emit SetOracle(chainId, oracle);
     }
 
     function setSharesLockTime(uint24 time) external onlyRoles(ADMIN_ROLE) {
         sharesLockTime = time;
+        emit SetSharesLockTime(time);
     }
 
     /// @notice sets the annually management fee
     /// @param _managementFee new BPS management fee
     function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
         managementFee = _managementFee;
+        emit setManagementFee(_managementFee);
     }
 
     /// @notice sets the annually oracle fee
     /// @param _oracleFee new BPS oracle fee
     function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
         oracleFee = _oracleFee;
+        emit setOracleFee(_oracleFee);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -1226,6 +1261,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _totalIdle -= cache.totalClaimableWithdraw.toUint128();
         _totalDebt = cache.totalDebt.toUint128();
 
+        emit ProcessRedeemRequest(config.controller, config.shares);
+
         // In case its not atommic
         if (config.retainAssets) {
             // Burn all shares from this contract(they already have been transferred)
@@ -1248,7 +1285,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
         uint256 claimableXChain = receiverContract.balance();
         receiverContract.pull(claimableXChain);
-        _fulfillRedeemRequest(pendingRedeemRequest(controller), claimableXChain, controller);
+        uint256 shares = pendingRedeemRequest(controller);
+        _fulfillRedeemRequest(shares, claimableXChain, controller);
+        emit FulfillRedeemRequest(controller, shares, claimableXChain);
     }
 
     /// @notice the number of decimals of the underlying token
@@ -1525,6 +1564,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint256 bridgedAssets = _pendingXChainDeposits[superformId];
         delete _pendingXChainDeposits[superformId];
         _totalPendingXChainDeposits -= bridgedAssets;
+        emit SettleXChainInvest(superformId, brifgedAssets);
         return this.onERC1155Received.selector;
     }
 

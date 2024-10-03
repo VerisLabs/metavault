@@ -12,8 +12,10 @@ import {
     MultiXChainSingleVaultWithdraw,
     MultiXChainMultiVaultWithdraw
 } from "src/types/Lib.sol";
+import { ERC7540Events } from "../helpers/ERC7540Events.sol";
+import { ERC4626Events } from "../helpers/ERC4626Events.sol";
 
-contract ERC7540PropertiesTest is BaseTest {
+contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
@@ -47,6 +49,8 @@ contract ERC7540PropertiesTest is BaseTest {
 
     function test_erc7540_requestDeposit() public {
         uint256 amount = 100 * _1_USDCE;
+        vm.expectEmit();
+        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vault.requestDeposit(amount, users.alice, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 100 * _1_USDCE);
@@ -59,6 +63,8 @@ contract ERC7540PropertiesTest is BaseTest {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
 
+        vm.expectEmit();
+        emit Deposit(users.alice, users.alice, amount, amount);
         uint256 shares = vault.deposit(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
@@ -70,8 +76,11 @@ contract ERC7540PropertiesTest is BaseTest {
 
     function test_erc7540_mint() public {
         uint256 amount = 100 * _1_USDCE;
+
         vault.requestDeposit(amount, users.alice, users.alice);
 
+        vm.expectEmit();
+        emit Deposit(users.alice, users.alice, amount, amount);
         uint256 assets = vault.mint(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
@@ -83,6 +92,10 @@ contract ERC7540PropertiesTest is BaseTest {
 
     function test_erc7540_depositAtomic() public {
         uint256 amount = 100 * _1_USDCE;
+        vm.expectEmit();
+        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
+        emit Deposit(users.alice, users.alice, amount, amount);
+
         uint256 shares = vault.depositAtomic(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
@@ -94,6 +107,10 @@ contract ERC7540PropertiesTest is BaseTest {
 
     function test_erc7540_mintAtomic() public {
         uint256 amount = 100 * _1_USDCE;
+        vm.expectEmit();
+        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
+        emit Deposit(users.alice, users.alice, amount, amount);
+
         uint256 assets = vault.mintAtomic(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
@@ -117,8 +134,12 @@ contract ERC7540PropertiesTest is BaseTest {
         uint256 shares = vault.deposit(amount, users.alice);
         shares;
         skip(sharesLockTime);
+        vm.expectEmit();
+        emit RedeemRequest(users.alice, users.alice, 0, users.alice, shares);
 
         vault.requestRedeem(shares, users.alice, users.alice);
+        assertEq(vault.balanceOf(address(vault)), shares);
+        assertEq(vault.balanceOf(users.alice), 0);
         assertEq(vault.pendingRedeemRequest(users.alice), shares);
         assertEq(vault.claimableRedeemRequest(users.alice), 0);
         assertEq(vault.totalSupply(), amount);
@@ -142,6 +163,8 @@ contract ERC7540PropertiesTest is BaseTest {
         _processRedeemRequest(users.alice);
 
         uint256 balanceBefore = USDCE_POLYGON.balanceOf(users.alice);
+        vm.expectEmit();
+        emit Withdraw(users.alice, users.alice, users.alice, amount, shares);
         uint256 assets = vault.redeem(shares, users.alice, users.alice);
         uint256 balanceAfter = USDCE_POLYGON.balanceOf(users.alice);
         assertEq(assets, amount);
@@ -163,6 +186,8 @@ contract ERC7540PropertiesTest is BaseTest {
         _processRedeemRequest(users.alice);
 
         uint256 balanceBefore = USDCE_POLYGON.balanceOf(users.alice);
+        vm.expectEmit();
+        emit Withdraw(users.alice, users.alice, users.alice, amount, shares);
         uint256 burntShares = vault.withdraw(amount, users.alice, users.alice);
         uint256 balanceAfter = USDCE_POLYGON.balanceOf(users.alice);
         assertEq(burntShares, shares);

@@ -6,8 +6,6 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { ERC7540_Request, ERC7540_FilledRequest, ERC7540Lib } from "../types/Lib.sol";
 
-// TODO: doc
-
 /// @notice Simple ERC7540 async Tokenized Vault implementation
 /// @author Solthodox (https://github.com/Solthodox)
 abstract contract ERC7540 is ERC4626 {
@@ -130,7 +128,6 @@ abstract contract ERC7540 is ERC4626 {
     {
         if (assets == 0) revert();
         requestId = _requestDeposit(assets, controller, owner, msg.sender);
-        // TODO: event emission in assembly
     }
 
     /// @dev Assumes control of shares from sender into the Vault and submits a Request for asynchronous redeem.
@@ -175,7 +172,9 @@ abstract contract ERC7540 is ERC4626 {
     function deposit(uint256 assets, address receiver, address controller) public virtual returns (uint256 shares) {
         _validateController(controller);
         if (assets > maxDeposit(controller)) revert DepositMoreThanMax();
-        return _deposit(assets, receiver, controller);
+        ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
+        shares = claimable.convertToSharesUp(assets);
+        _deposit(assets, shares, receiver, controller);
     }
 
     /// @dev Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
@@ -191,15 +190,19 @@ abstract contract ERC7540 is ERC4626 {
     /// - MUST emit the Deposit event.
     /// - controller MUST equal msg.sender unless the controller has approved the msg.sender as an operator.
     function mint(uint256 shares, address receiver, address controller) public virtual returns (uint256 assets) {
-        if (shares > maxMint(controller)) revert MintMoreThanMax();
         _validateController(controller);
-        return _mint(shares, receiver, controller);
+        if (shares > maxMint(controller)) revert MintMoreThanMax();
+        ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
+        assets = claimable.convertToAssetsUp(shares);
+        _deposit(assets, shares, receiver, controller);
     }
 
     function redeem(uint256 shares, address to, address controller) public virtual override returns (uint256 assets) {
         if (shares > maxRedeem(controller)) revert RedeemMoreThanMax();
         _validateController(controller);
-        return _redeem(shares, to, controller);
+        ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
+        assets = claimable.convertToAssets(shares);
+        _withdraw(assets, shares, to, controller);
     }
 
     function withdraw(
@@ -214,7 +217,9 @@ abstract contract ERC7540 is ERC4626 {
     {
         if (shares > maxWithdraw(controller)) revert WithdrawMoreThanMax();
         _validateController(controller);
-        return _withdraw(assets, to, controller);
+        ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
+        shares = claimable.convertToSharesUp(assets);
+        _withdraw(assets, shares, to, controller);
     }
 
     function pendingRedeemRequest(address controller) public view returns (uint256) {
@@ -233,52 +238,49 @@ abstract contract ERC7540 is ERC4626 {
         return maxRedeem(controller);
     }
 
-    function _deposit(uint256 assets, address receiver, address controller) internal virtual returns (uint256 shares) {
-        ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
-        shares = claimable.convertToShares(assets);
+    function _deposit(uint256 assets, uint256 shares, address receiver, address controller) internal virtual {
         unchecked {
             _claimableDepositRequest[controller].assets -= assets;
             _claimableDepositRequest[controller].shares -= shares;
         }
         _mint(receiver, shares);
-    }
-
-    function _mint(uint256 shares, address receiver, address controller) internal virtual returns (uint256 assets) {
-        ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
-        assets = claimable.convertToAssetsUp(shares);
-        unchecked {
-            _claimableDepositRequest[controller].assets -= assets;
-            _claimableDepositRequest[controller].shares -= shares;
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Emit the {Deposit} event.
+            mstore(0x00, assets)
+            mstore(0x20, shares)
+            let m := shr(96, not(0))
+            log3(
+                0x00,
+                0x40,
+                0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7,
+                and(m, controller),
+                and(m, receiver)
+            )
         }
-        _mint(receiver, shares);
     }
 
-    function _redeem(uint256 shares, address receiver, address controller) internal virtual returns (uint256 assets) {
-        ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
-        assets = claimable.convertToAssets(shares);
-        unchecked {
-            _claimableRedeemRequest[controller].assets -= assets;
-            _claimableRedeemRequest[controller].shares -= shares;
-        }
-        asset().safeTransfer(receiver, assets);
-    }
-
-    function _withdraw(
-        uint256 assets,
-        address receiver,
-        address controller
-    )
-        internal
-        virtual
-        returns (uint256 shares)
-    {
-        ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
-        shares = claimable.convertToSharesUp(assets);
+    function _withdraw(uint256 assets, uint256 shares, address receiver, address controller) internal virtual {
         unchecked {
             _claimableRedeemRequest[controller].assets -= assets;
             _claimableRedeemRequest[controller].shares -= shares;
         }
         asset().safeTransfer(receiver, assets);
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Emit the {Withdraw} event.
+            mstore(0x00, assets)
+            mstore(0x20, shares)
+            let m := shr(96, not(0))
+            log4(
+                0x00,
+                0x40,
+                0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db,
+                and(m, controller),
+                and(m, receiver),
+                and(m, controller)
+            )
+        }
     }
 
     function _requestDeposit(
