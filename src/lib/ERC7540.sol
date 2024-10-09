@@ -39,6 +39,22 @@ abstract contract ERC7540 is ERC4626 {
         0x1fdc681a13d8c5da54e301c7ce6542dcde4581e4725043fdab2db12ddc574506;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           ERRORS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Thrown when an unauthorized address attempts to act as a controller
+    error InvalidController();
+
+    /// @notice Thrown when trying to deposit or interact with zero assets
+    error InvalidZeroAssets();
+
+    /// @notice Thrown when trying to redeem or interact with zero shares
+    error InvalidZeroShares();
+
+    /// @notice Thrown when trying to set an invalid operator, such as setting oneself as an operator
+    error InvalidOperator();
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STORAGE                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
@@ -55,7 +71,7 @@ abstract contract ERC7540 is ERC4626 {
     mapping(address => ERC7540_FilledRequest) private _claimableRedeemRequest;
 
     /// @notice ERC7540 operator approvals
-    mapping(address controller => mapping(address operator => bool)) private isOperator;
+    mapping(address controller => mapping(address operator => bool)) public isOperator;
 
     /// @dev Preview functions for ERC-7540 vaults revert
     function previewDeposit(uint256 assets) public pure override returns (uint256 shares) {
@@ -126,7 +142,7 @@ abstract contract ERC7540 is ERC4626 {
         virtual
         returns (uint256 requestId)
     {
-        if (assets == 0) revert();
+        if (assets == 0) revert InvalidZeroAssets();
         requestId = _requestDeposit(assets, controller, owner, msg.sender);
     }
 
@@ -150,7 +166,7 @@ abstract contract ERC7540 is ERC4626 {
         virtual
         returns (uint256 requestId)
     {
-        if (shares == 0) revert();
+        if (shares == 0) revert InvalidZeroShares();
         // If msg.sender is operator of owner, the transfer is executed as if
         // the sender is the owner, to bypass the allowance check
         address sender = isOperator[owner][msg.sender] ? owner : msg.sender;
@@ -215,7 +231,7 @@ abstract contract ERC7540 is ERC4626 {
         override
         returns (uint256 shares)
     {
-        if (shares > maxWithdraw(controller)) revert WithdrawMoreThanMax();
+        if (assets > maxWithdraw(controller)) revert WithdrawMoreThanMax();
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
         shares = claimable.convertToSharesUp(assets);
@@ -323,7 +339,7 @@ abstract contract ERC7540 is ERC4626 {
     /// @param approved The approval status.
     /// @return success Whether the call was executed successfully or not
     function setOperator(address operator, bool approved) public returns (bool success) {
-        if (msg.sender == operator) revert();
+        if (msg.sender == operator) revert InvalidOperator();
         isOperator[msg.sender][operator] = approved;
         emit OperatorSet(msg.sender, operator, approved);
         return true;
@@ -331,7 +347,7 @@ abstract contract ERC7540 is ERC4626 {
 
     /// @dev Performs operator and controller permission checks
     function _validateController(address controller) private view {
-        if (msg.sender != controller && !isOperator[msg.sender][controller]) revert();
+        if (msg.sender != controller && !isOperator[controller][msg.sender]) revert InvalidController();
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/

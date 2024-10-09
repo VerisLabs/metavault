@@ -61,7 +61,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @dev Emitted when investing vault idle assets
     event Invest(uint256 amount);
 
-    event SettleXChainInvest(uint256 indexed superformId, uint256 assets)
+    /// @dev Emitted when cross-chain investment is settled
+    event SettleXChainInvest(uint256 indexed superformId, uint256 assets);
 
     /// @dev Emitted when investing vault idle assets
     event Report(uint64 indexed chainId, address indexed vault, int256 amount);
@@ -69,15 +70,48 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @dev Emitted when adding a new vault to the portfolio
     event AddVault(uint64 indexed chainId, address vault);
 
-    /// @dev 
+    /// @dev Emitted when setting a new oracle for a chain
     event SetOracle(uint64 indexed chainId, address oracle);
+
+    /// @dev Emitted when updating the shares lock time
     event SetSharesLockTime(uint24 time);
-    event SetManagementFee(uint16 time);
-    event SetOracleFee(uint16 time);
+
+    /// @dev Emitted when updating the management fee
+    event SetManagementFee(uint16 fee);
+
+    /// @dev Emitted when updating the oracle fee
+    event SetOracleFee(uint16 fee);
+
+    /// @dev Emitted when the emergency shutdown state is changed
+    event EmergencyShutdown(bool enabled);
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Thrown when attempting to interact with a vault that is not listed in the portfolio
+    error VaultNotListed();
+
+     /// @notice Thrown when attempting to add a vault that is already listed
+    error VaultAlreadyListed();
+
+    /// @notice Thrown when trying to perform an operation while cross-chain deposits are still pending
+    error XChainDepositsPending();
+
+    /// @notice Thrown when attempting to withdraw more assets than are currently available
+    error InsufficientAvailableAssets();
+
+    /// @notice Thrown when trying to perform an operation on a request that has not been settled yet
+    error RequestNotSettled();
+
+    /// @notice Thrown when attempting to redeem shares that are still locked
+    error SharesLocked();
+
+    /// @notice Thrown when there are not enough assets to fulfill a request
+    error InsufficientAssets();
+
+    /// @notice Thrown when attempting to perform an operation while the vault is in emergency shutdown
+    error VaultShutdown();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           CONSTANTS                        */
@@ -199,7 +233,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @dev Reverts the transaction if emergencyShutdown is true
     modifier noEmergencyShutdown() {
         if (emergencyShutdown) {
-            revert();
+            revert VaultShutdown();
         }
         _;
     }
@@ -462,6 +496,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _checkSharesLocked(controller);
         requestId = super.requestRedeem(shares, controller, owner);
     }
+    /// @dev Redeems shares for assets, ensuring all settled requests are fulfilled
+    /// @param shares The number of shares to redeem
+    /// @param receiver The address that will receive the assets
+    /// @param controller The address that controls the redemption
+    /// @return assets The amount of assets redeemed
 
     function redeem(
         uint256 shares,
@@ -480,6 +519,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return super.redeem(shares, receiver, controller);
     }
 
+    /// @dev Withdraws assets, ensuring all settled requests are fulfilled
+    /// @param assets The amount of assets to withdraw
+    /// @param receiver The address that will receive the assets
+    /// @param controller The address that controls the withdrawal
+    /// @return shares The number of shares burned
     function withdraw(
         uint256 assets,
         address receiver,
@@ -552,7 +596,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
         // Cannot process more assets than the available
         if (cachedRoute.assets > cachedRoute.totalAssets - _totalPendingXChainDeposits) {
-            revert();
+            revert InsufficientAvailableAssets();
         }
 
         // If totalIdle can covers the amount fulfill directly
@@ -591,7 +635,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         returns (uint256 shares)
     {
         // Ensure the target vault is in the approved list
-        if (!isVaultListed(vaultAddress)) revert();
+        if (!isVaultListed(vaultAddress)) revert VaultNotListed();
 
         // Record the balance before deposit to calculate received shares
         uint256 balanceBefore = vaultAddress.balanceOf(address(this));
@@ -604,7 +648,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
         // Ensure the received shares meet the minimum expected amount
         if (shares < minAmountOut) {
-            revert();
+            revert InsufficientAssets();
         }
 
         // Update the vault's internal accounting
@@ -613,6 +657,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _totalDebt += amountUint128;
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt += amountUint128;
 
+        emit Invest(amount);
         return shares;
     }
 
@@ -662,7 +707,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         VaultData memory vault = vaults[superformId];
 
         // Cant invest in a vault that is not in the portfolio
-        if (!isVaultListed(vault.vaultAddress)) revert();
+        if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
 
         // Prepare the cross-chain deposit request
         SingleXChainSingleVaultStateReq memory req = SingleXChainSingleVaultStateReq({
@@ -690,7 +735,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         uint128 amountUint128 = amount.toUint128();
         _totalIdle -= amountUint128;
         // We cannot invest more till the previous investment is successfully completed
-        if (_pendingXChainDeposits[superformId] != 0) revert();
+        if (_pendingXChainDeposits[superformId] != 0) revert XChainDepositsPending();
         // Account assets as pending
         _pendingXChainDeposits[superformId] = amount;
         _totalPendingXChainDeposits += amount;
@@ -746,7 +791,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             VaultReport memory _report = reports[i];
 
             // Ensure the reported vault is in the approved list
-            if (!isVaultListed(_report.vaultAddress)) revert();
+            if (!isVaultListed(_report.vaultAddress)) revert VaultNotListed();
 
             // Retrieve the superform ID for the vault
             uint256 superformId = _vaultToSuperformId[_report.vaultAddress];
@@ -793,7 +838,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         onlyRoles(ADMIN_ROLE)
     {
         // If its already listed revert
-        if (isVaultListed(vault)) revert();
+        if (isVaultListed(vault)) revert VaultAlreadyListed();
 
         // Save it into storage
         vaults[superformId].chainId = chainId;
@@ -829,6 +874,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         emit AddVault(chainId, vault);
     }
 
+    /// @notice Sets the emergency shutdown state of the vault
+    /// @dev Can only be called by addresses with the EMERGENCY_ADMIN_ROLE
+    /// @param _emergencyShutdown True to enable emergency shutdown, false to disable
+    function setEmergencyShutdown(bool _emergencyShutdown) external onlyRoles(EMERGENCY_ADMIN_ROLE) {
+        emergencyShutdown = _emergencyShutdown;
+        emit EmergencyShutdown(_emergencyShutdown);
+    }
+
     /// @notice set the oracle for one chain
     /// @param chainId the oracle
     /// @param oracle for that chain
@@ -846,14 +899,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @param _managementFee new BPS management fee
     function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
         managementFee = _managementFee;
-        emit setManagementFee(_managementFee);
+        emit SetManagementFee(_managementFee);
     }
 
     /// @notice sets the annually oracle fee
     /// @param _oracleFee new BPS oracle fee
     function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
         oracleFee = _oracleFee;
-        emit setOracleFee(_oracleFee);
+        emit SetOracleFee(_oracleFee);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -1028,7 +1081,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
         // Cannot process more assets than the
         if (cache.assets > cache.totalAssets - _totalPendingXChainDeposits) {
-            revert();
+            revert InsufficientAvailableAssets();
         }
 
         // If totalIdle can covers the amount fulfill directly
@@ -1316,13 +1369,15 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     function _checkRequestsSettled(address controller) private view {
-        if (block.timestamp < _requestRedeemSettlementCheckpoint[controller] + processRedeemSettlement) revert();
+        if (block.timestamp < _requestRedeemSettlementCheckpoint[controller] + processRedeemSettlement) {
+            revert RequestNotSettled();
+        }
     }
 
     /// @dev Reverts if deposited shares are locked
     /// @param controller shares controller
     function _checkSharesLocked(address controller) private view {
-        if (block.timestamp < _depositLockCheckPoint[controller] + sharesLockTime) revert();
+        if (block.timestamp < _depositLockCheckPoint[controller] + sharesLockTime) revert SharesLocked();
     }
 
     /// @dev Locks the deposited shares for a fixed period
@@ -1363,6 +1418,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return new bool[](len);
     }
 
+    /// @dev Withdraws assets from a single vault on the same chain
+    /// @param vault Address of the vault to withdraw from
+    /// @param amount Amount of shares to redeem
+    /// @param minAmountOut Minimum amount of assets expected to receive
+    /// @param receiver Address to receive the withdrawn assets
+    /// @return withdrawn Amount of assets actually withdrawn
     function _singleDirectSingleVaultWithdraw(
         address vault,
         uint256 amount,
@@ -1376,10 +1437,16 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         ERC4626(vault).redeem(amount, address(this), receiver);
         withdrawn = asset().balanceOf(address(this)) - balanceBefore;
         if (withdrawn < minAmountOut) {
-            revert();
+            revert InsufficientAssets();
         }
     }
 
+    /// @dev Withdraws assets from multiple vaults on the same chain
+    /// @param vaults Array of vault addresses to withdraw from
+    /// @param amounts Array of share amounts to redeem from each vault
+    /// @param minAmountsOut Array of minimum amounts of assets expected from each vault
+    /// @param receiver Address to receive the withdrawn assets
+    /// @return withdrawn Total amount of assets withdrawn from all vaults
     function _singleDirectMultiVaultWithdraw(
         address[] memory vaults,
         uint256[] memory amounts,
@@ -1394,6 +1461,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
     }
 
+    /// @dev Initiates a withdrawal from a single vault on a different chain
+    /// @param chainId ID of the destination chain
+    /// @param superformId ID of the superform to withdraw from
+    /// @param amount Amount of shares to withdraw
+    /// @param receiver Address to receive the withdrawn assets
+    /// @param config Configuration for the cross-chain withdrawal
     function _singleXChainSingleVaultWithdraw(
         uint64 chainId,
         uint256 superformId,
@@ -1423,6 +1496,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _vaultRouter.singleXChainSingleVaultWithdraw{ value: config.value }(params);
     }
 
+    /// @dev Initiates withdrawals from multiple vaults on a single different chain
+    /// @param chainId ID of the destination chain
+    /// @param superformIds Array of superform IDs to withdraw from
+    /// @param amounts Array of share amounts to withdraw from each superform
+    /// @param receiver Address to receive the withdrawn assets
+    /// @param config Configuration for the cross-chain withdrawals
     function _singleXChainMultiVaultWithdraw(
         uint64 chainId,
         uint256[] memory superformIds,
@@ -1453,6 +1532,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _vaultRouter.singleXChainMultiVaultWithdraw{ value: config.value }(params);
     }
 
+    /// @dev Initiates withdrawals from a single vault on multiple different chains
+    /// @param ambIds Array of AMB (Asset Management Bridge) IDs for each chain
+    /// @param dstChainIds Array of destination chain IDs
+    /// @param singleVaultDatas Array of SingleVaultSFData structures for each withdrawal
+    /// @param value Amount of native tokens to send with the transaction
     function _multiDstSingleVaultWithdraw(
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
@@ -1466,6 +1550,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _vaultRouter.multiDstSingleVaultWithdraw{ value: value }(params);
     }
 
+    /// @dev Initiates withdrawals from multiple vaults on multiple different chains
+    /// @param ambIds Array of AMB (Asset Management Bridge) IDs for each chain
+    /// @param dstChainIds Array of destination chain IDs
+    /// @param multiVaultDatas Array of MultiVaultSFData structures for each chain's withdrawals
+    /// @param value Amount of native tokens to send with the transaction
     function _multiDstMultiVaultWithdraw(
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
@@ -1542,6 +1631,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         }
     }
 
+    /// @dev Private helper to calculate shares from any @param _totalAssets
     function _convertToShares(uint256 assets, uint256 _totalAssets) private view returns (uint256 shares) {
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
@@ -1556,28 +1646,68 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
     }
 
-    function supportsInterface(bytes4 interfaceId) public view returns (bool) {
+    /// @dev Supports ERC1155 interface detection
+    /// @param interfaceId The interface identifier, as specified in ERC-165
+    /// @return bool True if the contract supports the interface, false otherwise
+    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
         if (interfaceId == 0x4e2312e0) return true;
     }
 
-    function onERC1155Received(address, address, uint256 superformId, uint256, bytes memory) public returns (bytes4) {
-        uint256 bridgedAssets = _pendingXChainDeposits[superformId];
-        delete _pendingXChainDeposits[superformId];
-        _totalPendingXChainDeposits -= bridgedAssets;
-        emit SettleXChainInvest(superformId, brifgedAssets);
-        return this.onERC1155Received.selector;
-    }
-
-    function onERC1155BatchReceived(
-        address,
-        address,
-        uint256[] memory superformIds,
-        uint256[] memory,
-        bytes memory
+    /// @notice Handles the receipt of a single ERC1155 token type
+    /// @dev This function is called at the end of a `safeTransferFrom` after the balance has been updated
+    /// @param operator The address which initiated the transfer (i.e. msg.sender)
+    /// @param from The address which previously owned the token
+    /// @param superformId The ID of the token being transferred
+    /// @param value The amount of tokens being transferred
+    /// @param data Additional data with no specified format
+    /// @return bytes4 `bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)"))`
+    function onERC1155Received(
+        address operator,
+        address from,
+        uint256 superformId,
+        uint256 value,
+        bytes memory data
     )
         public
         returns (bytes4)
     {
+        // Silence compiler warnings
+        operator;
+        from;
+        value;
+        data;
+        uint256 bridgedAssets = _pendingXChainDeposits[superformId];
+        delete _pendingXChainDeposits[superformId];
+        _totalPendingXChainDeposits -= bridgedAssets;
+        emit SettleXChainInvest(superformId, bridgedAssets);
+        return this.onERC1155Received.selector;
+    }
+
+    /// @notice Handles the receipt of multiple ERC1155 token types
+    /// @dev This function is called at the end of a `safeBatchTransferFrom` after the balances have been updated
+    /// @param operator The address which initiated the batch transfer (i.e. msg.sender)
+    /// @param from The address which previously owned the tokens
+    /// @param superformIds An array containing ids of each token being transferred (order and length must match values
+    /// array)
+    /// @param values An array containing amounts of each token being transferred (order and length must match ids
+    /// array)
+    /// @param data Additional data with no specified format
+    /// @return bytes4 `bytes4(keccak256("onERC1155BatchReceived(address,address,uint256[],uint256[],bytes)"))`
+    function onERC1155BatchReceived(
+        address operator,
+        address from,
+        uint256[] memory superformIds,
+        uint256[] memory values,
+        bytes memory data
+    )
+        public
+        returns (bytes4)
+    {
+        // Silence compiler warnings
+        operator;
+        from;
+        values;
+        data;
         for (uint256 i = 0; i < superformIds.length; ++i) {
             onERC1155Received(address(0), address(0), superformIds[i], 0, "");
         }
