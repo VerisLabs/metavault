@@ -209,19 +209,6 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
         vault.redeem(shares, users.alice, users.alice);
     }
 
-
-    // TODO: on xchain withdrawals
-    // function test_revert_erc7540_redeem_requestNotSettled() public {
-    //     uint256 amount = 100 * _1_USDCE;
-    //     vault.requestDeposit(amount, users.alice, users.alice);
-    //     uint256 shares = vault.deposit(amount, users.alice);
-    //     skip(sharesLockTime);
-    //     vault.requestRedeem(shares, users.alice, users.alice);
-
-    //     vm.expectRevert(MaxApyCrossChainVault.RequestNotSettled.selector);
-    //     vault.redeem(shares, users.alice, users.alice);
-    // }
-
     function test_erc7540_withdraw() public {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
@@ -247,21 +234,10 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
 
     function test_revert_erc7540_withdraw_noRequest() public {
         uint256 amount = 100 * _1_USDCE;
-       
+
         vm.expectRevert(ERC4626.WithdrawMoreThanMax.selector);
         vault.withdraw(amount, users.alice, users.alice);
     }
-
-    // function test_revert_erc7540_withdraw_requestNotSettled() public {
-    //     uint256 amount = 100 * _1_USDCE;
-    //     vault.requestDeposit(amount, users.alice, users.alice);
-    //     uint256 shares = vault.deposit(amount, users.alice);
-    //     skip(sharesLockTime);
-    //     vault.requestRedeem(shares, users.alice, users.alice);
-
-    //     vm.expectRevert(MaxApyCrossChainVault.RequestNotSettled.selector);
-    //     vault.withdraw(amount, users.alice, users.alice);
-    // }
 
     function _processRedeemRequest(address user) internal {
         SingleXChainSingleVaultWithdraw memory sXsV;

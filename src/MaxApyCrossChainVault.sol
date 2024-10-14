@@ -92,7 +92,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     /// @notice Thrown when attempting to interact with a vault that is not listed in the portfolio
     error VaultNotListed();
 
-     /// @notice Thrown when attempting to add a vault that is already listed
+    /// @notice Thrown when attempting to add a vault that is already listed
     error VaultAlreadyListed();
 
     /// @notice Thrown when trying to perform an operation while cross-chain deposits are still pending
@@ -103,6 +103,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
 
     /// @notice Thrown when trying to perform an operation on a request that has not been settled yet
     error RequestNotSettled();
+
+    /// @notice Thrown when trying to redeem a non processed request
+    error RedeemNotProcessed();
 
     /// @notice Thrown when attempting to redeem shares that are still locked
     error SharesLocked();
@@ -218,6 +221,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     mapping(address => uint256) private _requestRedeemSettlementCheckpoint;
     /// @notice Inverse mapping vault => superformId
     mapping(address => uint256) _vaultToSuperformId;
+    /// @notice Redeem is locked when requesting and unlocked when processing
+    mapping(address => bool) redeemLocked;
     /// @notice Timestamp of last report
     uint256 public lastReport;
     /// @notice pending bridged assets for each vault
@@ -495,6 +500,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // Require deposited shares arent locked
         _checkSharesLocked(controller);
         requestId = super.requestRedeem(shares, controller, owner);
+        // Lock redeem till the request is processed
+        redeemLocked[controller] = true;
     }
     /// @dev Redeems shares for assets, ensuring all settled requests are fulfilled
     /// @param shares The number of shares to redeem
@@ -512,6 +519,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         nonReentrant
         returns (uint256 assets)
     {
+        _checkRedeemProcessed(controller);
         // Require a settlement from the last redem request
         _checkRequestsSettled(controller);
         // Fulfill the request if theres any pending assets
@@ -709,6 +717,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // Cant invest in a vault that is not in the portfolio
         if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
 
+        // We cannot invest more till the previous investment is successfully completed
+        if (_pendingXChainDeposits[superformId] != 0) revert XChainDepositsPending();
+
         // Prepare the cross-chain deposit request
         SingleXChainSingleVaultStateReq memory req = SingleXChainSingleVaultStateReq({
             ambIds: ambIds,
@@ -734,8 +745,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // Update the vault's internal accounting
         uint128 amountUint128 = amount.toUint128();
         _totalIdle -= amountUint128;
-        // We cannot invest more till the previous investment is successfully completed
-        if (_pendingXChainDeposits[superformId] != 0) revert XChainDepositsPending();
         // Account assets as pending
         _pendingXChainDeposits[superformId] = amount;
         _totalPendingXChainDeposits += amount;
@@ -809,7 +818,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             vaults[superformId].lastReportedSharePrice = _report.sharePrice;
 
             // Calculate the total assets value after applying the new share price
-            uint256 totalAssetsAfter = vault.convertToAssetsCachedSharePrice(sharesBalance);
+            uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance, true);
 
             // Calculate the change in total assets (profit or loss)
             totalAssetsDelta += int256(totalAssetsAfter) - int256(totalAssetsBefore);
@@ -837,6 +846,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         external
         onlyRoles(ADMIN_ROLE)
     {
+        if(superformId == 0) revert();
         // If its already listed revert
         if (isVaultListed(vault)) revert VaultAlreadyListed();
 
@@ -846,7 +856,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         vaults[superformId].vaultAddress = vault;
         vaults[superformId].decimals = vaultDecimals;
         vaults[superformId].oracle = oracle;
-        vaults[superformId].lastReportedSharePrice = uint192(vaults[superformId].sharePrice());
+        uint192 lastSharePrice = uint192(vaults[superformId].sharePrice());
+        if(lastSharePrice == 0) revert();
+        vaults[superformId].lastReportedSharePrice = lastSharePrice;
         _vaultToSuperformId[vault] = superformId;
 
         if (chainId == THIS_CHAIN_ID) {
@@ -1309,6 +1321,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
             cache.sharesFulfilled = config.shares;
         }
 
+        // Unlock redeem
+        redeemLocked[config.controller] = false;
+
         // Optimistically deduct all assets to withdraw from the total
         _totalIdle = cache.totalIdle.toUint128();
         _totalIdle -= cache.totalClaimableWithdraw.toUint128();
@@ -1371,6 +1386,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     function _checkRequestsSettled(address controller) private view {
         if (block.timestamp < _requestRedeemSettlementCheckpoint[controller] + processRedeemSettlement) {
             revert RequestNotSettled();
+        }
+    }
+
+    function _checkRedeemProcessed(address controller) private view {
+        if (redeemLocked[controller]) {
+            revert RedeemNotProcessed();
         }
     }
 
