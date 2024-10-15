@@ -44,7 +44,8 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
             _superPositions_: superPositions,
             _vaultRouter_: vaultRouter,
             _factory_: factory,
-            _treasury: treasury
+            _treasury: treasury,
+            _signerRelayer: address(1)
         });
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
@@ -108,36 +109,6 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
         uint256 amount = 100 * _1_USDCE;
         vm.expectRevert(ERC4626.MintMoreThanMax.selector);
         vault.mint(amount, users.alice);
-    }
-
-    function test_erc7540_depositAtomic() public {
-        uint256 amount = 100 * _1_USDCE;
-        vm.expectEmit();
-        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
-        emit Deposit(users.alice, users.alice, amount, amount);
-
-        uint256 shares = vault.depositAtomic(amount, users.alice);
-        assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
-        assertEq(vault.claimableDepositRequest(users.alice), 0);
-        assertEq(vault.pendingDepositRequest(users.alice), 0);
-        assertEq(vault.totalAssets(), amount);
-        assertEq(shares, amount);
-        assertEq(vault.balanceOf(users.alice), shares);
-    }
-
-    function test_erc7540_mintAtomic() public {
-        uint256 amount = 100 * _1_USDCE;
-        vm.expectEmit();
-        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
-        emit Deposit(users.alice, users.alice, amount, amount);
-
-        uint256 assets = vault.mintAtomic(amount, users.alice);
-        assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
-        assertEq(vault.claimableDepositRequest(users.alice), 0);
-        assertEq(vault.pendingDepositRequest(users.alice), 0);
-        assertEq(vault.totalAssets(), amount);
-        assertEq(assets, amount);
-        assertEq(vault.balanceOf(users.alice), assets);
     }
 
     function test_erc7540_requestRedeem_sharesLocked() public {

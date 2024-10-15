@@ -3,10 +3,12 @@ pragma solidity 0.8.19;
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
-import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
+import { Multicallable } from "solady/utils/Multicallable.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
-import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
 import { ISuperPositions, IBaseRouter, ISuperformFactory, IERC4626Oracle } from "interfaces/Lib.sol";
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
@@ -34,7 +36,7 @@ import "forge-std/Test.sol";
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
+contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -225,8 +227,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     mapping(address => bool) redeemLocked;
     /// @notice Timestamp of last report
     uint256 public lastReport;
+    /// @notice Signer address to process redeem requests
+    address public signerRelayer;
     /// @notice pending bridged assets for each vault
     mapping(uint256 superformId => uint256 amount) private _pendingXChainDeposits;
+    /// @notice Nonce of each controller
+    mapping(address controller => uint256 nonce) private _controllerNonces;
     /// @notice Cached value of total assets that are being bridged at the moment
     uint256 private _totalPendingXChainDeposits;
 
@@ -266,7 +272,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         ISuperPositions _superPositions_,
         IBaseRouter _vaultRouter_,
         ISuperformFactory _factory_,
-        address _treasury
+        address _treasury,
+        address _signerRelayer
     ) {
         _asset = _asset_;
         _name = _name_;
@@ -298,6 +305,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         // Initialize ownership and grant admin role
         _initializeOwner(msg.sender);
         _grantRoles(msg.sender, ADMIN_ROLE);
+
+        signerRelayer = _signerRelayer;
 
         // Deploy and set the receiver implementation
         receiverImplementation = address(new ERC20Receiver(_asset_));
@@ -403,25 +412,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         _fulfillDepositRequest(controller, assets, convertToShares(assets));
     }
 
-    /// @notice Same as calling `requestDeposit` & `deposit`
-    /// @param assets amount to deposit
-    /// @param to shares receiver
-    /// @return shares minted shares
-    function depositAtomic(uint256 assets, address to) public returns (uint256 shares) {
-        requestDeposit(assets, msg.sender, msg.sender);
-        shares = deposit(assets, to, msg.sender);
-    }
-
-    /// @notice Same as calling `requestDeposit` & `mint`
-    /// @param shares to mint
-    /// @param to shares receiver
-    /// @return assets deposited assets
-    function mintAtomic(uint256 shares, address to) public returns (uint256 assets) {
-        assets = convertToAssets(shares);
-        requestDeposit(assets, msg.sender, msg.sender);
-        assets = mint(shares, to, msg.sender);
-    }
-
     /// @notice Mints shares Vault shares to receiver by claiming the Request of the controller.
     /// @dev uses msg.sender as controller
     /// @param shares to mint
@@ -454,7 +444,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
     }
 
     /// @notice Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
-    /// @dev uses msg.sender as controller
+    /// @dev uses msg.sender as controllerisValidSignat
     /// @param shares to mint
     /// @param to shares receiver
     /// @return assets deposited assets
@@ -585,6 +575,75 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         );
         // Note: After processing, the redeemed assets are held by this contract
         // The user can later claim these assets using `redeem` or `withdraw`
+    }
+
+    struct ProcessRedeemRequestWithSignatureParams {
+        address controller;
+        SingleXChainSingleVaultWithdraw sXsV;
+        SingleXChainMultiVaultWithdraw sXmV;
+        MultiXChainSingleVaultWithdraw mXsV;
+        MultiXChainMultiVaultWithdraw mXmV;
+        bytes signature;
+    }
+
+   
+    function processRedeemRequestWithSignature(ProcessRedeemRequestWithSignatureParams calldata params)
+        external
+        payable
+    {
+        bytes32 hash;
+        {
+            hash = keccak256(abi.encode(
+                ++_controllerNonces[params.controller],
+                params.controller,
+                keccak256(abi.encode(params.sXsV)), 
+                keccak256(abi.encode(params.sXmV)), 
+                keccak256(abi.encode(params.mXsV)), 
+                keccak256(abi.encode(params.mXmV))
+            ))          ;
+        }
+        // Needs explicit approval from the relayer
+        _checkSignerIsRelayer(
+            params.controller, hash, params.signature
+        );
+
+        // Retrieve the pending redeem request for the specified controller
+        // This request may involve cross-chain withdrawals from various ERC4626 vaults
+
+        // Process the redemption request asynchronously
+        // Parameters:
+        // 1. pendingRedeemRequest(controller): Fetches the pending shares
+        // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
+        // 3. address(this): The vault itself as the receiver of the redeemed assets
+        // 4. true: Retain the assets, dont send them directly to the controller
+        _processRedeemRequest(
+            ProcessRedeemRequestConfig(
+                pendingRedeemRequest(params.controller),
+                params.controller,
+                params.controller,
+                address(this),
+                true,
+                params.sXsV,
+                params.sXmV,
+                params.mXsV,
+                params.mXmV
+            )
+        );
+        // Note: After processing, the redeemed assets are held by this contract
+        // The user can later claim these assets using `redeem` or `withdraw`
+    }
+
+    function _checkSignerIsRelayer(
+        address controller,
+        bytes32 hash,
+        bytes memory signature
+    )
+        private
+    {
+
+        if (!SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, signature)) {
+            revert();
+        }
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -846,7 +905,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         external
         onlyRoles(ADMIN_ROLE)
     {
-        if(superformId == 0) revert();
+        if (superformId == 0) revert();
         // If its already listed revert
         if (isVaultListed(vault)) revert VaultAlreadyListed();
 
@@ -857,7 +916,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard {
         vaults[superformId].decimals = vaultDecimals;
         vaults[superformId].oracle = oracle;
         uint192 lastSharePrice = uint192(vaults[superformId].sharePrice());
-        if(lastSharePrice == 0) revert();
+        if (lastSharePrice == 0) revert();
         vaults[superformId].lastReportedSharePrice = lastSharePrice;
         _vaultToSuperformId[vault] = superformId;
 

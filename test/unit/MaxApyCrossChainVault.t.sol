@@ -51,7 +51,8 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             _superPositions_: superPositions,
             _vaultRouter_: vaultRouter,
             _factory_: factory,
-            _treasury: treasury
+            _treasury: treasury,
+            _signerRelayer: address(1)
         });
 
         oracle = new MockERC4626Oracle();
@@ -81,7 +82,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
-        uint256 shares = vault.depositAtomic(amount, users.alice);
+        uint256 shares = _depositAtomic(amount, users.alice, users.alice);
         assertEq(shares, amount);
         assertEq(vault.totalAssets(), amount);
         assertEq(vault.balanceOf(users.alice), amount);
@@ -93,7 +94,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
-        uint256 assets = vault.mintAtomic(amount, users.alice);
+        uint256 assets = _mintAtomic(amount, users.alice, users.alice);
         assertEq(assets, amount);
         assertEq(vault.totalAssets(), amount);
         assertEq(vault.balanceOf(users.alice), amount);
@@ -107,7 +108,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             vaultDecimals: yUsdce.decimals(),
             oracle: IERC4626Oracle(address(0))
         });
-        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
         vm.expectRevert(MaxApyCrossChainVault.InsufficientAssets.selector);
@@ -140,7 +141,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             oracle: IERC4626Oracle(address(0))
         });
 
-        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 amountPerVault = 500 * _1_USDCE;
 
@@ -187,7 +188,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             oracle: IERC4626Oracle(address(oracle))
         });
 
-        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
         (
@@ -220,7 +221,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
     }
 
     function test_revert_MaxApyCrossChainVault_redeem_requestNotProcessed() public {
-        uint256 sharesBalance = vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         skip(sharesLockTime);
         vm.startPrank(users.alice);
@@ -230,7 +231,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
     }
 
     function test_MaxApyCrossChainVault_processRedeemRequest_from_idle() public {
-        uint256 sharesBalance = vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         skip(sharesLockTime);
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
         SingleXChainSingleVaultWithdraw memory sXsV;
@@ -260,7 +261,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             vaultDecimals: yUsdce.decimals(),
             oracle: IERC4626Oracle(address(0))
         });
-        uint256 sharesBalance = vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
         uint256 totalAssetsBeforeLock = vault.totalAssets();
@@ -299,7 +300,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             vaultDecimals: yUsdce.decimals(),
             oracle: IERC4626Oracle(address(0))
         });
-        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
@@ -378,7 +379,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
                 oracle: IERC4626Oracle(address(oracle))
             });
 
-            sharesBalance = vault.depositAtomic(1000 * _1_USDCE, users.alice);
+            sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
             investAmount = 600 * _1_USDCE;
             (
@@ -416,7 +417,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
     }
 
     function test_revert_MaxApyCrossChainVault_report_VaultNotListed() public {
-        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         skip(vault.SECS_PER_YEAR());
         VaultReport[] memory mockReport = new VaultReport[](1);
         mockReport[0].chainId = uint64(1);
@@ -432,7 +433,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId,vaultAddress), block.timestamp);
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -441,7 +442,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             oracle: IERC4626Oracle(address(oracle))
         });
 
-        vault.depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
         (
@@ -481,7 +482,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
     function test_MaxApyCrossChainVault_addVault() public {
         address newVault = address(0x123);
         uint256 newSuperformId = 999;
-        uint64 newChainId = 42;     
+        uint64 newChainId = 42;
         uint8 newDecimals = 18;
         oracle.setValues(newVault, 1 * _1_USDCE, block.timestamp);
         vm.expectEmit(true, true, true, true);
@@ -563,7 +564,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         vault.setEmergencyShutdown(true);
 
         vm.expectRevert(MaxApyCrossChainVault.VaultShutdown.selector);
-        vault.depositAtomic(100 * _1_USDCE, users.alice);
+        vault.requestDeposit(100 * _1_USDCE, users.alice, users.alice);
     }
 
     function test_MaxApyCrossChainVault_onERC1155Received() public {
@@ -618,5 +619,24 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
     function test_revert_MaxApyCrossChainVault_setOperator_invalidOperator() public {
         vm.expectRevert(ERC7540.InvalidOperator.selector);
         vault.setOperator(users.alice, true);
+    }
+
+    function _depositAtomic(uint256 assets, address receiver, address sender) private returns (uint256 shares) {
+        bytes[] memory callDatas = new bytes[](2);
+        callDatas[0] =
+            abi.encodeWithSelector(MaxApyCrossChainVault.requestDeposit.selector, assets, receiver, users.alice);
+        callDatas[1] = abi.encodeWithSignature("deposit(uint256,address)", assets, receiver);
+        bytes[] memory returnData = vault.multicall(callDatas);
+        return abi.decode(returnData[1], (uint256));
+    }
+
+    function _mintAtomic(uint256 shares, address receiver, address sender) private returns (uint256 assets) {
+        bytes[] memory callDatas = new bytes[](2);
+        uint256 assets = vault.convertToAssets(shares);
+        callDatas[0] =
+            abi.encodeWithSelector(MaxApyCrossChainVault.requestDeposit.selector, assets, receiver, users.alice);
+        callDatas[1] = abi.encodeWithSignature("mint(uint256,address)", shares, receiver);
+        bytes[] memory returnData = vault.multicall(callDatas);
+        return abi.decode(returnData[1], (uint256));
     }
 }
