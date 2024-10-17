@@ -28,7 +28,8 @@ import {
     SingleXChainSingleVaultWithdraw,
     SingleXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    MultiXChainMultiVaultWithdraw
+    MultiXChainMultiVaultWithdraw,
+    ProcessRedeemRequestWithSignatureParams
 } from "types/Lib.sol";
 import "forge-std/Test.sol";
 
@@ -117,6 +118,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Thrown when attempting to perform an operation while the vault is in emergency shutdown
     error VaultShutdown();
+
+    error SignatureExpired();
+
+    error InvalidSignature();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           CONSTANTS                        */
@@ -539,11 +544,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         return super.withdraw(assets, receiver, controller);
     }
 
-    // function redeemAtomic(uint256 shares, address controller, address owner, address receiver) public nonReentrant {
-    //     _checkSharesLocked(controller);
-    //     _processRedeemRequest(shares, controller, owner, receiver, false);
-    // }
-
     /// @notice Processes a redemption request for a given controller
     /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
     /// including cross-chain withdrawals
@@ -577,35 +577,28 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
-    struct ProcessRedeemRequestWithSignatureParams {
-        address controller;
-        SingleXChainSingleVaultWithdraw sXsV;
-        SingleXChainMultiVaultWithdraw sXmV;
-        MultiXChainSingleVaultWithdraw mXsV;
-        MultiXChainMultiVaultWithdraw mXmV;
-        bytes signature;
-    }
-
-   
     function processRedeemRequestWithSignature(ProcessRedeemRequestWithSignatureParams calldata params)
         external
         payable
     {
+        if (block.timestamp < params.deadline) revert SignatureExpired();
+
         bytes32 hash;
         {
-            hash = keccak256(abi.encode(
-                ++_controllerNonces[params.controller],
-                params.controller,
-                keccak256(abi.encode(params.sXsV)), 
-                keccak256(abi.encode(params.sXmV)), 
-                keccak256(abi.encode(params.mXsV)), 
-                keccak256(abi.encode(params.mXmV))
-            ))          ;
+            hash = keccak256(
+                abi.encode(
+                    params.controller,
+                    keccak256(abi.encode(params.sXsV)),
+                    keccak256(abi.encode(params.sXmV)),
+                    keccak256(abi.encode(params.mXsV)),
+                    keccak256(abi.encode(params.mXmV)),
+                    ++_controllerNonces[params.controller],
+                    params.deadline
+                )
+            );
         }
         // Needs explicit approval from the relayer
-        _checkSignerIsRelayer(
-            params.controller, hash, params.signature
-        );
+        _checkSignerIsRelayer(params.controller, hash, params.v,params.r, params.s);
 
         // Retrieve the pending redeem request for the specified controller
         // This request may involve cross-chain withdrawals from various ERC4626 vaults
@@ -633,18 +626,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
-    function _checkSignerIsRelayer(
-        address controller,
-        bytes32 hash,
-        bytes memory signature
-    )
-        private
-    {
-
-        if (!SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, signature)) {
-            revert();
+    function _checkSignerIsRelayer(address controller, bytes32 hash, uint8 v, bytes32 r, bytes32 s) private {
+        bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v,r,s);
+        if (!isValid) {
+            revert InvalidSignature();
         }
-    }
+    }   
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       VAULT MANAGEMENT                     */

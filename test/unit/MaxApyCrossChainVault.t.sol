@@ -16,8 +16,10 @@ import {
     SingleXChainSingleVaultWithdraw,
     SingleXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    MultiXChainMultiVaultWithdraw
+    MultiXChainMultiVaultWithdraw,
+    ProcessRedeemRequestWithSignatureParams
 } from "src/types/Lib.sol";
+import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import "src/helpers/AddressBook.sol";
 import { MaxApyCrossChainVaultEvents } from "../helpers/MaxApyCrossChainVaultEvents.sol";
@@ -27,10 +29,11 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
 
     MaxApyCrossChainVault public vault;
     ERC4626 public yUsdce;
+    MockERC4626Oracle public oracle;
     uint64 public constant POLYGON_CHAIN_ID = 137;
+    MockSignerRelayer public relayer;
     uint24 public sharesLockTime = 30 days;
     uint256 public yUsdceSharePrice;
-    MockERC4626Oracle public oracle;
     uint16 managementFee = 2000;
     uint16 oracleFee = 2000;
     uint24 processRedeemSettlement = 1 days;
@@ -40,6 +43,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         super._setUp("POLYGON", 62_495_246);
         super.setUp();
         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
+        relayer = new MockSignerRelayer(0x11AA);
         vault = new MaxApyCrossChainVault({
             _asset_: USDCE_POLYGON,
             _name_: "maxCrossUSDCE",
@@ -52,7 +56,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             _vaultRouter_: vaultRouter,
             _factory_: factory,
             _treasury: treasury,
-            _signerRelayer: address(1)
+            _signerRelayer: relayer.signerAddress()
         });
 
         oracle = new MockERC4626Oracle();
@@ -360,6 +364,54 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         }
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
+    }
+
+    function test_MaxApyCrossChainVault_processRedeemRequest_signature() public {
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
+        skip(sharesLockTime);
+        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        uint256 nonce = 1;
+        uint256 deadline = block.timestamp;
+        (uint8 v, bytes32 r, bytes32 s) = relayer.sign(
+            MockSignerRelayer.SignatureParams({
+                controller: users.alice,
+                sXsV: sXsV,
+                sXmV: sXmV,
+                mXsV: mXsV,
+                mXmV: mXmV,
+                nonce: nonce,
+                deadline: deadline
+            })
+        );
+        vm.expectEmit(true, true, true, true);
+        emit ProcessRedeemRequest(users.alice, sharesBalance);
+        vault.processRedeemRequestWithSignature(
+            ProcessRedeemRequestWithSignatureParams({
+                controller: users.alice,
+                sXsV: sXsV,
+                sXmV: sXmV,
+                mXsV: mXsV,
+                mXmV: mXmV,
+                deadline: deadline,
+                v:v,
+                r:r,
+                s:s
+            })
+        );
+        assertEq(vault.totalSupply(), 0);
+        assertEq(vault.totalAssets(), 0);
+        assertEq(vault.totalIdle(), 0);
+        assertEq(vault.totalDebt(), 0);
+        assertEq(vault.claimableRedeemRequest(users.alice), sharesBalance);
+        assertEq(vault.pendingRedeemRequest(users.alice), 0);
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(users.alice, users.alice, users.alice, 1000 * _1_USDCE, sharesBalance);
+        uint256 assets = vault.redeem(sharesBalance, users.alice, users.alice);
+        assertEq(assets, 1000 * _1_USDCE);
     }
 
     function test_revert_MaxApyCrossChainVault_redeem_requestNotSettled() public {
