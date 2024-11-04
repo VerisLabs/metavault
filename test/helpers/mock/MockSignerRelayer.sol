@@ -40,6 +40,6 @@ contract MockSignerRelayer is Test {
             )
         );
 
-        ( v, r, s) = vm.sign(_prk, hash);
+        (v, r, s) = vm.sign(_prk, hash);
     }
 }

@@ -5,6 +5,7 @@ import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { ERC7540_Request, ERC7540_FilledRequest, ERC7540Lib } from "../types/Lib.sol";
+import "forge-std//Test.sol";
 
 /// @notice Simple ERC7540 async Tokenized Vault implementation
 /// @author Solthodox (https://github.com/Solthodox)
@@ -214,6 +215,8 @@ abstract contract ERC7540 is ERC4626 {
     }
 
     function redeem(uint256 shares, address to, address controller) public virtual override returns (uint256 assets) {
+        console2.log("shares : ", shares);
+        console2.log("maxRedeem : ", maxRedeem(controller));
         if (shares > maxRedeem(controller)) revert RedeemMoreThanMax();
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];

@@ -31,7 +31,6 @@ import {
     MultiXChainMultiVaultWithdraw,
     ProcessRedeemRequestWithSignatureParams
 } from "types/Lib.sol";
-import "forge-std/Test.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
@@ -177,10 +176,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /*                           STORAGE                          */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    // -- Slot 0
     /// @notice Cached value of total assets in this vault
     uint128 private _totalIdle;
-    // -- Slot 1
     /// @notice Cached value of total allocated assets
     uint128 private _totalDebt;
     /// @notice Asset decimals
@@ -195,7 +192,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     uint24 public processRedeemSettlement;
     /// @notice Wether the vault is paused
     bool public emergencyShutdown;
-    // -- Slot  2
     /// @notice Fee receiver
     address public treasury;
     /// @notice Underlying asset
@@ -221,7 +217,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @notice Timestamp of deposit lock
     mapping(address => uint256) private _depositLockCheckPoint;
     /// @notice Receiver delegation for withdrawals
-    mapping(address => address) private _receivers;
+    mapping(address => address) public receivers;
     /// @notice Implementation contract of the receiver contract
     address public receiverImplementation;
     /// @notice Timestamp of request redeem lock
@@ -598,7 +594,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             );
         }
         // Needs explicit approval from the relayer
-        _checkSignerIsRelayer(params.controller, hash, params.v,params.r, params.s);
+        _checkSignerIsRelayer(params.controller, hash, params.v, params.r, params.s);
 
         // Retrieve the pending redeem request for the specified controller
         // This request may involve cross-chain withdrawals from various ERC4626 vaults
@@ -627,11 +623,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     }
 
     function _checkSignerIsRelayer(address controller, bytes32 hash, uint8 v, bytes32 r, bytes32 s) private {
-        bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v,r,s);
+        bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
         if (!isValid) {
             revert InvalidSignature();
         }
-    }   
+    }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       VAULT MANAGEMENT                     */
@@ -1025,12 +1021,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         private
         view
     {
-        if (resetValues) {
-            console2.log("------xchain queue----");
-        } else {
-            console2.log("------local queue----");
-        }
-        console2.log("amountToWithdraw : ", cache.amountToWithdraw);
         // Cache how many chains we need and how many vaults in each chain
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
             // If we exhausted the queue stop
@@ -1051,8 +1041,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             VaultData memory vault = vaults[queue[i]];
             // Calcualate the maxWithdraw of the vault
             uint256 maxWithdraw = vault.convertToAssets(_sharesBalance(vault), true);
-            console2.log("maxWithdraw : ", maxWithdraw);
-            console2.log("need : ", cache.amountToWithdraw);
 
             // Dont withdraw more than max
             uint256 withdrawAssets = Math.min(maxWithdraw, cache.amountToWithdraw);
@@ -1064,8 +1052,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             // Push the superformId to the last index of the array
             cache.dstVaults[chainIndex][len] = vault.superformId;
             uint256 shares = vault.convertToShares(withdrawAssets, true);
-            console2.log("4626 balance : ", _superPositions.balanceOf(address(this), vault.superformId));
-            console2.log("4626 shares : ", shares);
+            uint256 balance = _superPositions.balanceOf(address(this), vault.superformId);
+            if (balance == 0) {
+                balance = vault.vaultAddress.balanceOf(address(this));
+            }
             if (shares == 0) continue;
             // Push the shares to redeeem of that vault
             cache.sharesPerVault[chainIndex][len] = shares;
@@ -1101,12 +1091,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                 cache.lens[chainIndex]++;
             }
         }
-
-        if (resetValues) {
-            console2.log("------xchain queue----");
-        } else {
-            console2.log("------local queue----");
-        }
     }
 
     /// @param shares to redeem and burn
@@ -1128,7 +1112,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Executes the redeem request for a controller
     function _processRedeemRequest(ProcessRedeemRequestConfig memory config) private {
-        console2.log("shares : ", config.shares);
         // Use struct to avoid stack too deep
         ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
@@ -1144,26 +1127,20 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
         // If totalIdle can covers the amount fulfill directly
         if (cache.totalIdle >= cache.assets) {
-            console2.log("here wrong");
             cache.sharesFulfilled = config.shares;
             cache.totalClaimableWithdraw = cache.assets;
         }
         // Otherwise perform Superform withdrawals
         else {
-            console2.log("totalIdle : ", cache.totalIdle);
             // Cache amount to withdraw before reducing totalIdle
             cache.amountToWithdraw = cache.assets - cache.totalIdle;
-            console2.log("amountToWithdraw : ", cache.amountToWithdraw);
-
             // Use totalIdle to fulfill the request
             if (cache.totalIdle > 0) {
                 cache.totalClaimableWithdraw = cache.totalIdle;
                 cache.sharesFulfilled = _convertToShares(cache.totalIdle, cache.totalAssets);
             }
             ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
-            console2.log("-----prepare-----");
             _prepareWithdrawalRoute(cache);
-            console2.log("-----prepare-----");
             //////////////////////////////// WITHDRAW FROM THIS CHAIN ////////////////////////////////
             // Cache chain index
             uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
@@ -1172,7 +1149,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                 if (cache.lens[chainIndex] == 1) {
                     // shares to redeem
                     uint256 sharesAmount = cache.sharesPerVault[chainIndex][0];
-                    console2.log("4626 shares direct: ", sharesAmount);
                     // assets to withdraw
                     uint256 assetsAmount = cache.assetsPerVault[chainIndex][0];
                     // superformId(take first element fo the array)
@@ -1238,7 +1214,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                             chainId = DST_CHAINS[i];
                             superformId = cache.dstVaults[i][0];
                             amount = cache.sharesPerVault[i][0];
-                            console2.log("4626 shares xchain: ", amount);
 
                             // Withdraw from one vault asynchronously(crosschain)
                             _singleXChainSingleVaultWithdraw(chainId, superformId, amount, config.receiver, config.sXsV);
@@ -1657,13 +1632,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @dev If it doesnt exist it deploys it at the moment
     /// @notice receiverAddress returns delegatee
     function _receiver(address controller) private returns (address receiverAddress) {
-        address current = _receivers[controller];
+        address current = receivers[controller];
         if (current != address(0)) {
             return current;
         } else {
             receiverAddress =
                 LibClone.clone(receiverImplementation, abi.encodeWithSignature("initialize(address)", controller));
-            _receivers[controller] = receiverAddress;
+            receivers[controller] = receiverAddress;
         }
     }
 
