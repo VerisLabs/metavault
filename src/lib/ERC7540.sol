@@ -5,7 +5,6 @@ import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { ERC7540_Request, ERC7540_FilledRequest, ERC7540Lib } from "../types/Lib.sol";
-import "forge-std//Test.sol";
 
 /// @notice Simple ERC7540 async Tokenized Vault implementation
 /// @author Solthodox (https://github.com/Solthodox)
@@ -215,8 +214,6 @@ abstract contract ERC7540 is ERC4626 {
     }
 
     function redeem(uint256 shares, address to, address controller) public virtual override returns (uint256 assets) {
-        console2.log("shares : ", shares);
-        console2.log("maxRedeem : ", maxRedeem(controller));
         if (shares > maxRedeem(controller)) revert RedeemMoreThanMax();
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
@@ -253,7 +250,7 @@ abstract contract ERC7540 is ERC4626 {
         return maxDeposit(controller);
     }
 
-    function claimableRedeemRequest(address controller) public view returns (uint256) {
+    function claimableRedeemRequest(address controller) public virtual returns (uint256) {
         return maxRedeem(controller);
     }
 
@@ -371,7 +368,6 @@ abstract contract ERC7540 is ERC4626 {
         _claimableDepositRequest[controller].shares += sharesMinted;
     }
 
-    /// @dev Hook that is called when processing a redeem request and make it claimable.
     /// @dev Hook that is called when processing a redeem request and make it claimable.
     /// @dev It assumes user transferred its shares to the contract when requesting a redeem
     function _fulfillRedeemRequest(

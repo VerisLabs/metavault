@@ -254,6 +254,39 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         assertEq(superPositions.balanceOf(address(vault), superformId), shares);
     }
 
+    function test_MaxApyCrossChainVault_refund_gas() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
+
+        uint256 investAmount = 600 * _1_USDCE;
+        (
+            uint8[] memory ambIds,
+            uint256 outputAmount,
+            uint256 maxSlippage,
+            LiqRequest memory liqRequest,
+            bool hasDstSwap
+        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+
+        vault.investSingleXChainSingleVault{ value: 100 ether }(
+            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+        );
+        assertEq(address(vault).balance, 0);
+    }
+
     function test_revert_MaxApyCrossChainVault_redeem_requestNotProcessed() public {
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
@@ -325,7 +358,6 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         assertEq(assets, totalAssetsAfterLock - 2);
     }
 
-    // TODO
     function test_MaxApyCrossChainVault_processRedeemRequest_from_local_and_xchain_queue() public {
         vault.addVault({
             chainId: 137,
@@ -390,15 +422,22 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
                 _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
-            console2.log("shares balance : ", vault.balanceOf(users.alice));
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
-            vault.processRedeemRequest{
-                value:value
-            }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
         }
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
+        address receiver = vault.receivers(users.alice);
+        assertEq(USDCE_POLYGON.balanceOf(receiver), 0);
+        assertEq(USDCE_POLYGON.balanceOf(address(vault)), 399_999_999);
+        assertEq(vault.claimableRedeemRequest(users.alice), 400_000_206);
+
+        deal(USDCE_POLYGON, address(receiver), 588 * _1_USDCE);
+        skip(processRedeemSettlement);
+        assertEq(vault.claimableRedeemRequest(users.alice), 1000 * _1_USDCE);
+        uint256 assets = vault.redeem(aliceBalance, users.alice, users.alice);
+        assertEq(assets, 399_999_999 + 588 * _1_USDCE);
     }
 
     function test_MaxApyCrossChainVault_processRedeemRequest_signature() public {
@@ -450,42 +489,59 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
     }
 
     function test_revert_MaxApyCrossChainVault_redeem_requestNotSettled() public {
-        uint256 sharesBalance;
-        uint256 investAmount;
+        vault.addVault({
+            chainId: 137,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            oracle: IERC4626Oracle(address(0))
+        });
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        {
-            address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-            uint64 optimismChainId = 10;
-            oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        uint64 optimismChainId = 10;
 
-            vault.addVault({
-                chainId: optimismChainId,
-                superformId: superformId,
-                vault: vaultAddress,
-                vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-                oracle: IERC4626Oracle(address(oracle))
-            });
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            oracle: IERC4626Oracle(address(oracle))
+        });
 
-            vault.setSharesLockTime(0);
-            sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
+        uint256 investAmount = 600 * _1_USDCE;
+        (
+            uint8[] memory ambIds,
+            uint256 outputAmount,
+            uint256 maxSlippage,
+            LiqRequest memory liqRequest,
+            bool hasDstSwap
+        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
-            investAmount = 600 * _1_USDCE;
-            (
-                uint8[] memory ambIds,
-                uint256 outputAmount,
-                uint256 maxSlippage,
-                LiqRequest memory liqRequest,
-                bool hasDstSwap
-            ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
-            uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+        );
 
-            vault.investSingleXChainSingleVault{
-                value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount)
-            }(superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap);
-            _mintSuperpositions(address(vault), superformId, shares);
-        }
+        _mintSuperpositions(address(vault), superformId, shares);
+
         vm.startPrank(users.alice);
+
+        vault.setSharesLockTime(0);
+
+        uint256 aliceBalance = vault.balanceOf(users.alice);
+
+        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
+
+        {
+            oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        }
 
         {
             SingleXChainSingleVaultWithdraw memory sXsV;
@@ -494,15 +550,16 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             MultiXChainMultiVaultWithdraw memory mXmV;
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
                 _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
-            vault.processRedeemRequest{ value: _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount) }(
-                users.alice, sXsV, sXmV, mXsV, mXmV
-            );
+            uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
+            sXsV.value = value;
+            vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
         }
-
-        deal(USDCE_POLYGON, vault.receivers(users.alice), 1010 * _1_USDCE);
-
+       
+        address receiver = vault.receivers(users.alice);
+        
+        deal(USDCE_POLYGON, address(receiver), 588 * _1_USDCE);
         vm.expectRevert(MaxApyCrossChainVault.RequestNotSettled.selector);
-        vault.redeem(sharesBalance, users.alice, users.alice);
+        vault.redeem(aliceBalance, users.alice, users.alice);
     }
 
     function test_revert_MaxApyCrossChainVault_report_VaultNotListed() public {
