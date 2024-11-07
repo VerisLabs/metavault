@@ -425,6 +425,10 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            (,,,,, uint128 totalDebt,) = vault.vaults(1);
+            assertEq(totalDebt, 1, "TD1");
+            (,,,,, totalDebt,) = vault.vaults(superformId);
+            assertEq(totalDebt, 0, "TD2");
         }
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
