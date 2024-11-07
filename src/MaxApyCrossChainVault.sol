@@ -1269,8 +1269,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                                 chainId, superformIds, amounts, _receiver(config.controller), config.sXmV
                             );
                             // reduce vault debt
-                            // vaults[cache.dstVaults[i]].totalDebt =
-                            //    _sub0(vaults[cache.dstVaults[i]].totalDebt,cache.assetsPerVault[chainIndex][i]).toUint128();
+                            for (uint256 i = 0; i < superformIds.length;) {
+                                vaults[superformIds[i]].totalDebt =
+                                    _sub0(vaults[superformIds[i]].totalDebt, amounts[i]).toUint128();
+                                unchecked {
+                                    ++i;
+                                }
+                            }
                             settle = true;
                             break;
                         }

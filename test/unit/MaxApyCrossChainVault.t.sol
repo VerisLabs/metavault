@@ -554,9 +554,9 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             sXsV.value = value;
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
         }
-       
+
         address receiver = vault.receivers(users.alice);
-        
+
         deal(USDCE_POLYGON, address(receiver), 588 * _1_USDCE);
         vm.expectRevert(MaxApyCrossChainVault.RequestNotSettled.selector);
         vault.redeem(aliceBalance, users.alice, users.alice);
