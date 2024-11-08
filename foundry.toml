@@ -9,8 +9,10 @@ evm_version =  "paris"
 evm_version =  "shanghai"
 
 [profile.deployment]
+evm_version =  "paris"
 optimizer = true
 optimizer_runs = 200
+via_ir=true
 
 [fuzz]
 runs = 1000

@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
 import { Test, console2 } from "forge-std/Test.sol";
-import { MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+import { MaxApyCrossChainVault, ERC7540, ERC4626 } from "src/MaxApyCrossChainVault.sol";
 import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { BaseTest } from "../base/BaseTest.t.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
@@ -12,8 +15,10 @@ import {
     MultiXChainSingleVaultWithdraw,
     MultiXChainMultiVaultWithdraw
 } from "src/types/Lib.sol";
+import { ERC7540Events } from "../helpers/ERC7540Events.sol";
+import { ERC4626Events } from "../helpers/ERC4626Events.sol";
 
-contract ERC7540PropertiesTest is BaseTest {
+contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
@@ -39,7 +44,8 @@ contract ERC7540PropertiesTest is BaseTest {
             _superPositions_: superPositions,
             _vaultRouter_: vaultRouter,
             _factory_: factory,
-            _treasury: treasury
+            _treasury: treasury,
+            _signerRelayer: address(1)
         });
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
@@ -47,6 +53,8 @@ contract ERC7540PropertiesTest is BaseTest {
 
     function test_erc7540_requestDeposit() public {
         uint256 amount = 100 * _1_USDCE;
+        vm.expectEmit();
+        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vault.requestDeposit(amount, users.alice, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 100 * _1_USDCE);
@@ -55,10 +63,17 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.balanceOf(users.alice), 0);
     }
 
+    function test_revert_erc7540_requestDeposit_zeroAssets() public {
+        vm.expectRevert(ERC7540.InvalidZeroAssets.selector);
+        vault.requestDeposit(0, users.alice, users.alice);
+    }
+
     function test_erc7540_deposit() public {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
 
+        vm.expectEmit();
+        emit Deposit(users.alice, users.alice, amount, amount);
         uint256 shares = vault.deposit(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
@@ -68,10 +83,19 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.balanceOf(users.alice), shares);
     }
 
+    function test_revert_erc7540_deposit_noRequest() public {
+        uint256 amount = 100 * _1_USDCE;
+        vm.expectRevert(ERC4626.DepositMoreThanMax.selector);
+        vault.deposit(amount, users.alice);
+    }
+
     function test_erc7540_mint() public {
         uint256 amount = 100 * _1_USDCE;
+
         vault.requestDeposit(amount, users.alice, users.alice);
 
+        vm.expectEmit();
+        emit Deposit(users.alice, users.alice, amount, amount);
         uint256 assets = vault.mint(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
@@ -81,33 +105,17 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.balanceOf(users.alice), assets);
     }
 
-    function test_erc7540_depositAtomic() public {
+    function test_revert_erc7540_mint_noRequest() public {
         uint256 amount = 100 * _1_USDCE;
-        uint256 shares = vault.depositAtomic(amount, users.alice);
-        assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
-        assertEq(vault.claimableDepositRequest(users.alice), 0);
-        assertEq(vault.pendingDepositRequest(users.alice), 0);
-        assertEq(vault.totalAssets(), amount);
-        assertEq(shares, amount);
-        assertEq(vault.balanceOf(users.alice), shares);
-    }
-
-    function test_erc7540_mintAtomic() public {
-        uint256 amount = 100 * _1_USDCE;
-        uint256 assets = vault.mintAtomic(amount, users.alice);
-        assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
-        assertEq(vault.claimableDepositRequest(users.alice), 0);
-        assertEq(vault.pendingDepositRequest(users.alice), 0);
-        assertEq(vault.totalAssets(), amount);
-        assertEq(assets, amount);
-        assertEq(vault.balanceOf(users.alice), assets);
+        vm.expectRevert(ERC4626.MintMoreThanMax.selector);
+        vault.mint(amount, users.alice);
     }
 
     function test_erc7540_requestRedeem_sharesLocked() public {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
-        vm.expectRevert();
+        vm.expectRevert(MaxApyCrossChainVault.SharesLocked.selector);
         vault.requestRedeem(shares, users.alice, users.alice);
     }
 
@@ -117,8 +125,12 @@ contract ERC7540PropertiesTest is BaseTest {
         uint256 shares = vault.deposit(amount, users.alice);
         shares;
         skip(sharesLockTime);
+        vm.expectEmit();
+        emit RedeemRequest(users.alice, users.alice, 0, users.alice, shares);
 
         vault.requestRedeem(shares, users.alice, users.alice);
+        assertEq(vault.balanceOf(address(vault)), shares);
+        assertEq(vault.balanceOf(users.alice), 0);
         assertEq(vault.pendingRedeemRequest(users.alice), shares);
         assertEq(vault.claimableRedeemRequest(users.alice), 0);
         assertEq(vault.totalSupply(), amount);
@@ -129,6 +141,11 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.claimableRedeemRequest(users.alice), amount);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
+    }
+
+    function test_revert_erc7540_requestRedeem_zeroShares() public {
+        vm.expectRevert(ERC7540.InvalidZeroShares.selector);
+        vault.requestRedeem(0, users.alice, users.alice);
     }
 
     function test_erc7540_redeem() public {
@@ -142,6 +159,8 @@ contract ERC7540PropertiesTest is BaseTest {
         _processRedeemRequest(users.alice);
 
         uint256 balanceBefore = USDCE_POLYGON.balanceOf(users.alice);
+        vm.expectEmit();
+        emit Withdraw(users.alice, users.alice, users.alice, amount, shares);
         uint256 assets = vault.redeem(shares, users.alice, users.alice);
         uint256 balanceAfter = USDCE_POLYGON.balanceOf(users.alice);
         assertEq(assets, amount);
@@ -150,6 +169,15 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.claimableRedeemRequest(users.alice), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
+    }
+
+    function test_revert_erc7540_redeem_noRequest() public {
+        uint256 amount = 100 * _1_USDCE;
+        vault.requestDeposit(amount, users.alice, users.alice);
+        uint256 shares = vault.deposit(amount, users.alice);
+
+        vm.expectRevert(ERC4626.RedeemMoreThanMax.selector);
+        vault.redeem(shares, users.alice, users.alice);
     }
 
     function test_erc7540_withdraw() public {
@@ -163,6 +191,8 @@ contract ERC7540PropertiesTest is BaseTest {
         _processRedeemRequest(users.alice);
 
         uint256 balanceBefore = USDCE_POLYGON.balanceOf(users.alice);
+        vm.expectEmit();
+        emit Withdraw(users.alice, users.alice, users.alice, amount, shares);
         uint256 burntShares = vault.withdraw(amount, users.alice, users.alice);
         uint256 balanceAfter = USDCE_POLYGON.balanceOf(users.alice);
         assertEq(burntShares, shares);
@@ -171,6 +201,13 @@ contract ERC7540PropertiesTest is BaseTest {
         assertEq(vault.claimableRedeemRequest(users.alice), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
+    }
+
+    function test_revert_erc7540_withdraw_noRequest() public {
+        uint256 amount = 100 * _1_USDCE;
+
+        vm.expectRevert(ERC4626.WithdrawMoreThanMax.selector);
+        vault.withdraw(amount, users.alice, users.alice);
     }
 
     function _processRedeemRequest(address user) internal {

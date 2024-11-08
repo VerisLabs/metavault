@@ -5,9 +5,8 @@ import { Test, console2, Vm } from "forge-std/Test.sol";
 import { IERC20 } from "../interfaces/IERC20.sol";
 import { Utilities } from "../utils/Utilities.sol";
 import { getTokensList } from "../helpers/Tokens.sol";
-import { MaxApyCrossChainVaultEvents } from "../helpers/MaxApyCrossChainVaultEvents.sol";
 
-contract BaseTest is Test, MaxApyCrossChainVaultEvents {
+contract BaseTest is Test {
     struct Users {
         address payable alice;
         address payable bob;
