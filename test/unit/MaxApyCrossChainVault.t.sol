@@ -225,20 +225,15 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
-        (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
-        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
         vm.expectEmit(true, true, true, true);
         emit Invest(investAmount);
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+            req
         );
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), 400 * _1_USDCE);
         assertEq(vault.totalAssets(), 1000 * _1_USDCE);
@@ -271,19 +266,12 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
-        (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
-        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
-        vault.investSingleXChainSingleVault{ value: 100 ether }(
-            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
-        );
+        vault.investSingleXChainSingleVault{ value: 100 ether }(req);
         assertEq(address(vault).balance, 0);
     }
 
@@ -385,18 +373,13 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         });
 
         uint256 investAmount = 600 * _1_USDCE;
-        (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
-        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+            req
         );
 
         _mintSuperpositions(address(vault), superformId, shares);
@@ -419,16 +402,16 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             MultiXChainSingleVaultWithdraw memory mXsV;
             MultiXChainMultiVaultWithdraw memory mXmV;
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
-                _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+                1(superformId, investAmount);
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
             (,,,,, uint128 totalDebt,) = vault.vaults(1);
-            assertEq(totalDebt, 1, "TD1");
+            assertEq(totalDebt, 1);
             (,,,,, totalDebt,) = vault.vaults(superformId);
-            assertEq(totalDebt, 0, "TD2");
+            assertEq(totalDebt, 0);
         }
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
@@ -519,18 +502,13 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         });
 
         uint256 investAmount = 600 * _1_USDCE;
-        (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
-        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+            req
         );
 
         _mintSuperpositions(address(vault), superformId, shares);
@@ -553,7 +531,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             MultiXChainSingleVaultWithdraw memory mXsV;
             MultiXChainMultiVaultWithdraw memory mXmV;
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
-                _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+                1(superformId, investAmount);
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
@@ -595,13 +573,9 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
-        (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
-        ) = _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
         uint256 newSharesPrice = 2 * _1_USDCE;
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
@@ -609,7 +583,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         vm.expectEmit(true, true, true, true);
         emit Invest(investAmount);
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            superformId, ambIds, investAmount, outputAmount, maxSlippage, liqRequest, hasDstSwap
+            req
         );
 
         _mintSuperpositions(address(vault), superformId, shares);

@@ -109,11 +109,7 @@ contract SuperformActions is Test {
         internal
         view
         returns (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
+           SingleXChainSingleVaultStateReq memory req
         )
     {
         bytes memory payload = depositPayloads[_superformId][_amount];
@@ -135,7 +131,14 @@ contract SuperformActions is Test {
         )
     {
         bytes memory payload = withdrawPayloads[_superformId][_amount];
-        return _decodeSingleXChainSingleVaultStateReq(payload);
+        SingleXChainSingleVaultStateReq memory req = _decodeSingleXChainSingleVaultStateReq(payload);
+        (ambIds, outputAmount, maxSlippage, liqRequest, hasDstSwap) = (
+            req.ambIds,
+            req.superformData.outputAmount,
+            req.superformData.maxSlippage,
+            req.superformData.liqRequest,
+            req.superformData.hasDstSwap
+        );
     }
 
     function _getInvestSingleXChainSingleVaultValue(
@@ -163,23 +166,10 @@ contract SuperformActions is Test {
     function _decodeSingleXChainSingleVaultStateReq(bytes memory payload)
         private
         pure
-        returns (
-            uint8[] memory ambIds,
-            uint256 outputAmount,
-            uint256 maxSlippage,
-            LiqRequest memory liqRequest,
-            bool hasDstSwap
-        )
+        returns (SingleXChainSingleVaultStateReq memory req)
     {
-        SingleXChainSingleVaultStateReq memory req =
-            abi.decode(slice(payload, 4, payload.length - 4), (SingleXChainSingleVaultStateReq));
-        return (
-            req.ambIds,
-            req.superformData.outputAmount,
-            req.superformData.maxSlippage,
-            req.superformData.liqRequest,
-            req.superformData.hasDstSwap
-        );
+        req = abi.decode(slice(payload, 4, payload.length - 4), (SingleXChainSingleVaultStateReq));
+        return req;
     }
 
     function getSelector(bytes memory _data) private pure returns (bytes4 sig) {

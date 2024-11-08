@@ -63,6 +63,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @dev Emitted when investing vault idle assets
     event Invest(uint256 amount);
 
+    /// @dev Emitted when divesting vault idle assets
+    event Divest(uint256 amount);
+
     /// @dev Emitted when cross-chain investment is settled
     event SettleXChainInvest(uint256 indexed superformId, uint256 assets);
 
@@ -84,6 +87,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @dev Emitted when updating the oracle fee
     event SetOracleFee(uint16 fee);
 
+    // @dev Emitted when updating the recovery address
+    event setRecoveryAddress(address recoveryAddress);
+
     /// @dev Emitted when the emergency shutdown state is changed
     event EmergencyShutdown(bool enabled);
 
@@ -102,6 +108,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Thrown when trying to perform an operation while cross-chain deposits are still pending
     error XChainDepositsPending();
+
+    /// @notice Thrown when trying to perform an operation while cross-chain withdraws are still pending
+    error XChainWithdrawsPending();
 
     /// @notice Thrown when attempting to withdraw more assets than are currently available
     error InsufficientAvailableAssets();
@@ -162,19 +171,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
-    /// @notice Array of destination chain IDs
-    /// @dev Includes Ethereum Mainnet, Polygon, BNB Chain, Optimism, Base, Arbitrum One, and Avalanche
-    uint64[N_CHAINS] public DST_CHAINS = [
-        1, // Ethereum Mainnet
-        137, // Polygon
-        56, // BNB Chain
-        10, // Optimism
-        8453, // Base
-        42_161, // Arbitrum One
-        43_114 // Avalanche
-    ];
-    /// @notice Mapping of chain IDs to their respective indexes
-    mapping(uint64 => uint256) chainIndexes;
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           STORAGE                          */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -210,35 +206,53 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @notice ERC20 symbol
     string private _symbol;
     /// @notice maps the assets and data of each allocated vault
-    mapping(uint256 => VaultData) public vaults;
-    /// @notice the ERC4626 oracle of each chain
-    mapping(uint64 chain => address) public oracles;
     /// @notice Vaults portfolio on this same chain
     uint256[WITHDRAWAL_QUEUE_SIZE] public localWithdrawalQueue;
     /// @notice Vaults portfolio in external chains
     uint256[WITHDRAWAL_QUEUE_SIZE] public xChainWithdrawalQueue;
+    /// @notice Implementation contract of the receiver contract
+    address public receiverImplementation;
+    /// @notice Timestamp of last report
+    uint256 public lastReport;
+    /// @notice Signer address to process redeem requests
+    address public signerRelayer;
+    /// @notice Cached value of total assets that are being bridged at the moment
+    uint256 private _totalPendingXChainDeposits;
+    /// @notice Cached value of total assets that are being bridged at the moment
+    uint256 private _totalPendingXChainWithdraws;
+    /// @notice Array of destination chain IDs
+    /// @dev Includes Ethereum Mainnet, Polygon, BNB Chain, Optimism, Base, Arbitrum One, and Avalanche
+    uint64[N_CHAINS] public DST_CHAINS = [
+        1, // Ethereum Mainnet
+        137, // Polygon
+        56, // BNB Chain
+        10, // Optimism
+        8453, // Base
+        42_161, // Arbitrum One
+        43_114 // Avalanche
+    ];
     /// @notice Timestamp of deposit lock
     mapping(address => uint256) private _depositLockCheckPoint;
     /// @notice Receiver delegation for withdrawals
     mapping(address => address) public receivers;
-    /// @notice Implementation contract of the receiver contract
-    address public receiverImplementation;
+    /// @notice Storage of each vault related data
+    mapping(uint256 => VaultData) public vaults;
+    /// @notice the ERC4626 oracle of each chain
+    mapping(uint64 chain => address) public oracles;
     /// @notice Timestamp of request redeem lock
     mapping(address => uint256) private _requestRedeemSettlementCheckpoint;
     /// @notice Inverse mapping vault => superformId
     mapping(address => uint256) _vaultToSuperformId;
     /// @notice Redeem is locked when requesting and unlocked when processing
     mapping(address => bool) redeemLocked;
-    /// @notice Timestamp of last report
-    uint256 public lastReport;
-    /// @notice Signer address to process redeem requests
-    address public signerRelayer;
     /// @notice pending bridged assets for each vault
     mapping(uint256 superformId => uint256 amount) private _pendingXChainDeposits;
+    /// @notice pending bridged assets for each vault
+    mapping(uint256 superformId => uint256 amount) private _pendingXChainWithdraws;
     /// @notice Nonce of each controller
     mapping(address controller => uint256 nonce) private _controllerNonces;
-    /// @notice Cached value of total assets that are being bridged at the moment
-    uint256 private _totalPendingXChainDeposits;
+    /// @notice Mapping of chain IDs to their respective indexes
+    mapping(uint64 => uint256) chainIndexes;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -690,13 +704,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @notice Invests assets from this vault into a single target vault within the same chain
     /// @dev Only callable by addresses with the MANAGER_ROLE
     /// @param vaultAddress The address of the target vault to invest in
-    /// @param amount The amount of assets to invest
-    /// @param minAmountOut The minimum amount of shares expected to receive from the investment
+    /// @param assets The amount of assets to invest
+    /// @param minSharesOut The minimum amount of shares expected to receive from the investment
     /// @return shares The number of shares received from the target vault
     function investSingleDirectSingleVault(
         address vaultAddress,
-        uint256 amount,
-        uint256 minAmountOut
+        uint256 assets,
+        uint256 minSharesOut
     )
         public
         onlyRoles(MANAGER_ROLE)
@@ -709,43 +723,43 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint256 balanceBefore = vaultAddress.balanceOf(address(this));
 
         // Deposit assets into the target vault
-        ERC4626(vaultAddress).deposit(amount, address(this));
+        ERC4626(vaultAddress).deposit(assets, address(this));
 
         // Calculate the number of shares received
         shares = vaultAddress.balanceOf(address(this)) - balanceBefore;
 
-        // Ensure the received shares meet the minimum expected amount
-        if (shares < minAmountOut) {
+        // Ensure the received shares meet the minimum expected assets
+        if (shares < minSharesOut) {
             revert InsufficientAssets();
         }
 
         // Update the vault's internal accounting
-        uint128 amountUint128 = amount.toUint128();
+        uint128 amountUint128 = assets.toUint128();
         _totalIdle -= amountUint128;
         _totalDebt += amountUint128;
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt += amountUint128;
 
-        emit Invest(amount);
+        emit Invest(assets);
         return shares;
     }
 
     /// @notice Invests assets from this vault into multiple target vaults within the same chain
     /// @dev Calls investSingleDirectSingleVault for each target vault
     /// @param vaultAddresses An array of addresses of the target vaults to invest in
-    /// @param amounts An array of amounts to invest in each corresponding vault
-    /// @param minAmountOuts An array of minimum amounts of shares expected from each investment
+    /// @param assets An array of amounts to invest in each corresponding vault
+    /// @param minSharesOuts An array of minimum amounts of shares expected from each investment
     /// @return shares An array of the number of shares received from each target vault
     function investSingleDirectMultiVault(
         address[] calldata vaultAddresses,
-        uint256[] calldata amounts,
-        uint256[] calldata minAmountOuts
+        uint256[] calldata assets,
+        uint256[] calldata minSharesOuts
     )
         external
         returns (uint256[] memory shares)
     {
         shares = new uint256[](vaultAddresses.length);
         for (uint256 i = 0; i < vaultAddresses.length; ++i) {
-            shares[i] = investSingleDirectSingleVault(vaultAddresses[i], amounts[i], minAmountOuts[i]);
+            shares[i] = investSingleDirectSingleVault(vaultAddresses[i], assets[i], minSharesOuts[i]);
         }
     }
 
@@ -844,6 +858,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @dev Not implemented yet
     function investMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
         external
+        payable
         onlyRoles(MANAGER_ROLE)
         refundGas
     {
@@ -870,6 +885,171 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         _totalPendingXChainDeposits += totalAmount;
         _totalIdle -= totalAmount.toUint128();
         emit Invest(totalAmount);
+    }
+
+    function divestSingleDirectSingleVault(
+        address vaultAddress,
+        uint256 shares,
+        uint256 minAssetsOut
+    )
+        public
+        onlyRoles(MANAGER_ROLE)
+        returns (uint256 assets)
+    {
+        uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
+        // Ensure the target vault is in the approved list
+        if (!isVaultListed(vaultAddress)) revert VaultNotListed();
+
+        // Record the balance before deposit to calculate received assets
+        uint256 balanceBefore = asset().balanceOf(address(this));
+
+        // Deposit assets into the target vault
+        ERC4626(vaultAddress).redeem(shares, address(this), address(this));
+
+        // Calculate the number of assets received
+        assets = asset().balanceOf(address(this)) - balanceBefore;
+
+        // Ensure the received assets meet the minimum expected amount
+        if (assets < minAssetsOut) {
+            revert InsufficientAssets();
+        }
+
+        // Update the vault's internal accounting
+        _totalIdle += assets.toUint128();
+        uint128 amountUint128 = sharesValue.toUint128();
+        _totalDebt -= amountUint128;
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt -= amountUint128;
+
+        emit Divest(sharesValue);
+        return assets;
+    }
+
+    function divestSingleDirectMultiVault(
+        address[] calldata vaultAddresses,
+        uint256[] calldata shares,
+        uint256[] calldata minAssetsOuts
+    )
+        external
+        returns (uint256[] memory assets)
+    {
+        assets = new uint256[](vaultAddresses.length);
+        for (uint256 i = 0; i < vaultAddresses.length; ++i) {
+            assets[i] = investSingleDirectSingleVault(vaultAddresses[i], shares[i], minAssetsOuts[i]);
+        }
+    }
+
+    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+        refundGas
+    {
+        uint256 superformId = req.superformData.superformId;
+        // Retrieve the vault data for the target vault
+        VaultData memory vault = vaults[superformId];
+
+        if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+
+        if (_pendingXChainWithdraws[superformId] != 0) revert XChainWithdrawsPending();
+
+        _vaultRouter.singleXChainSingleVaultWithdraw{ value: msg.value }(req);
+
+        // Update the vault's internal accounting
+        uint256 sharesValue = vault.convertToAssets(req.superformData.amount, true);
+        uint128 amountUint128 = sharesValue.toUint128();
+        _totalIdle += amountUint128;
+        // Account assets as pending
+        _pendingXChainWithdraws[superformId] = amountUint128;
+        _totalPendingXChainWithdraws += amountUint128;
+        emit Divest(sharesValue);
+    }
+
+    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+        refundGas
+    {
+        uint256 totalAmount;
+        for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
+            uint256 superformId = req.superformsData.superformIds[i];
+            // Retrieve the vault data for the target vault
+            VaultData memory vault = vaults[superformId];
+            // Cant invest in a vault that is not in the portfolio
+            if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+            // We cannot invest more till the previous investment is successfully completed
+            if (_pendingXChainWithdraws[superformId] != 0) revert XChainWithdrawsPending();
+            uint256 amount = vault.convertToAssets(req.superformsData.amounts[i], true);
+            // Account assets as pending
+            _pendingXChainWithdraws[superformId] = amount;
+            // Update the vault's internal accounting
+            totalAmount += amount;
+        }
+        _vaultRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
+        _totalPendingXChainWithdraws += totalAmount;
+        _totalIdle += totalAmount.toUint128();
+        emit Divest(totalAmount);
+    }
+
+    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+        refundGas
+    {
+        uint256 totalAmount;
+        for (uint256 i = 0; i < req.superformsData.length;) {
+            uint256 superformId = req.superformsData[i].superformId;
+            // Retrieve the vault data for the target vault
+            VaultData memory vault = vaults[superformId];
+            uint256 amount = vault.convertToAssets(req.superformsData[i].amount, true);
+            // Cant invest in a vault that is not in the portfolio
+            if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+
+            // We cannot invest more till the previous investment is successfully completed
+            if (_pendingXChainWithdraws[superformId] != 0) revert XChainDepositsPending();
+            // Account assets as pending
+            _pendingXChainWithdraws[superformId] = amount;
+            totalAmount += amount;
+            unchecked {
+                ++i;
+            }
+        }
+        _vaultRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        _totalPendingXChainWithdraws += totalAmount;
+        _totalIdle += totalAmount.toUint128();
+        emit Divest(totalAmount);
+    }
+
+    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+        refundGas
+    {
+        uint256 totalAmount;
+        for (uint256 i = 0; i < req.superformsData.length; i++) {
+            uint256[] memory superformIds = req.superformsData[i].superformIds;
+            uint256[] memory amounts = req.superformsData[i].amounts;
+            for (uint256 j = 0; j < superformIds.length; j++) {
+                uint256 superformId = superformIds[j];
+                // Retrieve the vault data for the target vault
+                VaultData memory vault = vaults[superformId];
+                uint256 amount = vault.convertToAssets(amounts[j], true);
+                // Account assets as pending
+                _pendingXChainWithdraws[superformId] = amount;
+                // Cant invest in a vault that is not in the portfolio
+                if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+
+                // We cannot invest more till the previous investment is successfully completed
+                if (_pendingXChainWithdraws[superformId] != 0) revert XChainDepositsPending();
+                totalAmount += amount;
+            }
+        }
+        _vaultRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
+        _totalPendingXChainWithdraws += totalAmount;
+        _totalIdle -= totalAmount.toUint128();
+        emit Divest(totalAmount);
     }
 
     /// @notice Updates the share prices of vaults based on oracle reports
@@ -1003,6 +1183,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
         oracleFee = _oracleFee;
         emit SetOracleFee(_oracleFee);
+    }
+
+    function setRecoveryAddress(address _recoveryAddress) external onlyRoles(ADMIN_ROLE) {
+        recoveryAddress = _recoveryAddress;
+        emit SetRecoveryAddress(_recoveryAddress);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
