@@ -1982,14 +1982,4 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         }
         return this.onERC1155BatchReceived.selector;
     }
-
-    function claimableRedeemRequest(address controller) public override returns (uint256) {
-        uint256 shares = super.claimableRedeemRequest(controller);
-        if (block.timestamp >= _requestRedeemSettlementCheckpoint[controller] + processRedeemSettlement) {
-            address receiver = receivers[controller];
-            if (receiver != address(0) && ERC20Receiver(_receiver(controller)).balance() > 0) {
-                shares += pendingRedeemRequest(controller);
-            }
-        }
-    }
 }
