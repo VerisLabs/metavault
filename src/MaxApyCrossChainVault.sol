@@ -83,7 +83,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @dev Emitted when updating the management fee
     event SetManagementFee(uint16 fee);
-
+    /// @dev Emitted when updating the performance fee
+    event SetPerformanceFee(uint16 fee);
     /// @dev Emitted when updating the oracle fee
     event SetOracleFee(uint16 fee);
 
@@ -184,7 +185,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @notice Protocol fee
     uint16 public managementFee;
     /// @notice Protocol fee
+    uint16 public performanceFee;
+    /// @notice Protocol fee
     uint16 public oracleFee;
+    /// @notice Hurdle rate of underlying asset
+    uint16 public hurdleRate;
     /// @notice Minimum time users must wait to redeem shares
     uint24 public sharesLockTime;
     /// @notice Delay from processing a redeem till its claimed
@@ -216,6 +221,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     address public recoveryAddress;
     /// @notice Timestamp of last report
     uint256 public lastReport;
+    /// @notice The ATH share price
+    uint256 public sharePriceWaterMark;
     /// @notice Signer address to process redeem requests
     address public signerRelayer;
     /// @notice Cached value of total assets that are being bridged at the moment
@@ -294,6 +301,16 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         }
     }
 
+    /// @notice Modifier to update the share price water-mark before running a function
+    modifier updateWatermark() {
+        _;
+        uint256 sp = sharePrice();
+        assembly {
+            let spwm := sload(sharePriceWaterMark.slot)
+            if lt(spwm, sp) { sstore(sharePriceWaterMark.slot, sp) }
+        }
+    }
+
     /// @notice Initializes the MaxApyCrossChainVault contract
     /// @param _asset_ Address of the underlying asset token
     /// @param _name_ Name of the vault token
@@ -311,7 +328,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         string memory _name_,
         string memory _symbol_,
         uint16 _managementFee,
+        uint16 _performanceFee,
         uint16 _oracleFee,
+        uint16 _assetHurdleRate,
         uint24 _sharesLockTime,
         uint24 _processRedeemSettlement,
         ISuperPositions _superPositions_,
@@ -328,10 +347,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         _vaultRouter = _vaultRouter_;
         treasury = _treasury;
         managementFee = _managementFee;
+        performanceFee = _performanceFee;
         oracleFee = _oracleFee;
         sharesLockTime = _sharesLockTime;
         processRedeemSettlement = _processRedeemSettlement;
         lastReport = block.timestamp;
+        hurdleRate = _assetHurdleRate;
+        // Update the ATH share price
+        sharePriceWaterMark = sharePrice();
 
         // Try to get asset decimals, fallback to default if unsuccessful
         (bool success, uint8 result) = _tryGetAssetDecimals(_asset_);
@@ -351,6 +374,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         _initializeOwner(msg.sender);
         _grantRoles(msg.sender, ADMIN_ROLE);
 
+        // Initialize signer relayer
         signerRelayer = _signerRelayer;
 
         // Deploy and set the receiver implementation
@@ -931,7 +955,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint256[] calldata shares,
         uint256[] calldata minAssetsOuts
     )
-        external
+        payable
         returns (uint256[] memory assets)
     {
         assets = new uint256[](vaultAddresses.length);
@@ -1058,9 +1082,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @dev This function can only be called by addresses with the ORACLE_ROLE
     /// @param reports An array of VaultReport structures containing updated share prices
     /// @param source The address of the oracle providing the report
-    function report(VaultReport[] calldata reports, address source) external onlyRoles(ORACLE_ROLE) {
-        int256 totalAssetsDelta;
-
+    function report(VaultReport[] calldata reports, address source) external updateWatermark onlyRoles(ORACLE_ROLE) {
+        uint256 duration = block.timestamp - lastReport;
+        uint256 sharePrice = sharePrice();
         for (uint256 i = 0; i < reports.length; i++) {
             // Cache the current report for efficiency
             VaultReport memory _report = reports[i];
@@ -1085,15 +1109,30 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
             // Calculate the total assets value after applying the new share price
             uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance, true);
+            
+            // Gains/losses of the strategy
+            int256 vaultDelta = int256(totalAssetsAfter) - int256(totalAssetsBefore);
 
-            // Calculate the change in total assets (profit or loss)
-            totalAssetsDelta += int256(totalAssetsAfter) - int256(totalAssetsBefore);
-
-            emit Report(vault.chainId, vault.vaultAddress, totalAssetsDelta);
+            // If it has profit apply fees
+            if (vaultDelta > 0) {
+                // Only charge fees on yield above watermark
+                if (sharePrice > sharePriceWaterMark) {
+                    // And only charge rees if the strategy yield is above hurdle rate
+                    uint256 rate = uint256(vaultDelta) * MAX_BPS * SECS_PER_YEAR / duration / totalAssetsBefore;
+                    if (rate > hurdleRate) {
+                        uint16 effectiveFee = performanceFee - vault.deductedFees;
+                        uint256 performanceFees = uint256(vaultDelta) * effectiveFee / MAX_BPS;
+                        uint256 performanceFeeShares = convertToShares(performanceFees);
+                        _mint(treasury, performanceFeeShares);
+                    }
+                }
+            }
+            emit Report(vault.chainId, vault.vaultAddress, vaultDelta);
         }
-
         // Calculate and distribute management fees based on the change in total assets
-        _assessFees(treasury, source);
+        _assessMangementFees(treasury, source, duration);
+        // Update timestamp of last report
+        lastReport = block.timestamp;
     }
 
     /// @notice Add a new vault to the portfolio
@@ -1107,6 +1146,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint256 superformId,
         address vault,
         uint8 vaultDecimals,
+        uint16 deductedFees,
         IERC4626Oracle oracle
     )
         external
@@ -1122,6 +1162,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         vaults[superformId].vaultAddress = vault;
         vaults[superformId].decimals = vaultDecimals;
         vaults[superformId].oracle = oracle;
+        vaults[superformId].deductedFees = deductedFees;
         uint192 lastSharePrice = uint192(vaults[superformId].sharePrice());
         if (lastSharePrice == 0) revert();
         vaults[superformId].lastReportedSharePrice = lastSharePrice;
@@ -1178,6 +1219,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
         managementFee = _managementFee;
         emit SetManagementFee(_managementFee);
+    }
+
+    /// @notice sets the annually management fee
+    /// @param _performanceFee new BPS management fee
+    function setPerformanceFee(uint16 _performanceFee) external onlyRoles(ADMIN_ROLE) {
+        performanceFee = _performanceFee;
+        emit SetPerformanceFee(_performanceFee);
     }
 
     /// @notice sets the annually oracle fee
@@ -1618,9 +1666,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Applies annualized fees to vault assets
     /// @notice Mints shares to the treasury
-    function _assessFees(address managementFeeReceiver, address oracleFeeReceiver) private {
-        uint256 duration = block.timestamp - lastReport;
-
+    function _assessMangementFees(address managementFeeReceiver, address oracleFeeReceiver, uint256 duration) private {
         uint256 managementFees = (totalAssets() * duration * managementFee) / SECS_PER_YEAR / MAX_BPS;
         uint256 managementFeeShares = convertToShares(managementFees);
 

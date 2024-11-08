@@ -11,6 +11,8 @@ uint256 constant ORACLE_STALENESS_TOLERANCE = 8 hours;
 /// @notice A struct describing the status of an underlying vault
 /// @dev Contains data about a vault's chain ID, share price, oracle, and more
 struct VaultData {
+    /// @dev Fees to deduct when applying performance fees
+    uint16 deductedFees;
     /// @dev The ID of the chain where the vault is deployed
     uint64 chainId;
     /// @dev The last reported share price of the vault
