@@ -43,38 +43,43 @@ import { MaxApyCrossChainVaultEvents } from "../helpers/MaxApyCrossChainVaultEve
 contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossChainVaultEvents {
     using SafeTransferLib for address;
 
+    uint64 public constant POLYGON_CHAIN_ID = 137;
+    address public constant VAULT_DEPLOYMENT_ADDRESS = 0x5E0B4Bfa0B55932A3587E648c3552a6515bA56b1;
     MaxApyCrossChainVault public vault;
     ERC4626 public yUsdce;
     MockERC4626Oracle public oracle;
-    uint64 public constant POLYGON_CHAIN_ID = 137;
     MockSignerRelayer public relayer;
     uint24 public sharesLockTime = 30 days;
     uint256 public yUsdceSharePrice;
-    uint16 managementFee = 2000;
-    uint16 oracleFee = 2000;
-    uint24 processRedeemSettlement = 1 days;
-    address treasury = makeAddr("treasury");
+    uint16 public managementFee = 2000;
+    uint16 public oracleFee = 2000;
+    uint24 public processRedeemSettlement = 1 days;
+    address public treasury = makeAddr("treasury");
 
     function setUp() public override {
         super._setUp("POLYGON", 62_495_246);
         super.setUp();
         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
-        relayer = new MockSignerRelayer(0x11AA);
-        vault = new MaxApyCrossChainVault({
-            _asset_: USDCE_POLYGON,
-            _name_: "maxCrossUSDCE",
-            _symbol_: "maxCrossUSDCE",
-            _managementFee: managementFee,
-            _oracleFee: oracleFee,
-            _sharesLockTime: sharesLockTime,
-            _processRedeemSettlement: processRedeemSettlement,
-            _superPositions_: superPositions,
-            _vaultRouter_: vaultRouter,
-            _factory_: factory,
-            _treasury: treasury,
-            _signerRelayer: relayer.signerAddress()
-        });
-
+        relayer = new MockSignerRelayer(0x13AA);
+        deployCodeTo(
+            "MaxApyCrossChainVault.sol",
+            abi.encode(
+                USDCE_POLYGON,
+                "maxCrossUSDCE",
+                "maxCrossUSDCE",
+                managementFee,
+                oracleFee,
+                sharesLockTime,
+                processRedeemSettlement,
+                superPositions,
+                vaultRouter,
+                factory,
+                treasury,
+                relayer.signerAddress()
+            ),
+            VAULT_DEPLOYMENT_ADDRESS
+        );
+        vault = MaxApyCrossChainVault(VAULT_DEPLOYMENT_ADDRESS);
         oracle = new MockERC4626Oracle();
         yUsdceSharePrice = yUsdce.convertToAssets(10 ** yUsdce.decimals());
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
@@ -96,6 +101,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
         vm.label(address(vault), "MaxApyCrossChainVault");
         vm.label(USDCE_POLYGON, "USDC");
         vm.label(address(oracle), "SharePriceOracle");
+        vm.label(address(relayer), "Relayer");
     }
 
     function test_MaxApyCrossChainVault_initialization() public view {
@@ -402,7 +408,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             MultiXChainSingleVaultWithdraw memory mXsV;
             MultiXChainMultiVaultWithdraw memory mXmV;
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
-                1(superformId, investAmount);
+                _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
             vm.expectEmit(true, true, true, true);
@@ -531,7 +537,7 @@ contract MaxApyCrossChainVaultTest is BaseTest, SuperformActions, MaxApyCrossCha
             MultiXChainSingleVaultWithdraw memory mXsV;
             MultiXChainMultiVaultWithdraw memory mXmV;
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
-                1(superformId, investAmount);
+                _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);

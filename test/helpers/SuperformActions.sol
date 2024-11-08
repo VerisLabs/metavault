@@ -108,9 +108,7 @@ contract SuperformActions is Test {
     )
         internal
         view
-        returns (
-           SingleXChainSingleVaultStateReq memory req
-        )
+        returns (SingleXChainSingleVaultStateReq memory req)
     {
         bytes memory payload = depositPayloads[_superformId][_amount];
         return _decodeSingleXChainSingleVaultStateReq(payload);

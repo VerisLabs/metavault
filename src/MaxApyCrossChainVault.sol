@@ -88,7 +88,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     event SetOracleFee(uint16 fee);
 
     // @dev Emitted when updating the recovery address
-    event setRecoveryAddress(address recoveryAddress);
+    event SetRecoveryAddress(address recoveryAddress);
 
     /// @dev Emitted when the emergency shutdown state is changed
     event EmergencyShutdown(bool enabled);
@@ -212,6 +212,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     uint256[WITHDRAWAL_QUEUE_SIZE] public xChainWithdrawalQueue;
     /// @notice Implementation contract of the receiver contract
     address public receiverImplementation;
+    /// @notice Superform recovery address
+    address public recoveryAddress;
     /// @notice Timestamp of last report
     uint256 public lastReport;
     /// @notice Signer address to process redeem requests
