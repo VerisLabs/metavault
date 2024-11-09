@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { Test, console2 } from "forge-std/Test.sol";
-import { MaxApyCrossChainVault, ERC7540, ERC4626 } from "src/MaxApyCrossChainVault.sol";
-import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { BaseTest } from "../base/BaseTest.t.sol";
-import { _1_USDCE } from "../helpers/Tokens.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { IBaseRouter as ISuperformRouter, ISuperformFactory, ISuperPositions } from "src/interfaces/Lib.sol";
-import "src/helpers/AddressBook.sol";
-import {
-    SingleXChainSingleVaultWithdraw,
-    SingleXChainMultiVaultWithdraw,
-    MultiXChainSingleVaultWithdraw,
-    MultiXChainMultiVaultWithdraw
-} from "src/types/Lib.sol";
-import { ERC7540Events } from "../helpers/ERC7540Events.sol";
+
 import { ERC4626Events } from "../helpers/ERC4626Events.sol";
+import { ERC7540Events } from "../helpers/ERC7540Events.sol";
+import { _1_USDCE } from "../helpers/Tokens.sol";
+import { MockERC20 } from "../helpers/mock/MockERC20.sol";
+import { Test, console2 } from "forge-std/Test.sol";
+
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { ERC4626, ERC7540, MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+
+import "src/helpers/AddressBook.sol";
+import { IBaseRouter as ISuperformRouter, ISuperPositions, ISuperformFactory } from "src/interfaces/Lib.sol";
+import {
+    MultiXChainMultiVaultWithdraw,
+    MultiXChainSingleVaultWithdraw,
+    SingleXChainMultiVaultWithdraw,
+    SingleXChainSingleVaultWithdraw
+} from "src/types/Lib.sol";
 
 contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
