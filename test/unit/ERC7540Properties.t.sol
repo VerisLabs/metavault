@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { BaseTest } from "../base/BaseTest.t.sol";
+import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
 
 import { ERC4626Events } from "../helpers/ERC4626Events.sol";
 import { ERC7540Events } from "../helpers/ERC7540Events.sol";
@@ -21,7 +21,7 @@ import {
     SingleXChainSingleVaultWithdraw
 } from "src/types/Lib.sol";
 
-contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
+contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
 
     MaxApyCrossChainVault public vault;
@@ -36,20 +36,8 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
         superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
-        vault = new MaxApyCrossChainVault({
-            _asset_: USDCE_POLYGON,
-            _name_: "maxCrossUSDCE",
-            _symbol_: "maxCrossUSDCE",
-            _managementFee: 2000,
-            _oracleFee: 2000,
-            _sharesLockTime: sharesLockTime,
-            _processRedeemSettlement: 1 days,
-            _superPositions_: superPositions,
-            _vaultRouter_: vaultRouter,
-            _factory_: factory,
-            _treasury: treasury,
-            _signerRelayer: address(1)
-        });
+        config = polygonUsdceVaultConfig();
+        vault = new MaxApyCrossChainVault(config);
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
     }
@@ -127,7 +115,7 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
         shares;
-        skip(sharesLockTime);
+        skip(config.sharesLockTime);
         vm.expectEmit();
         emit RedeemRequest(users.alice, users.alice, 0, users.alice, shares);
 
@@ -156,7 +144,7 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
         shares;
-        skip(sharesLockTime);
+        skip(config.sharesLockTime);
 
         vault.requestRedeem(shares, users.alice, users.alice);
         _processRedeemRequest(users.alice);
@@ -188,7 +176,7 @@ contract ERC7540PropertiesTest is BaseTest, ERC7540Events, ERC4626Events {
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
         shares;
-        skip(sharesLockTime);
+        skip(config.sharesLockTime);
 
         vault.requestRedeem(shares, users.alice, users.alice);
         _processRedeemRequest(users.alice);

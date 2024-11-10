@@ -4,6 +4,9 @@ pragma solidity 0.8.19;
 import { IERC4626Oracle } from "../interfaces/IERC4626Oracle.sol";
 import { LiqRequest } from "./SuperformTypes.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { IBaseRouter } from "src/interfaces/IBaseRouter.sol";
+import { ISuperPositions } from "src/interfaces/ISuperPositions.sol";
+import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
 
 /// @dev The maximum allowable staleness for oracle data before being considered outdated
 uint256 constant ORACLE_STALENESS_TOLERANCE = 8 hours;
@@ -29,6 +32,24 @@ struct VaultData {
     address vaultAddress;
 }
 
+struct VaultConfig {
+    address asset;
+    string name;
+    string symbol;
+    uint16 managementFee;
+    uint16 performanceFee;
+    uint16 oracleFee;
+    uint16 assetHurdleRate;
+    uint24 sharesLockTime;
+    uint24 processRedeemSettlement;
+    ISuperPositions superPositions;
+    IBaseRouter vaultRouter;
+    ISuperformFactory factory;
+    address treasury;
+    address recoveryAddress;
+    address signerRelayer;
+}
+
 /// @notice A helper library to define methods for handling VaultData
 /// @dev Provides methods to simulate conversions between shares and assets for a vault
 library VaultLib {
@@ -49,11 +70,11 @@ library VaultLib {
         returns (uint256 assets)
     {
         if (self.chainId != _chainId()) {
-            (uint256 sharePrice, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
+            (uint256 sharePrice_, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
             }
-            return sharePrice * shares / 10 ** self.decimals;
+            return sharePrice_ * shares / 10 ** self.decimals;
         } else {
             // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToAssets(shares);
@@ -90,11 +111,11 @@ library VaultLib {
         returns (uint256 shares)
     {
         if (self.chainId != _chainId()) {
-            (uint256 sharePrice, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
+            (uint256 sharePrice_, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
             }
-            return assets * 10 ** self.decimals / sharePrice;
+            return assets * 10 ** self.decimals / sharePrice_;
         } else {
             // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToShares(assets);
@@ -106,8 +127,8 @@ library VaultLib {
     /// @return The current share price
     function sharePrice(VaultData memory self) internal view returns (uint256) {
         if (self.chainId != _chainId()) {
-            (uint256 sharePrice,) = self.oracle.getSharePrice(self.vaultAddress);
-            return sharePrice;
+            (uint256 sharePrice_,) = self.oracle.getSharePrice(self.vaultAddress);
+            return sharePrice_;
         } else {
             // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToAssets(10 ** self.decimals);
@@ -123,7 +144,7 @@ library VaultLib {
         uint256 assets
     )
         internal
-        view
+        pure
         returns (uint256 shares)
     {
         return assets * 10 ** self.decimals / self.lastReportedSharePrice;

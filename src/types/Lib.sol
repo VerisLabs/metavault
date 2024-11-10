@@ -9,6 +9,7 @@ import {
     ProcessRedeemRequestWithSignatureParams,
     SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultWithdraw,
+    VaultConfig,
     VaultData,
     VaultLib,
     VaultReport

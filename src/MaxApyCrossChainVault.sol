@@ -29,6 +29,7 @@ import {
     SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultStateReq,
     SingleXChainSingleVaultWithdraw,
+    VaultConfig,
     VaultData,
     VaultLib,
     VaultReport
@@ -169,7 +170,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     uint24 public constant REQUEST_REDEEM_DELAY = 1 days;
 
     /// @notice Chain ID of the current network
-    uint64 public immutable THIS_CHAIN_ID;
+    uint64 public THIS_CHAIN_ID;
 
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
@@ -313,53 +314,27 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         }
     }
 
-    /// @notice Initializes the MaxApyCrossChainVault contract
-    /// @param _asset_ Address of the underlying asset token
-    /// @param _name_ Name of the vault token
-    /// @param _symbol_ Symbol of the vault token
-    /// @param _managementFee Management fee in basis points
-    /// @param _oracleFee Oracle fee in basis points
-    /// @param _sharesLockTime Duration for which shares are locked after minting
-    /// @param _processRedeemSettlement Time allowed for processing redeem settlements
-    /// @param _superPositions_ Address of the SuperPositions contract
-    /// @param _vaultRouter_ Address of the BaseRouter contract
-    /// @param _factory_ Address of the SuperformFactory contract
-    /// @param _treasury Address of the treasury to receive fees
-    constructor(
-        address _asset_,
-        string memory _name_,
-        string memory _symbol_,
-        uint16 _managementFee,
-        uint16 _performanceFee,
-        uint16 _oracleFee,
-        uint16 _assetHurdleRate,
-        uint24 _sharesLockTime,
-        uint24 _processRedeemSettlement,
-        ISuperPositions _superPositions_,
-        IBaseRouter _vaultRouter_,
-        ISuperformFactory _factory_,
-        address _treasury,
-        address _signerRelayer
-    ) {
-        _asset = _asset_;
-        _name = _name_;
-        _symbol = _symbol_;
-        _factory = _factory_;
-        _superPositions = _superPositions_;
-        _vaultRouter = _vaultRouter_;
-        treasury = _treasury;
-        managementFee = _managementFee;
-        performanceFee = _performanceFee;
-        oracleFee = _oracleFee;
-        sharesLockTime = _sharesLockTime;
-        processRedeemSettlement = _processRedeemSettlement;
+    constructor(VaultConfig memory config) {
+        _asset = config.asset;
+        _name = config.name;
+        _symbol = config.symbol;
+        _factory = config.factory;
+        _superPositions = config.superPositions;
+        _vaultRouter = config.vaultRouter;
+        treasury = config.treasury;
+        managementFee = config.managementFee;
+        performanceFee = config.performanceFee;
+        oracleFee = config.oracleFee;
+        recoveryAddress = config.recoveryAddress;
+        sharesLockTime = config.sharesLockTime;
+        processRedeemSettlement = config.processRedeemSettlement;
         lastReport = block.timestamp;
-        hurdleRate = _assetHurdleRate;
+        hurdleRate = config.assetHurdleRate;
         // Update the ATH share price
         sharePriceWaterMark = sharePrice();
 
         // Try to get asset decimals, fallback to default if unsuccessful
-        (bool success, uint8 result) = _tryGetAssetDecimals(_asset_);
+        (bool success, uint8 result) = _tryGetAssetDecimals(config.asset);
         _decimals = success ? result : _DEFAULT_UNDERLYING_DECIMALS;
         // Set the chain ID for the current network
         THIS_CHAIN_ID = uint64(block.chainid);
@@ -368,19 +343,19 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             chainIndexes[DST_CHAINS[i]] = i;
         }
         // Approve vault router to spend the asset
-        asset().safeApprove(address(_vaultRouter_), type(uint256).max);
+        asset().safeApprove(address(config.vaultRouter), type(uint256).max);
         // Approve vault router to burn superpositions
-        _superPositions_.setApprovalForAll(address(_vaultRouter_), true);
+        config.superPositions.setApprovalForAll(address(config.vaultRouter), true);
 
         // Initialize ownership and grant admin role
         _initializeOwner(msg.sender);
         _grantRoles(msg.sender, ADMIN_ROLE);
 
         // Initialize signer relayer
-        signerRelayer = _signerRelayer;
+        signerRelayer = config.signerRelayer;
 
         // Deploy and set the receiver implementation
-        receiverImplementation = address(new ERC20Receiver(_asset_));
+        receiverImplementation = address(new ERC20Receiver(config.asset));
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -656,7 +631,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             );
         }
         // Needs explicit approval from the relayer
-        _checkSignerIsRelayer(params.controller, hash, params.v, params.r, params.s);
+        _checkSignerIsRelayer(hash, params.v, params.r, params.s);
 
         // Retrieve the pending redeem request for the specified controller
         // This request may involve cross-chain withdrawals from various ERC4626 vaults
@@ -682,7 +657,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
-    function _checkSignerIsRelayer(address controller, bytes32 hash, uint8 v, bytes32 r, bytes32 s) private {
+    function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view{
         bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
         if (!isValid) {
             revert InvalidSignature();
@@ -957,6 +932,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint256[] calldata shares,
         uint256[] calldata minAssetsOuts
     )
+        external
         payable
         returns (uint256[] memory assets)
     {
@@ -1086,7 +1062,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @param source The address of the oracle providing the report
     function report(VaultReport[] calldata reports, address source) external updateWatermark onlyRoles(ORACLE_ROLE) {
         uint256 duration = block.timestamp - lastReport;
-        uint256 sharePrice = sharePrice();
+        uint256 sharePrice_ = sharePrice();
         for (uint256 i = 0; i < reports.length; i++) {
             // Cache the current report for efficiency
             VaultReport memory _report = reports[i];
@@ -1118,7 +1094,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             // If it has profit apply fees
             if (vaultDelta > 0) {
                 // Only charge fees on yield above watermark
-                if (sharePrice > sharePriceWaterMark) {
+                if (sharePrice_ > sharePriceWaterMark) {
                     // And only charge rees if the strategy yield is above hurdle rate
                     uint256 rate = uint256(vaultDelta) * MAX_BPS * SECS_PER_YEAR / duration / totalAssetsBefore;
                     if (rate > hurdleRate) {
@@ -1518,8 +1494,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                         if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
                         if (cache.lens[i] > 0) {
                             chainId = DST_CHAINS[i];
-                            superformIds = _toDynamicuintArray(cache.dstVaults[i], cache.lens[i]);
-                            amounts = _toDynamicuintArray(cache.sharesPerVault[i], cache.lens[i]);
+                            superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
+                            amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
                             // Withdraw from multiple vaults asynchronously(crosschain)
                             _singleXChainMultiVaultWithdraw(
                                 chainId, superformIds, amounts, _receiver(config.controller), config.sXmV
@@ -1602,11 +1578,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                     }
 
                     for (uint256 i = 0; i < chainsLen; i++) {
-                        uint256[] memory emptyuintArray = _getEmptyuintArray(cache.lens[i]);
                         bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
                         multiVaultDatas[i] = MultiVaultSFData({
-                            superformIds: _toDynamicuintArray(cache.dstVaults[i], cache.lens[i]),
-                            amounts: _toDynamicuintArray(cache.sharesPerVault[i], cache.lens[i]),
+                            superformIds: _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]),
+                            amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
                             outputAmounts: config.mXmV.outputAmounts[i],
                             maxSlippages: config.mXmV.maxSlippages[i],
                             liqRequests: config.mXmV.liqRequests[i],
@@ -1758,13 +1733,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     }
 
     /// @dev Withdraws assets from multiple vaults on the same chain
-    /// @param vaults Array of vault addresses to withdraw from
+    /// @param vaults_ Array of vault addresses to withdraw from
     /// @param amounts Array of share amounts to redeem from each vault
     /// @param minAmountsOut Array of minimum amounts of assets expected from each vault
     /// @param receiver Address to receive the withdrawn assets
     /// @return withdrawn Total amount of assets withdrawn from all vaults
     function _singleDirectMultiVaultWithdraw(
-        address[] memory vaults,
+        address[] memory vaults_,
         uint256[] memory amounts,
         uint256[] memory minAmountsOut,
         address receiver
@@ -1772,8 +1747,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         private
         returns (uint256 withdrawn)
     {
-        for (uint256 i = 0; i < vaults.length; ++i) {
-            withdrawn += _singleDirectSingleVaultWithdraw(vaults[i], amounts[i], minAmountsOut[i], receiver);
+        for (uint256 i = 0; i < vaults_.length; ++i) {
+            withdrawn += _singleDirectSingleVaultWithdraw(vaults_[i], amounts[i], minAmountsOut[i], receiver);
         }
     }
 
@@ -1888,7 +1863,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @param arr fixed uint array
     /// @param len length of new dynamic array
     /// @return dynArr new dynamic array
-    function _toDynamicuintArray(
+    function _toDynamicUint256Array(
         uint256[WITHDRAWAL_QUEUE_SIZE] memory arr,
         uint256 len
     )
@@ -1964,8 +1939,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @dev Supports ERC1155 interface detection
     /// @param interfaceId The interface identifier, as specified in ERC-165
-    /// @return bool True if the contract supports the interface, false otherwise
-    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
+    /// @return isSupported True if the contract supports the interface, false otherwise
+    function supportsInterface(bytes4 interfaceId) public pure returns (bool isSupported) {
         if (interfaceId == 0x4e2312e0) return true;
     }
 
