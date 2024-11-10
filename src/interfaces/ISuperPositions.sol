@@ -1,8 +1,8 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.19;
 
-import { IERC1155A } from "./IERC1155A.sol";
 import { AMBMessage } from "../types/Lib.sol";
+import { IERC1155A } from "./IERC1155A.sol";
 
 /// @title ISuperPositions
 /// @dev Interface for SuperPositions

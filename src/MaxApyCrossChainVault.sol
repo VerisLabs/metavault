@@ -1,35 +1,37 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.19;
 
+import { ERC20Receiver } from "crosschain/Lib.sol";
+import { IBaseRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory } from "interfaces/Lib.sol";
+import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
+import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
-import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
-import { Multicallable } from "solady/utils/Multicallable.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { Multicallable } from "solady/utils/Multicallable.sol";
+
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
-import { ERC20Receiver } from "crosschain/Lib.sol";
-import { ISuperPositions, IBaseRouter, ISuperformFactory, IERC4626Oracle } from "interfaces/Lib.sol";
-import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
+
 import {
-    VaultData,
-    VaultReport,
-    VaultLib,
     LiqRequest,
-    MultiVaultSFData,
-    SingleVaultSFData,
     MultiDstMultiVaultStateReq,
-    SingleXChainMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
-    SingleXChainSingleVaultStateReq,
-    SingleDirectSingleVaultStateReq,
-    SingleDirectMultiVaultStateReq,
-    SingleXChainSingleVaultWithdraw,
-    SingleXChainMultiVaultWithdraw,
-    MultiXChainSingleVaultWithdraw,
+    MultiVaultSFData,
     MultiXChainMultiVaultWithdraw,
-    ProcessRedeemRequestWithSignatureParams
+    MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestWithSignatureParams,
+    SingleDirectMultiVaultStateReq,
+    SingleDirectSingleVaultStateReq,
+    SingleVaultSFData,
+    SingleXChainMultiVaultStateReq,
+    SingleXChainMultiVaultWithdraw,
+    SingleXChainSingleVaultStateReq,
+    SingleXChainSingleVaultWithdraw,
+    VaultData,
+    VaultLib,
+    VaultReport
 } from "types/Lib.sol";
 
 /// @title MaxApyCrossChainVault
@@ -41,7 +43,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev Safe casting operations for uint256
+    /// @dev Safe casting operations for uint
     using SafeCastLib for uint256;
 
     /// @dev Safe transfer operations for ERC20 tokens
@@ -1109,7 +1111,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
             // Calculate the total assets value after applying the new share price
             uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance, true);
-            
+
             // Gains/losses of the strategy
             int256 vaultDelta = int256(totalAssetsAfter) - int256(totalAssetsBefore);
 
@@ -1470,7 +1472,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                     }
                     // Withdraw from the vault synchronously
                     uint256 withdrawn = _singleDirectMultiVaultWithdraw(
-                        vaultAddresses, amounts, _getEmptyUint256Array(amounts.length), address(this)
+                        vaultAddresses, amounts, _getEmptyuintArray(amounts.length), address(this)
                     );
                     // Increase claimable assets and fulfilled shares by the amount withdran synchronously
                     cache.totalClaimableWithdraw += withdrawn;
@@ -1516,8 +1518,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                         if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
                         if (cache.lens[i] > 0) {
                             chainId = DST_CHAINS[i];
-                            superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
-                            amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
+                            superformIds = _toDynamicuintArray(cache.dstVaults[i], cache.lens[i]);
+                            amounts = _toDynamicuintArray(cache.sharesPerVault[i], cache.lens[i]);
                             // Withdraw from multiple vaults asynchronously(crosschain)
                             _singleXChainMultiVaultWithdraw(
                                 chainId, superformIds, amounts, _receiver(config.controller), config.sXmV
@@ -1600,11 +1602,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                     }
 
                     for (uint256 i = 0; i < chainsLen; i++) {
-                        uint256[] memory emptyUint256Array = _getEmptyUint256Array(cache.lens[i]);
+                        uint256[] memory emptyuintArray = _getEmptyuintArray(cache.lens[i]);
                         bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
                         multiVaultDatas[i] = MultiVaultSFData({
-                            superformIds: _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]),
-                            amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
+                            superformIds: _toDynamicuintArray(cache.dstVaults[i], cache.lens[i]),
+                            amounts: _toDynamicuintArray(cache.sharesPerVault[i], cache.lens[i]),
                             outputAmounts: config.mXmV.outputAmounts[i],
                             maxSlippages: config.mXmV.maxSlippages[i],
                             liqRequests: config.mXmV.liqRequests[i],
@@ -1677,7 +1679,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     }
 
     /// @dev Hook that is called after any deposit or mint.
-    function _afterDeposit(uint256 assets, uint256 /*uint256 shares*/ ) internal override {
+    function _afterDeposit(uint256 assets, uint256 /*uint shares*/ ) internal override {
         uint128 assetsUint128 = assets.toUint128();
         _totalIdle += assetsUint128;
     }
@@ -1720,10 +1722,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         }
     }
 
-    /// @dev Private helper get an array uint256 full of zeros
+    /// @dev Private helper get an array uint full of zeros
     /// @param len array length
     /// @return
-    function _getEmptyUint256Array(uint256 len) private pure returns (uint256[] memory) {
+    function _getEmptyuintArray(uint256 len) private pure returns (uint256[] memory) {
         return new uint256[](len);
     }
 
@@ -1883,10 +1885,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     }
 
     /// @dev Helper function to convert a fixed array to dynamic
-    /// @param arr fixed uint256 array
+    /// @param arr fixed uint array
     /// @param len length of new dynamic array
     /// @return dynArr new dynamic array
-    function _toDynamicUint256Array(
+    function _toDynamicuintArray(
         uint256[WITHDRAWAL_QUEUE_SIZE] memory arr,
         uint256 len
     )
@@ -1929,7 +1931,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @dev Private helper to return `x + 1` without the overflow check.
     /// Used for computing the denominator input to `FixedPointMathLib.fullMulDiv(a, b, x + 1)`.
-    /// When `x == type(uint256).max`, we get `x + 1 == 0` (mod 2**256 - 1),
+    /// When `x == type(uint).max`, we get `x + 1 == 0` (mod 2**256 - 1),
     /// and `FixedPointMathLib.fullMulDiv` will revert as the denominator is zero.
     function _inc_(uint256 x) private pure returns (uint256) {
         unchecked {
@@ -1974,7 +1976,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @param superformId The ID of the token being transferred
     /// @param value The amount of tokens being transferred
     /// @param data Additional data with no specified format
-    /// @return bytes4 `bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)"))`
+    /// @return bytes4 `bytes4(keccak256("onERC1155Received(address,address,uint,uint,bytes)"))`
     function onERC1155Received(
         address operator,
         address from,
@@ -2007,7 +2009,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @param values An array containing amounts of each token being transferred (order and length must match ids
     /// array)
     /// @param data Additional data with no specified format
-    /// @return bytes4 `bytes4(keccak256("onERC1155BatchReceived(address,address,uint256[],uint256[],bytes)"))`
+    /// @return bytes4 `bytes4(keccak256("onERC1155BatchReceived(address,address,uint[],uint[],bytes)"))`
     function onERC1155BatchReceived(
         address operator,
         address from,

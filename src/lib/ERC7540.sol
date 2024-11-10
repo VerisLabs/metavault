@@ -1,10 +1,10 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity 0.8.19;
 
+import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
-import { ERC7540_Request, ERC7540_FilledRequest, ERC7540Lib } from "../types/Lib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 /// @notice Simple ERC7540 async Tokenized Vault implementation
 /// @author Solthodox (https://github.com/Solthodox)
