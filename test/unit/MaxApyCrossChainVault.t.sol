@@ -51,10 +51,8 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
     MockSignerRelayer public relayer;
     uint256 public yUsdceSharePrice;
 
-    function setUp() public override {
-        super._setUp("POLYGON", 62_495_246);
-        super.setUp();
-        yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
+    function _setUpTestEnvironment() private {
+         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
         relayer = new MockSignerRelayer(0xAAAAAA);
 
         config = polygonUsdceVaultConfig();
@@ -70,7 +68,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
         vault.grantRoles(users.alice, vault.EMERGENCY_ADMIN_ROLE());
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
+    }
 
+    function _setupContractLabels() private {
         vm.label(SUPERFORM_SUPEREGISTRY_POLYGON, "SuperRegistry");
         vm.label(SUPERFORM_SUPERPOSITIONS_POLYGON, "SuperPositions");
         vm.label(SUPERFORM_PAYMENT_HELPER_POLYGON, "PaymentHelper");
@@ -86,6 +86,15 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vm.label(address(oracle), "SharePriceOracle");
         vm.label(address(relayer), "Relayer");
     }
+    
+    function setUp() public override {
+        super._setUp("POLYGON", 62_495_246);
+        super.setUp();
+
+        _setUpTestEnvironment();
+        _setupContractLabels();
+    }
+
 
     function test_MaxApyCrossChainVault_initialization() public view {
         assertEq(vault.totalAssets(), 0);
@@ -764,5 +773,313 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         callDatas[1] = abi.encodeWithSignature("mint(uint256,address)", shares, receiver);
         bytes[] memory returnData = vault.multicall(callDatas);
         return abi.decode(returnData[1], (uint256));
+    }
+
+    function test_divestSingleDirectSingleVault() public {
+        // Setup local vault
+        vault.addVault({
+            chainId: 137,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        // Deposit and invest
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        // Divest
+        uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
+        uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1; // Allow 1 wei slippage
+
+        vm.expectEmit(true, true, true, true);
+        emit Divest(400 * _1_USDCE);
+
+        uint256 divestAssets = vault.divestSingleDirectSingleVault(address(yUsdce), sharesToDivest, minAssetsOut);
+
+        // Validate divest
+        assertGt(divestAssets, 0, "Should have divested assets");
+        assertEq(vault.totalDebt(), 0, "Should have no remaining debt");
+        assertEq(vault.totalIdle(), 1000 * _1_USDCE - 1, "Should have returned assets to idle");
+        assertEq(yUsdce.balanceOf(address(vault)), 0, "Should have no remaining vault shares");
+    }
+
+    function test_revert_divestSingleDirectSingleVault_InsufficientAssets() public {
+        vault.addVault({
+            chainId: 137,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
+        uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) + 1; // Require more than possible
+
+        vm.expectRevert(MaxApyCrossChainVault.InsufficientAssets.selector);
+        vault.divestSingleDirectSingleVault(address(yUsdce), sharesToDivest, minAssetsOut);
+    }
+
+    // -- Divest Single Direct Multi Vault Tests --
+
+    function test_divestSingleDirectMultiVault() public {
+        // Setup two local vaults
+        vault.addVault({
+            chainId: 137,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        ERC4626 yUsdceLender = ERC4626(YEARN_USDCE_LENDER_VAULT_POLYGON);
+        vault.addVault({
+            chainId: 137,
+            superformId: 2,
+            vault: address(yUsdceLender),
+            vaultDecimals: yUsdceLender.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        // Deposit and invest in both vaults
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 amountPerVault = 400 * _1_USDCE;
+
+        address[] memory vaultAddresses = new address[](2);
+        vaultAddresses[0] = address(yUsdce);
+        vaultAddresses[1] = address(yUsdceLender);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = amountPerVault;
+        amounts[1] = amountPerVault;
+
+        uint256[] memory minAmountsOut = new uint256[](2);
+        minAmountsOut[0] = yUsdce.previewDeposit(amountPerVault);
+        minAmountsOut[1] = yUsdceLender.previewDeposit(amountPerVault);
+
+        vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
+
+        // Prepare divest parameters
+        address[] memory divestVaults = new address[](2);
+        divestVaults[0] = address(yUsdce);
+        divestVaults[1] = address(yUsdceLender);
+
+        uint256[] memory divestShares = new uint256[](2);
+        divestShares[0] = yUsdce.balanceOf(address(vault));
+        divestShares[1] = yUsdceLender.balanceOf(address(vault));
+
+        uint256[] memory minDivestAmounts = new uint256[](2);
+        minDivestAmounts[0] = yUsdce.convertToAssets(divestShares[0]) - 1;
+        minDivestAmounts[1] = yUsdceLender.convertToAssets(divestShares[1]) - 1;
+
+        // Divest from both vaults
+        uint256[] memory divestAssets = vault.divestSingleDirectMultiVault(divestVaults, divestShares, minDivestAmounts);
+
+        // Validate divest
+        assertEq(divestAssets.length, 2, "Should have divested from both vaults");
+        assertGt(divestAssets[0], 0, "Should have divested assets from first vault");
+        assertGt(divestAssets[1], 0, "Should have divested assets from second vault");
+        assertEq(vault.totalDebt(), 0, "Should have no remaining debt");
+        assertApproxEqRel(
+            vault.totalIdle(),
+            1000 * _1_USDCE,
+            1e16, // 1% tolerance
+            "Should have returned all assets to idle"
+        );
+    }
+
+    // -- Cross-Chain Divest Tests --
+
+    function test_divestSingleXChainSingleVault() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Setup cross-chain vault
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        // Deposit and invest cross-chain
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory investReq =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            investReq
+        );
+        _mintSuperpositions(address(vault), superformId, shares);
+
+        // Prepare divest request
+        SingleXChainSingleVaultStateReq memory divestReq =
+            _buildDivestSingleXChainSingleVaultParams(superformId, shares);
+
+        // Execute divest
+        vm.expectEmit(true, true, true, true);
+        emit Divest(investAmount);
+
+        vault.divestSingleXChainSingleVault{ value: _getDivestSingleXChainSingleVaultValue(superformId, shares) }(
+            divestReq
+        );
+
+        // Validate state after divest initiation
+        assertEq(vault.totalIdle(), investAmount, "Idle should include divested amount");
+        assertEq(vault._pendingXChainWithdraws(superformId), investAmount, "Should track pending withdrawal");
+    }
+
+    // -- Fee Logic Tests --
+
+    function test_report_managementFees() public {
+        // Setup vault with assets
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        // Skip one year
+        skip(vault.SECS_PER_YEAR());
+
+        // Calculate expected management fee
+        uint256 totalAssets = vault.totalAssets();
+        uint256 expectedManagementFee = (totalAssets * vault.managementFee()) / vault.MAX_BPS();
+
+        // Create report with no price change
+        VaultReport[] memory reports = new VaultReport[](0);
+
+        // Capture treasury balance before
+        uint256 treasuryBalanceBefore = vault.balanceOf(config.treasury);
+
+        // Report and distribute fees
+        vault.report(reports, users.bob);
+
+        // Validate management fee
+        uint256 actualFee = vault.balanceOf(config.treasury) - treasuryBalanceBefore;
+        assertApproxEqRel(
+            actualFee,
+            expectedManagementFee,
+            1e16, // 1% tolerance
+            "Management fee calculation incorrect"
+        );
+    }
+
+    function test_report_performanceFees() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Setup vault with investment
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        // Invest in vault
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory req =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+        _mintSuperpositions(address(vault), superformId, shares);
+
+        // Skip time and simulate profit
+        skip(vault.SECS_PER_YEAR());
+        uint256 newSharePrice = 2 * _1_USDCE; // 100% increase
+
+        // Create report with profit
+        VaultReport[] memory reports = new VaultReport[](1);
+        reports[0].chainId = optimismChainId;
+        reports[0].sharePrice = uint192(newSharePrice);
+        reports[0].vaultAddress = vaultAddress;
+
+        // Set oracle price
+        oracle.setValues(vaultAddress, newSharePrice, block.timestamp);
+
+        // Capture balances before
+        uint256 treasuryBalanceBefore = vault.balanceOf(config.treasury);
+
+        // Report profit and distribute fees
+        vault.report(reports, users.bob);
+
+        // Calculate expected performance fee
+        uint256 profit = investAmount; // 100% return
+        uint256 expectedPerformanceFee = (profit * vault.performanceFee()) / vault.MAX_BPS();
+
+        // Validate performance fee
+        uint256 actualFee = vault.balanceOf(config.treasury) - treasuryBalanceBefore;
+        assertApproxEqRel(
+            actualFee,
+            expectedPerformanceFee,
+            1e16, // 1% tolerance
+            "Performance fee calculation incorrect"
+        );
+    }
+
+    function test_report_feeDeduction() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Setup vault with deducted fees
+        uint16 deductedFees = 1000; // 10%
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: deductedFees,
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        // Invest and generate profit
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory req =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+        _mintSuperpositions(address(vault), superformId, shares);
+
+        // Skip time and simulate profit
+        skip(vault.SECS_PER_YEAR());
+        uint256 newSharePrice = 2 * _1_USDCE;
+
+        // Validate oracle fee
+        uint256 actualOracleFee = vault.balanceOf(users.bob) - oracleBalanceBefore;
+        assertApproxEqRel(
+            actualOracleFee,
+            expectedOracleFee,
+            1e16, // 1% tolerance
+            "Oracle fee calculation incorrect"
+        );
     }
 }

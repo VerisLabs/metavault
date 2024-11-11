@@ -657,7 +657,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
-    function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view{
+    function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view {
         bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
         if (!isValid) {
             revert InvalidSignature();
