@@ -1,4 +1,6 @@
 import { BaseTest } from "./BaseTest.t.sol";
+
+import { IBaseRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory } from "interfaces/Lib.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     SUPERFORM_FACTORY_POLYGON,
@@ -6,8 +8,7 @@ import {
     SUPERFORM_SUPERPOSITIONS_POLYGON,
     USDCE_POLYGON
 } from "src/helpers/AddressBook.sol";
-import { IBaseRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory } from "src/interfaces/Lib.sol";
-import { VaultConfig } from "src/types/Lib.sol";
+import { VaultConfig } from "types/Lib.sol";
 
 contract BaseVaultTest is BaseTest {
     VaultConfig public config;

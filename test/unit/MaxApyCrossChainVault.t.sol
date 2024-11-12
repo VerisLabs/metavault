@@ -52,7 +52,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
     uint256 public yUsdceSharePrice;
 
     function _setUpTestEnvironment() private {
-         yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
+        yUsdce = ERC4626(YEARN_USDCE_VAULT_POLYGON);
         relayer = new MockSignerRelayer(0xAAAAAA);
 
         config = polygonUsdceVaultConfig();
@@ -86,7 +86,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vm.label(address(oracle), "SharePriceOracle");
         vm.label(address(relayer), "Relayer");
     }
-    
+
     function setUp() public override {
         super._setUp("POLYGON", 62_495_246);
         super.setUp();
@@ -94,7 +94,6 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         _setUpTestEnvironment();
         _setupContractLabels();
     }
-
 
     function test_MaxApyCrossChainVault_initialization() public view {
         assertEq(vault.totalAssets(), 0);
