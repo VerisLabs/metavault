@@ -1,5 +1,5 @@
 // SPDX-License-Identifer: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 // SUPERFORM
 address constant SUPERFORM_ROUTER_POLYGON = 0xa195608C2306A26f727d5199D5A382a4508308DA;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 import { IERC4626Oracle } from "../interfaces/IERC4626Oracle.sol";
 import { LiqRequest } from "./SuperformTypes.sol";

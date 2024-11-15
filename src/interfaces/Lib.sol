@@ -1,5 +1,5 @@
 /// SPDX-License-Identifer: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 import { IBaseRouter } from "./IBaseRouter.sol";
 

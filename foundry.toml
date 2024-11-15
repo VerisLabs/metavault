@@ -4,6 +4,7 @@ out = "out"
 libs = ["dependencies"]
 gas_reports = ['*']
 evm_version =  "paris"
+via_ir = true
 
 [profile.fork]
 evm_version =  "shanghai"

@@ -1,9 +1,9 @@
 /// SPDX-License-Identifer: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
-import { ERC20Receiver } from "crosschain/Lib.sol";
-import { IBaseRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory } from "interfaces/Lib.sol";
-import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
+import { ERC20Receiver } from "./crosschain/Lib.sol";
+import { IBaseRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory } from "./interfaces/Lib.sol";
+import { ERC7540, ReentrancyGuard } from "./lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
@@ -33,7 +33,7 @@ import {
     VaultData,
     VaultLib,
     VaultReport
-} from "types/Lib.sol";
+} from "./types/Lib.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd

@@ -1,6 +1,7 @@
 forge-std/=dependencies/forge-std-1.9.2/src
 solady/=dependencies/solady-0.0.236/src
-types/=src/types/
-crosschain/=src/crosschain/
-lib/=src/lib/
-interfaces/=src/interfaces/
+@openzeppelin-contracts/=dependencies/openzeppelin-contracts/
+forge-std/=dependencies/forge-std/src/
+@solady/=dependencies/solady/src/
+solidity-bytes-utils/=dependencies/solidity-bytes-utils
+@layerzerolabs/=external/@layerzerolabs/

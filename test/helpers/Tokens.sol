@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 import { USDCE_POLYGON, USDC_MAINNET, WETH_MAINNET } from "src/helpers/AddressBook.sol";
 

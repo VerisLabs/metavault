@@ -1,4 +1,4 @@
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 import { _1_USDCE } from "./Tokens.sol";
 import { Test } from "forge-std/Test.sol";

@@ -1,4 +1,4 @@
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 contract ERC7540Events {
     /// @dev Emitted when `assets` tokens are deposited into the vault

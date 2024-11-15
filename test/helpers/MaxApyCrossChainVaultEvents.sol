@@ -1,4 +1,4 @@
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 contract MaxApyCrossChainVaultEvents {
     /// @dev Emitted when a redeem request is processed
