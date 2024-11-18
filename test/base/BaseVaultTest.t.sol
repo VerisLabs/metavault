@@ -44,7 +44,7 @@ contract BaseVaultTest is BaseTest {
             asset: USDCE_BASE,
             name: "MaxApyCrossUSDCeVault",
             symbol: "maxcUSDCE",
-            managementFee: 100,
+            managementFee: 0,
             performanceFee: 2000,
             oracleFee: 300,
             assetHurdleRate: 600,

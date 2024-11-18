@@ -11,6 +11,8 @@ import { MockERC4626 } from "../helpers/mock/MockERC4626.sol";
 import { MockERC4626Oracle } from "../helpers/mock/MockERC4626Oracle.sol";
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { Test, console2 } from "forge-std/Test.sol";
+
+import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC4626, ERC7540, MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
 
@@ -96,7 +98,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.decimals(), 6);
         assertEq(vault.totalIdle(), 0);
         assertEq(vault.totalDebt(), 0);
-        assertEq(vault.managementFee(), 100);
+        assertEq(vault.managementFee(), 0);
         assertEq(vault.performanceFee(), 2000);
         assertEq(vault.oracleFee(), 300);
         assertEq(vault.hurdleRate(), 600);
@@ -432,7 +434,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         address receiver = vault.receivers(users.alice);
         assertEq(USDCE_BASE.balanceOf(receiver), 0);
         assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-        assertEq(vault.claimableRedeemRequest(users.alice), 400000207);
+        assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
 
         deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
         skip(config.processRedeemSettlement);
@@ -440,10 +442,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.claimableRedeemRequest(users.alice), 1000 * _1_USDCE);
         uint256 assets = vault.redeem(aliceBalance, users.alice, users.alice);
         assertEq(assets, 400 * _1_USDCE + 588 * _1_USDCE);
-        assertEq(vault.totalAssets(),0);
-        assertEq(vault.totalSupply(),0);
-        assertEq(vault.totalIdle(),0);
-       
+        assertEq(vault.totalAssets(), 0);
+        assertEq(vault.totalSupply(), 0);
+        assertEq(vault.totalIdle(), 0);
     }
 
     function test_MaxApyCrossChainVault_processRedeemRequest_signature() public {
@@ -491,459 +492,369 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vm.expectEmit(true, true, true, true);
         emit Withdraw(users.alice, users.alice, users.alice, 1000 * _1_USDCE, sharesBalance);
         uint256 assets = vault.redeem(sharesBalance, users.alice, users.alice);
-        assertEq(assets, 1000 * _1_USDCE, "redeem");
+        assertEq(assets, 1000 * _1_USDCE);
     }
 
-    // function test_revert_MaxApyCrossChainVault_redeem_requestNotSettled() public {
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 1,
-    //         vault: address(yUsdce),
-    //         vaultDecimals: yUsdce.decimals(),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-    //     uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
-
-    //     vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
-
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-    //     uint64 optimismChainId = 10;
-
-    //     oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(oracle))
-    //     });
-
-    //     uint256 investAmount = 600 * _1_USDCE;
-    //     (SingleXChainSingleVaultStateReq memory req) =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-
-    //     uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-
-    //     vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount)
-    // }(
-    //         req
-    //     );
-
-    //     _mintSuperpositions(address(vault), superformId, shares);
-
-    //     vm.startPrank(users.alice);
-
-    //     vault.setSharesLockTime(0);
-
-    //     uint256 aliceBalance = vault.balanceOf(users.alice);
-
-    //     vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
-
-    //     {
-    //         oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
-    //     }
-
-    //     {
-    //         SingleXChainSingleVaultWithdraw memory sXsV;
-    //         SingleXChainMultiVaultWithdraw memory sXmV;
-    //         MultiXChainSingleVaultWithdraw memory mXsV;
-    //         MultiXChainMultiVaultWithdraw memory mXmV;
-    //         (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
-    //             _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
-    //         uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
-    //         sXsV.value = value;
-    //         vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
-    //     }
-
-    //     address receiver = vault.receivers(users.alice);
-
-    //     deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
-    //     vm.expectRevert(MaxApyCrossChainVault.RequestNotSettled.selector);
-    //     vault.redeem(aliceBalance, users.alice, users.alice);
-    // }
-
-    // function test_revert_MaxApyCrossChainVault_report_VaultNotListed() public {
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-    //     skip(vault.SECS_PER_YEAR());
-    //     VaultReport[] memory mockReport = new VaultReport[](1);
-    //     mockReport[0].chainId = uint64(1);
-    //     mockReport[0].sharePrice = uint192(2 * _1_USDCE);
-    //     mockReport[0].vaultAddress = makeAddr("random address");
-
-    //     vm.expectRevert(MaxApyCrossChainVault.VaultNotListed.selector);
-    //     vault.report(mockReport, users.bob);
-    // }
-
-    // function test_MaxApyCrossChainVault_report() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-    //     uint64 optimismChainId = 10;
-
-    //     oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(oracle))
-    //     });
-
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-
-    //     uint256 investAmount = 600 * _1_USDCE;
-
-    //     (SingleXChainSingleVaultStateReq memory req) =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-
-    //     uint256 newSharesPrice = 2 * _1_USDCE;
-    //     uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit Invest(investAmount);
-    //     vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount)
-    // }(
-    //         req
-    //     );
-
-    //     _mintSuperpositions(address(vault), superformId, shares);
-    //     vm.startPrank(users.alice);
-    //     VaultReport[] memory mockReport = new VaultReport[](1);
-    //     mockReport[0].chainId = optimismChainId;
-    //     mockReport[0].sharePrice = uint192(newSharesPrice);
-    //     mockReport[0].vaultAddress = vaultAddress;
-
-    //     skip(vault.SECS_PER_YEAR());
-    //     oracle.setValues(vaultAddress, newSharesPrice, block.timestamp);
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit Report(optimismChainId, vaultAddress, 566_695_022);
-    //     vault.report(mockReport, users.bob);
-    //     assertApproxEq(vault.balanceOf(config.treasury), 200 * _1_USDCE, 2);
-    //     assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
-    // }
-
-    // function test_MaxApyCrossChainVault_addVault() public {
-    //     address newVault = address(0x123);
-    //     uint256 newSuperformId = 999;
-    //     uint64 newChainId = 42;
-    //     uint8 newDecimals = 18;
-    //     oracle.setValues(newVault, 1 * _1_USDCE, block.timestamp);
-    //     vm.expectEmit(true, true, true, true);
-    //     emit AddVault(newChainId, newVault);
-    //     vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
-
-    //     assertTrue(vault.isVaultListed(newVault));
-    // }
-
-    // function test_MaxApyCrossChainVault_addVault_ZeroSharePrice() public {
-    //     address newVault = address(0x123);
-    //     uint256 newSuperformId = 999;
-    //     uint64 newChainId = 42;
-    //     uint8 newDecimals = 18;
-
-    //     vm.expectRevert();
-    //     vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
-    // }
-
-    // function test_revert_MaxApyCrossChainVault_addVault_alreadyListed() public {
-    //     uint8 decimals = yUsdce.decimals();
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 1,
-    //         vault: address(yUsdce),
-    //         vaultDecimals: decimals,
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-    //     vm.expectRevert(MaxApyCrossChainVault.VaultAlreadyListed.selector);
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 1,
-    //         vault: address(yUsdce),
-    //         vaultDecimals: decimals,
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-    // }
-
-    // function test_MaxApyCrossChainVault_setOracle() public {
-    //     address newOracle = address(0x789);
-    //     uint64 chainId = 42;
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SetOracle(chainId, newOracle);
-    //     vault.setOracle(chainId, newOracle);
-    // }
-
-    // function test_MaxApyCrossChainVault_setSharesLockTime() public {
-    //     uint24 newLockTime = 60 days;
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SetSharesLockTime(newLockTime);
-    //     vault.setSharesLockTime(newLockTime);
-
-    //     assertEq(vault.sharesLockTime(), newLockTime);
-    // }
-
-    // function test_MaxApyCrossChainVault_setManagementFee() public {
-    //     uint16 newFee = 3000;
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SetManagementFee(newFee);
-    //     vault.setManagementFee(newFee);
-
-    //     assertEq(vault.managementFee(), newFee);
-    // }
-
-    // function test_MaxApyCrossChainVault_setOracleFee() public {
-    //     uint16 newFee = 2500;
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SetOracleFee(newFee);
-    //     vault.setOracleFee(newFee);
-
-    //     assertEq(vault.oracleFee(), newFee);
-    // }
-
-    // function test_revert_MaxApyCrossChainVault_emergencyShutdown() public {
-    //     vault.setEmergencyShutdown(true);
-
-    //     vm.expectRevert(MaxApyCrossChainVault.VaultShutdown.selector);
-    //     vault.requestDeposit(100 * _1_USDCE, users.alice, users.alice);
-    // }
-
-    // function test_MaxApyCrossChainVault_onERC1155Received() public {
-    //     uint256 superformId = 1;
-    //     uint256 bridgedAssets = 1000 * _1_USDCE;
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SettleXChainInvest(superformId, 0);
-    //     vault.onERC1155Received(address(0), address(0), superformId, bridgedAssets, "");
-    // }
-
-    // function test_MaxApyCrossChainVault_onERC1155BatchReceived() public {
-    //     uint256[] memory superformIds = new uint256[](2);
-    //     superformIds[0] = 1;
-    //     superformIds[1] = 2;
-    //     uint256[] memory amounts = new uint256[](2);
-    //     amounts[0] = 500 * _1_USDCE;
-    //     amounts[1] = 500 * _1_USDCE;
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SettleXChainInvest(superformIds[0], 0);
-    //     vm.expectEmit(true, true, true, true);
-    //     emit SettleXChainInvest(superformIds[1], 0);
-    //     vault.onERC1155BatchReceived(address(0), address(0), superformIds, amounts, "");
-    // }
-
-    // function test_revert_MaxApyCrossChainVault_invalidController() public {
-    //     uint256 amount = 100 * _1_USDCE;
-    //     vault.requestDeposit(amount, users.alice, users.alice);
-
-    //     vm.startPrank(users.bob);
-    //     vm.expectRevert(ERC7540.InvalidController.selector);
-    //     vault.deposit(amount, users.bob, users.alice);
-    // }
-
-    // function test_MaxApyCrossChainVault_setOperator() public {
-    //     uint256 amount = 100 * _1_USDCE;
-    //     vm.startPrank(users.alice);
-    //     vm.expectEmit(true, true, true, true);
-    //     emit OperatorSet(users.alice, users.bob, true);
-    //     vault.setOperator(users.bob, true);
-    //     vault.requestDeposit(amount, users.alice, users.alice);
-    //     vm.stopPrank();
-
-    //     assertTrue(vault.isOperator(users.alice, users.bob));
-
-    //     // Now bob should be able to deposit on behalf of alice
-    //     vm.startPrank(users.bob);
-    //     vault.deposit(amount, users.alice, users.alice);
-    // }
-
-    // function test_revert_MaxApyCrossChainVault_setOperator_invalidOperator() public {
-    //     vm.expectRevert(ERC7540.InvalidOperator.selector);
-    //     vault.setOperator(users.alice, true);
-    // }
-
-    // function test_divestSingleDirectSingleVault() public {
-    //     // Setup local vault
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 1,
-    //         vault: address(yUsdce),
-    //         vaultDecimals: yUsdce.decimals(),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-
-    //     // Deposit and invest
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-    //     uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
-    //     vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
-
-    //     // Divest
-    //     uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
-    //     uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1; // Allow 1 wei slippage
-
-    //     vm.expectEmit(true, true, true, true);
-    //     emit Divest(400 * _1_USDCE - 1);
-
-    //     uint256 divestAssets = vault.divestSingleDirectSingleVault(address(yUsdce), sharesToDivest, minAssetsOut);
-
-    //     // Validate divest
-    //     assertGt(divestAssets, 0, "Should have divested assets");
-    //     assertEq(vault.totalDebt(), 0, "Should have no remaining debt");
-    //     assertEq(vault.totalIdle(), 1000 * _1_USDCE - 1, "Should have returned assets to idle");
-    //     assertEq(yUsdce.balanceOf(address(vault)), 0, "Should have no remaining vault shares");
-    // }
-
-    // function test_revert_divestSingleDirectSingleVault_InsufficientAssets() public {
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 1,
-    //         vault: address(yUsdce),
-    //         vaultDecimals: yUsdce.decimals(),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-    //     uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
-    //     vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
-
-    //     uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
-    //     uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) + 1; // Require more than possible
-
-    //     vm.expectRevert(MaxApyCrossChainVault.InsufficientAssets.selector);
-    //     vault.divestSingleDirectSingleVault(address(yUsdce), sharesToDivest, minAssetsOut);
-    // }
-
-    // // -- Divest Single Direct Multi Vault Tests --
-
-    // function test_divestSingleDirectMultiVault() public {
-    //     // Setup two local vaults
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 1,
-    //         vault: address(yUsdce),
-    //         vaultDecimals: yUsdce.decimals(),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-
-    //     ERC4626 yUsdceLender = ERC4626(YEARN_USDCE_LENDER_VAULT_BASE);
-    //     vault.addVault({
-    //         chainId: 137,
-    //         superformId: 2,
-    //         vault: address(yUsdceLender),
-    //         vaultDecimals: yUsdceLender.decimals(),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(0))
-    //     });
-
-    //     // Deposit and invest in both vaults
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-    //     uint256 amountPerVault = 400 * _1_USDCE;
-
-    //     address[] memory vaultAddresses = new address[](2);
-    //     vaultAddresses[0] = address(yUsdce);
-    //     vaultAddresses[1] = address(yUsdceLender);
-
-    //     uint256[] memory amounts = new uint256[](2);
-    //     amounts[0] = amountPerVault;
-    //     amounts[1] = amountPerVault;
-
-    //     uint256[] memory minAmountsOut = new uint256[](2);
-    //     minAmountsOut[0] = yUsdce.previewDeposit(amountPerVault);
-    //     minAmountsOut[1] = yUsdceLender.previewDeposit(amountPerVault);
-
-    //     vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
-
-    //     // Prepare divest parameters
-    //     address[] memory divestVaults = new address[](2);
-    //     divestVaults[0] = address(yUsdce);
-    //     divestVaults[1] = address(yUsdceLender);
-
-    //     uint256[] memory divestShares = new uint256[](2);
-    //     divestShares[0] = yUsdce.balanceOf(address(vault));
-    //     divestShares[1] = yUsdceLender.balanceOf(address(vault));
-
-    //     uint256[] memory minDivestAmounts = new uint256[](2);
-    //     minDivestAmounts[0] = yUsdce.convertToAssets(divestShares[0]);
-    //     minDivestAmounts[1] = yUsdceLender.convertToAssets(divestShares[1]);
-
-    //     // Divest from both vaults
-    //     uint256[] memory divestAssets = vault.divestSingleDirectMultiVault(divestVaults, divestShares,
-    // minDivestAmounts);
-
-    //     // Validate divest
-    //     assertEq(divestAssets.length, 2, "Should have divested from both vaults");
-    //     assertGt(divestAssets[0], 0, "Should have divested assets from first vault");
-    //     assertGt(divestAssets[1], 0, "Should have divested assets from second vault");
-    //     assertEq(vault.totalDebt(), 0, "Should have no remaining debt");
-    //     assertApproxEqRel(
-    //         vault.totalIdle(),
-    //         1000 * _1_USDCE,
-    //         1e16, // 1% tolerance
-    //         "Should have returned all assets to idle"
-    //     );
-    // }
-
-    // // -- Cross-Chain Divest Tests --
-    // function test_divestSingleXChainSingleVault() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-    //     uint64 optimismChainId = 10;
-
-    //     // Setup cross-chain vault
-    //     oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(oracle))
-    //     });
-
-    //     // Deposit and invest cross-chain
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-    //     uint256 investAmount = 600 * _1_USDCE;
-    //     SingleXChainSingleVaultStateReq memory investReq =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-
-    //     uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-    //     vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount)
-    // }(
-    //         investReq
-    //     );
-    //     _mintSuperpositions(address(vault), superformId, shares);
-
-    //     // Prepare divest request
-    //     SingleXChainSingleVaultStateReq memory divestReq =
-    //         _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
-
-    //     // Execute divest
-    //     vm.expectEmit(true, true, true, true);
-    //     emit Divest(investAmount);
-
-    //     vm.startPrank(users.alice);
-    //     vault.divestSingleXChainSingleVault{ value: _getDivestSingleXChainSingleVaultValue(superformId, shares) }(
-    //         divestReq
-    //     );
-
-    //     // // Validate state after divest initiation
-    //     // assertEq(vault.totalIdle(), investAmount, "Idle should include divested amount");
-    //     // assertEq(vault._pendingXChainWithdraws(superformId), investAmount, "Should track pending withdrawal");
-    // }
-
-    // // -- Fee Logic Tests --
+    function test_revert_MaxApyCrossChainVault_report_VaultNotListed() public {
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        skip(vault.SECS_PER_YEAR());
+        VaultReport[] memory mockReport = new VaultReport[](1);
+        mockReport[0].chainId = uint64(1);
+        mockReport[0].sharePrice = uint192(2 * _1_USDCE);
+        mockReport[0].vaultAddress = makeAddr("random address");
+
+        vm.expectRevert(MaxApyCrossChainVault.VaultNotListed.selector);
+        vault.report(mockReport, users.bob);
+    }
+
+    function test_MaxApyCrossChainVault_report() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 50,
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        uint256 investAmount = 600 * _1_USDCE;
+
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        req.superformData.amount = investAmount;
+
+        uint256 newSharesPrice = 2 * _1_USDCE;
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+
+        vm.expectEmit(true, true, true, true);
+        emit Invest(investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+
+        _mintSuperpositions(address(vault), superformId, shares);
+        vm.startPrank(users.alice);
+        VaultReport[] memory mockReport = new VaultReport[](1);
+        mockReport[0].chainId = optimismChainId;
+        mockReport[0].sharePrice = uint192(newSharesPrice);
+        mockReport[0].vaultAddress = vaultAddress;
+
+        skip(vault.SECS_PER_YEAR());
+        oracle.setValues(vaultAddress, newSharesPrice, block.timestamp);
+
+        uint256 deductedFee = 50;
+
+        uint256 expectedPerformanceFees =
+            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
+        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
+
+        vm.expectEmit(true, true, true, true);
+        emit Report(optimismChainId, vaultAddress, 566_695_022);
+        vault.report(mockReport, users.bob);
+        assertEq(vault.balanceOf(config.treasury), expectedMintedShares);
+        // assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
+    }
+
+    function test_MaxApyCrossChainVault_addVault() public {
+        address newVault = address(0x123);
+        uint256 newSuperformId = 999;
+        uint64 newChainId = 42;
+        uint8 newDecimals = 18;
+        oracle.setValues(newVault, 1 * _1_USDCE, block.timestamp);
+        vm.expectEmit(true, true, true, true);
+        emit AddVault(newChainId, newVault);
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+
+        assertTrue(vault.isVaultListed(newVault));
+    }
+
+    function test_MaxApyCrossChainVault_addVault_ZeroSharePrice() public {
+        address newVault = address(0x123);
+        uint256 newSuperformId = 999;
+        uint64 newChainId = 42;
+        uint8 newDecimals = 18;
+
+        vm.expectRevert();
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+    }
+
+    function test_revert_MaxApyCrossChainVault_addVault_alreadyListed() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        uint8 decimals = yUsdce.decimals();
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: decimals,
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+        vm.expectRevert(MaxApyCrossChainVault.VaultAlreadyListed.selector);
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: decimals,
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+    }
+
+    function test_MaxApyCrossChainVault_setOracle() public {
+        address newOracle = address(0x789);
+        uint64 chainId = 42;
+
+        vm.expectEmit(true, true, true, true);
+        emit SetOracle(chainId, newOracle);
+        vault.setOracle(chainId, newOracle);
+    }
+
+    function test_MaxApyCrossChainVault_setSharesLockTime() public {
+        uint24 newLockTime = 60 days;
+
+        vm.expectEmit(true, true, true, true);
+        emit SetSharesLockTime(newLockTime);
+        vault.setSharesLockTime(newLockTime);
+
+        assertEq(vault.sharesLockTime(), newLockTime);
+    }
+
+    function test_MaxApyCrossChainVault_setManagementFee() public {
+        uint16 newFee = 3000;
+
+        vm.expectEmit(true, true, true, true);
+        emit SetManagementFee(newFee);
+        vault.setManagementFee(newFee);
+
+        assertEq(vault.managementFee(), newFee);
+    }
+
+    function test_MaxApyCrossChainVault_setOracleFee() public {
+        uint16 newFee = 2500;
+
+        vm.expectEmit(true, true, true, true);
+        emit SetOracleFee(newFee);
+        vault.setOracleFee(newFee);
+
+        assertEq(vault.oracleFee(), newFee);
+    }
+
+    function test_revert_MaxApyCrossChainVault_emergencyShutdown() public {
+        vault.setEmergencyShutdown(true);
+
+        vm.expectRevert(MaxApyCrossChainVault.VaultShutdown.selector);
+        vault.requestDeposit(100 * _1_USDCE, users.alice, users.alice);
+    }
+
+    function test_MaxApyCrossChainVault_onERC1155Received() public {
+        uint256 superformId = 1;
+        uint256 bridgedAssets = 1000 * _1_USDCE;
+
+        vm.expectEmit(true, true, true, true);
+        emit SettleXChainInvest(superformId, 0);
+        vault.onERC1155Received(address(0), address(0), superformId, bridgedAssets, "");
+    }
+
+    function test_MaxApyCrossChainVault_onERC1155BatchReceived() public {
+        uint256[] memory superformIds = new uint256[](2);
+        superformIds[0] = 1;
+        superformIds[1] = 2;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 500 * _1_USDCE;
+        amounts[1] = 500 * _1_USDCE;
+
+        vm.expectEmit(true, true, true, true);
+        emit SettleXChainInvest(superformIds[0], 0);
+        vm.expectEmit(true, true, true, true);
+        emit SettleXChainInvest(superformIds[1], 0);
+        vault.onERC1155BatchReceived(address(0), address(0), superformIds, amounts, "");
+    }
+
+    function test_revert_MaxApyCrossChainVault_invalidController() public {
+        uint256 amount = 100 * _1_USDCE;
+        vault.requestDeposit(amount, users.alice, users.alice);
+
+        vm.startPrank(users.bob);
+        vm.expectRevert(ERC7540.InvalidController.selector);
+        vault.deposit(amount, users.bob, users.alice);
+    }
+
+    function test_MaxApyCrossChainVault_setOperator() public {
+        uint256 amount = 100 * _1_USDCE;
+        vm.startPrank(users.alice);
+        vm.expectEmit(true, true, true, true);
+        emit OperatorSet(users.alice, users.bob, true);
+        vault.setOperator(users.bob, true);
+        vault.requestDeposit(amount, users.alice, users.alice);
+        vm.stopPrank();
+
+        assertTrue(vault.isOperator(users.alice, users.bob));
+
+        // Now bob should be able to deposit on behalf of alice
+        vm.startPrank(users.bob);
+        vault.deposit(amount, users.alice, users.alice);
+    }
+
+    function test_revert_MaxApyCrossChainVault_setOperator_invalidOperator() public {
+        vm.expectRevert(ERC7540.InvalidOperator.selector);
+        vault.setOperator(users.alice, true);
+    }
+
+    function test_divestSingleDirectSingleVault() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        // Setup local vault
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        // Deposit and invest
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        // Divest
+        uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
+        uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1; // Allow 1 wei slippage
+
+        vm.expectEmit(true, true, true, true);
+        emit Divest(400 * _1_USDCE);
+
+        uint256 divestAssets = vault.divestSingleDirectSingleVault(address(yUsdce), sharesToDivest, minAssetsOut);
+
+        assertGt(divestAssets, 0);
+        assertEq(vault.totalDebt(), 0);
+        assertEq(vault.totalIdle(), 1000 * _1_USDCE);
+        assertEq(yUsdce.balanceOf(address(vault)), 0);
+    }
+
+    function test_divestSingleDirectMultiVault() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        MockERC4626 smUsdce = new MockERC4626(USDCE_BASE, "Sommelier USDCE", "smUSDCe", true, 0);
+
+        // Setup two local vaults
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 2,
+            vault: address(smUsdce),
+            vaultDecimals: smUsdce.decimals(),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(0))
+        });
+
+        // Deposit and invest in both vaults
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 amountPerVault = 400 * _1_USDCE;
+
+        address[] memory vaultAddresses = new address[](2);
+        vaultAddresses[0] = address(yUsdce);
+        vaultAddresses[1] = address(smUsdce);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = amountPerVault;
+        amounts[1] = amountPerVault;
+
+        uint256[] memory minAmountsOut = new uint256[](2);
+        minAmountsOut[0] = yUsdce.previewDeposit(amountPerVault);
+        minAmountsOut[1] = smUsdce.previewDeposit(amountPerVault);
+
+        vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
+
+        // Prepare divest parameters
+        address[] memory divestVaults = new address[](2);
+        divestVaults[0] = address(yUsdce);
+        divestVaults[1] = address(smUsdce);
+
+        uint256[] memory divestShares = new uint256[](2);
+        divestShares[0] = yUsdce.balanceOf(address(vault));
+        divestShares[1] = smUsdce.balanceOf(address(vault));
+
+        uint256[] memory minDivestAmounts = new uint256[](2);
+        minDivestAmounts[0] = yUsdce.convertToAssets(divestShares[0]);
+        minDivestAmounts[1] = smUsdce.convertToAssets(divestShares[1]);
+
+        // Divest from both vaults
+        uint256[] memory divestAssets = vault.divestSingleDirectMultiVault(divestVaults, divestShares, minDivestAmounts);
+
+        // Validate divest
+        assertEq(divestAssets.length, 2);
+        assertGt(divestAssets[0], 0);
+        assertGt(divestAssets[1], 0);
+        assertEq(vault.totalDebt(), 0);
+        assertEq(vault.totalIdle(), 1000 * _1_USDCE);
+    }
+
+    function test_divestSingleXChainSingleVault() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Setup cross-chain vault
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(oracle))
+        });
+
+        // Deposit and invest cross-chain
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory investReq =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        investReq.superformData.amount = investAmount;
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) 
+    }(
+            investReq
+        );
+        _mintSuperpositions(address(vault), superformId, shares);
+
+        // Prepare divest request
+        SingleXChainSingleVaultStateReq memory divestReq =
+            _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        // Execute divest
+        vm.expectEmit(true, true, true, true);
+        emit Divest(investAmount);
+
+        vm.startPrank(users.alice);
+        vault.divestSingleXChainSingleVault{ value: _getDivestSingleXChainSingleVaultValue(superformId, shares) }(
+            divestReq
+        );
+
+        // // // Validate state after divest initiation
+        // assertEq(vault.totalIdle(), investAmount, "Idle should include divested amount");
+        // assertEq(vault._pendingXChainWithdraws(superformId), investAmount, "Should track pending withdrawal");
+    }
+
+    // -- Fee Logic Tests --
 
     // function test_report_managementFees() public {
     //     // Setup vault with assets
@@ -972,70 +883,6 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
     //         expectedManagementFee,
     //         1e16, // 1% tolerance
     //         "Management fee calculation incorrect"
-    //     );
-    // }
-
-    // function test_report_performanceFees() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-    //     uint64 optimismChainId = 10;
-
-    //     // Setup vault with investment
-    //     oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: IERC4626Oracle(address(oracle))
-    //     });
-
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-
-    //     // Invest in vault
-    //     uint256 investAmount = 600 * _1_USDCE;
-    //     SingleXChainSingleVaultStateReq memory req =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-
-    //     uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-    //     vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount)
-    // }(
-    //         req
-    //     );
-    //     _mintSuperpositions(address(vault), superformId, shares);
-
-    //     // Skip time and simulate profit
-    //     skip(vault.SECS_PER_YEAR());
-    //     uint256 newSharePrice = 2 * _1_USDCE; // 100% increase
-
-    //     // Create report with profit
-    //     VaultReport[] memory reports = new VaultReport[](1);
-    //     reports[0].chainId = optimismChainId;
-    //     reports[0].sharePrice = uint192(newSharePrice);
-    //     reports[0].vaultAddress = vaultAddress;
-
-    //     // Set oracle price
-    //     oracle.setValues(vaultAddress, newSharePrice, block.timestamp);
-
-    //     // Capture balances before
-    //     uint256 treasuryBalanceBefore = vault.balanceOf(config.treasury);
-
-    //     vm.startPrank(users.alice);
-    //     // Report profit and distribute fees
-    //     vault.report(reports, users.bob);
-
-    //     // Calculate expected performance fee
-    //     uint256 profit = investAmount; // 100% return
-    //     uint256 expectedPerformanceFee = (profit * vault.performanceFee()) / vault.MAX_BPS();
-
-    //     // Validate performance fee
-    //     uint256 actualFee = vault.balanceOf(config.treasury) - treasuryBalanceBefore;
-    //     assertApproxEqRel(
-    //         actualFee,
-    //         expectedPerformanceFee,
-    //         1e16, // 1% tolerance
-    //         "Performance fee calculation incorrect"
     //     );
     // }
 

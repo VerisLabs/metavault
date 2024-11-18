@@ -35,7 +35,6 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
-
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
@@ -53,6 +52,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @dev Library for vault-related operations
     using VaultLib for VaultData;
+
+    /// @dev Library for math
+    using Math for uint256;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           EVENTS                           */
@@ -1106,7 +1108,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                 // Only charge fees on yield above watermark
                 if (sharePrice_ > sharePriceWaterMark) {
                     // And only charge rees if the strategy yield is above hurdle rate
-                    uint256 rate = uint256(vaultDelta) * MAX_BPS * SECS_PER_YEAR / duration / totalAssetsBefore;
+                    uint256 rate = (uint256(vaultDelta) * MAX_BPS).mulDiv(SECS_PER_YEAR, duration) / totalAssetsBefore;
                     if (rate > hurdleRate) {
                         uint16 effectiveFee = performanceFee - vault.deductedFees;
                         uint256 performanceFees = uint256(vaultDelta) * effectiveFee / MAX_BPS;
@@ -1229,7 +1231,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     }
 
     function fulfillSettledRequests(address controller) public {
-        if(msg.sender != controller && hasAnyRole(controller, RELAYER_ROLE)) revert Unauthorized();
+        if (msg.sender != controller && hasAnyRole(controller, RELAYER_ROLE)) revert Unauthorized();
         _fulfillSettledRequests(controller);
     }
 
@@ -1276,7 +1278,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// Note: First it will try to fulfill the request with idle assets, after that it will
     /// loop through the withdrawal queue and compute the destination chains and vaults on each
     /// destionation chain, plus the shaes to redeem on each vault
-     function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
+    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
         // Use the local vaults first
         _exhaustWithdrawalQueue(cache, localWithdrawalQueue, false);
         // Use the crosschain vaults after
@@ -1390,7 +1392,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         cache.assets = convertToAssets(config.shares);
         cache.totalAssets = totalAssets();
         bool settle;
-
 
         // Cannot process more assets than the
         if (cache.assets > cache.totalAssets - _totalPendingXChainDeposits) {
