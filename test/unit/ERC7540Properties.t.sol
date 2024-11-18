@@ -24,7 +24,6 @@ import {
 contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
 
-    MaxApyCrossChainVault public vault;
     ISuperPositions superPositions;
     ISuperformRouter vaultRouter;
     ISuperformFactory factory;

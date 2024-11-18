@@ -35,7 +35,6 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
-import "forge-std/console2.sol";
 
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
@@ -91,7 +90,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @dev Emitted when updating the performance fee
     event SetPerformanceFee(uint16 fee);
-    
+
     /// @dev Emitted when updating the oracle fee
     event SetOracleFee(uint16 fee);
 
@@ -777,7 +776,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         external
         payable
         onlyRoles(MANAGER_ROLE)
-       /// refundGas
+    /// refundGas
     {
         uint256 superformId = req.superformData.superformId;
         // Retrieve the vault data for the target vault
@@ -903,11 +902,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         onlyRoles(MANAGER_ROLE)
         returns (uint256 assets)
     {
-
         uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
         uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
         bool removeDebt;
-        if(shares == sharesBalance) {
+        if (shares == sharesBalance) {
             removeDebt = true;
         }
 
@@ -930,7 +928,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
         // Update the vault's internal accounting
         _totalIdle += assets.toUint128();
-        uint128 amountUint128 = removeDebt ? vaults[_vaultToSuperformId[vaultAddress]].totalDebt : sharesValue.toUint128();
+        uint128 amountUint128 =
+            removeDebt ? vaults[_vaultToSuperformId[vaultAddress]].totalDebt : sharesValue.toUint128();
         _totalDebt -= amountUint128;
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt -= amountUint128;
 
@@ -957,12 +956,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         external
         payable
         onlyRoles(MANAGER_ROLE)
-        /// refundGas
+    /// refundGas
     {
         uint256 superformId = req.superformData.superformId;
         // Retrieve the vault data for the target vault
         VaultData memory vault = vaults[superformId];
-      
+
         if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
 
         if (_pendingXChainWithdraws[superformId] != 0) revert XChainWithdrawsPending();
@@ -1229,6 +1228,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         emit SetRecoveryAddress(_recoveryAddress);
     }
 
+    function fulfillSettledRequests(address controller) public {
+        if(msg.sender != controller && hasAnyRole(controller, RELAYER_ROLE)) revert Unauthorized();
+        _fulfillSettledRequests(controller);
+    }
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       PRIVATE FUNCTIONS                    */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -1272,7 +1276,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// Note: First it will try to fulfill the request with idle assets, after that it will
     /// loop through the withdrawal queue and compute the destination chains and vaults on each
     /// destionation chain, plus the shaes to redeem on each vault
-    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
+     function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
         // Use the local vaults first
         _exhaustWithdrawalQueue(cache, localWithdrawalQueue, false);
         // Use the crosschain vaults after
@@ -1387,6 +1391,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         cache.totalAssets = totalAssets();
         bool settle;
 
+
         // Cannot process more assets than the
         if (cache.assets > cache.totalAssets - _totalPendingXChainDeposits) {
             revert InsufficientAvailableAssets();
@@ -1471,12 +1476,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                     uint256 superformId;
                     uint256 amount;
                     uint64 chainId;
+                    uint256 chainIndex;
 
                     for (uint256 i = 0; i < N_CHAINS; ++i) {
                         if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
                         // The vaults list length should be 1(single-vault)
                         if (cache.lens[i] > 0) {
                             chainId = DST_CHAINS[i];
+                            chainIndex = chainIndexes[chainId];
                             superformId = cache.dstVaults[i][0];
                             amount = cache.sharesPerVault[i][0];
 
@@ -1976,6 +1983,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         delete _pendingXChainDeposits[superformId];
         _totalPendingXChainDeposits -= bridgedAssets;
         vaults[superformId].totalDebt += bridgedAssets.toUint128();
+        _totalDebt += bridgedAssets.toUint128();
         emit SettleXChainInvest(superformId, bridgedAssets);
         return this.onERC1155Received.selector;
     }
