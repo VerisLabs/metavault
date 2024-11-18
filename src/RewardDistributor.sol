@@ -8,6 +8,8 @@ import { PendingRoot } from "types/Lib.sol";
 /// @notice Adapted from Morpho's UniversalRewardDistributor:
 /// https://github.com/morpho-org/universal-rewards-distributor/blob/main/src/UniversalRewardsDistributor.sol
 contract RewardDistributor is OwnableRoles {
+    using SafeTransferLib for address;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -73,7 +75,7 @@ contract RewardDistributor is OwnableRoles {
     /// @dev Warning: The `newIpfsHash` might not correspond to the `newRoot`.
     function submitRoot(bytes32 newRoot, bytes32 newIpfsHash) external onlyRoles(UPDATER_ROLE) {
         if (newRoot == pendingRoot.root || newIpfsHash == pendingRoot.ipfsHash) {
-            AlreadyPending();
+            revert AlreadyPending();
         }
         pendingRoot = PendingRoot({ root: newRoot, ipfsHash: newIpfsHash, validAt: block.timestamp + timelock });
         emit PendingRootSet(msg.sender, newRoot, newIpfsHash);

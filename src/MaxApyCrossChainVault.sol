@@ -35,6 +35,8 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
+import "forge-std/console2.sol";
+
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
@@ -86,8 +88,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @dev Emitted when updating the management fee
     event SetManagementFee(uint16 fee);
+
     /// @dev Emitted when updating the performance fee
     event SetPerformanceFee(uint16 fee);
+    
     /// @dev Emitted when updating the oracle fee
     event SetOracleFee(uint16 fee);
 
@@ -296,7 +300,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             }
             case false {
                 // Transfer all the ETH to sender and check if it succeeded or not.
-                if iszero(call(gas(), caller(), selfbalance(), codesize(), 0x00, codesize(), 0x00)) {
+                if iszero(call(gas(), caller(), balanceAfter, codesize(), 0x00, codesize(), 0x00)) {
                     mstore(0x00, 0xb12d13eb) // `ETHTransferFailed()`.
                     revert(0x1c, 0x04)
                 }
@@ -773,7 +777,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         external
         payable
         onlyRoles(MANAGER_ROLE)
-        refundGas
+       /// refundGas
     {
         uint256 superformId = req.superformData.superformId;
         // Retrieve the vault data for the target vault
@@ -899,7 +903,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         onlyRoles(MANAGER_ROLE)
         returns (uint256 assets)
     {
+
+        uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
         uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
+        bool removeDebt;
+        if(shares == sharesBalance) {
+            removeDebt = true;
+        }
+
         // Ensure the target vault is in the approved list
         if (!isVaultListed(vaultAddress)) revert VaultNotListed();
 
@@ -919,7 +930,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
         // Update the vault's internal accounting
         _totalIdle += assets.toUint128();
-        uint128 amountUint128 = sharesValue.toUint128();
+        uint128 amountUint128 = removeDebt ? vaults[_vaultToSuperformId[vaultAddress]].totalDebt : sharesValue.toUint128();
         _totalDebt -= amountUint128;
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt -= amountUint128;
 
@@ -938,7 +949,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     {
         assets = new uint256[](vaultAddresses.length);
         for (uint256 i = 0; i < vaultAddresses.length; ++i) {
-            assets[i] = investSingleDirectSingleVault(vaultAddresses[i], shares[i], minAssetsOuts[i]);
+            assets[i] = divestSingleDirectSingleVault(vaultAddresses[i], shares[i], minAssetsOuts[i]);
         }
     }
 
@@ -946,12 +957,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         external
         payable
         onlyRoles(MANAGER_ROLE)
-        refundGas
+        /// refundGas
     {
         uint256 superformId = req.superformData.superformId;
         // Retrieve the vault data for the target vault
         VaultData memory vault = vaults[superformId];
-
+      
         if (!isVaultListed(vault.vaultAddress)) revert VaultNotListed();
 
         if (_pendingXChainWithdraws[superformId] != 0) revert XChainWithdrawsPending();
@@ -1141,7 +1152,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         vaults[superformId].decimals = vaultDecimals;
         vaults[superformId].oracle = oracle;
         vaults[superformId].deductedFees = deductedFees;
-        uint192 lastSharePrice = uint192(vaults[superformId].sharePrice());
+        uint192 lastSharePrice = vaults[superformId].sharePrice().toUint192();
         if (lastSharePrice == 0) revert();
         vaults[superformId].lastReportedSharePrice = lastSharePrice;
         _vaultToSuperformId[vault] = superformId;
@@ -1309,13 +1320,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
             uint256 shares;
             if (cache.amountToWithdraw >= maxWithdraw) {
-                uint256 balance;
-                if (resetValues) {
-                    balance = _superPositions.balanceOf(address(this), vault.superformId);
-                } else {
-                    balance = vault.vaultAddress.balanceOf(address(this));
-                }
-
+                uint256 balance = _sharesBalance(vault);
                 shares = balance;
             } else {
                 shares = vault.convertToShares(withdrawAssets, true);
