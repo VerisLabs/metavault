@@ -830,104 +830,86 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         investReq.superformData.amount = investAmount;
 
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) 
-    }(
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             investReq
         );
         _mintSuperpositions(address(vault), superformId, shares);
+
+        uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
 
         // Prepare divest request
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
+        (uint256 lastSharePrice,) = oracle.getSharePrice(vaultAddress);
+        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         // Execute divest
         vm.expectEmit(true, true, true, true);
-        emit Divest(investAmount);
+        emit Divest(expectedDivestedValue);
 
         vm.startPrank(users.alice);
-        vault.divestSingleXChainSingleVault{ value: _getDivestSingleXChainSingleVaultValue(superformId, shares) }(
-            divestReq
-        );
+        vault.divestSingleXChainSingleVault{ value: value }(divestReq);
 
-        // // // Validate state after divest initiation
-        // assertEq(vault.totalIdle(), investAmount, "Idle should include divested amount");
-        // assertEq(vault._pendingXChainWithdraws(superformId), investAmount, "Should track pending withdrawal");
+        assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
+        assertEq(vault.pendingXChainDivests(superformId), expectedDivestedValue);
+        assertEq(vault.totalPendingXChainDivests(), expectedDivestedValue);
     }
 
-    // -- Fee Logic Tests --
+    function test_MaxApyCrossChainVault_management_fees() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
 
-    // function test_report_managementFees() public {
-    //     // Setup vault with assets
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
+        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: IERC4626Oracle(address(oracle))
+        });
 
-    //     // Skip one year
-    //     skip(vault.SECS_PER_YEAR());
+        _depositAtomic(1000 * _1_USDCE, users.alice);
 
-    //     // Calculate expected management fee
-    //     uint256 totalAssets = vault.totalAssets();
-    //     uint256 expectedManagementFee = (totalAssets * vault.managementFee()) / vault.MAX_BPS();
+        uint256 investAmount = 600 * _1_USDCE;
 
-    //     // Create report with no price change
-    //     VaultReport[] memory reports = new VaultReport[](0);
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
-    //     // Capture treasury balance before
-    //     uint256 treasuryBalanceBefore = vault.balanceOf(config.treasury);
+        req.superformData.amount = investAmount;
 
-    //     // Report and distribute fees
-    //     vault.report(reports, users.bob);
+        uint256 newSharesPrice = 2 * _1_USDCE;
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
-    //     // Validate management fee
-    //     uint256 actualFee = vault.balanceOf(config.treasury) - treasuryBalanceBefore;
-    //     assertApproxEqRel(
-    //         actualFee,
-    //         expectedManagementFee,
-    //         1e16, // 1% tolerance
-    //         "Management fee calculation incorrect"
-    //     );
-    // }
+        vm.expectEmit(true, true, true, true);
+        emit Invest(investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
 
-    // function test_report_feeDeduction() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-    //     uint64 optimismChainId = 10;
+        _mintSuperpositions(address(vault), superformId, shares);
+        vm.startPrank(users.alice);
+        VaultReport[] memory mockReport = new VaultReport[](1);
+        mockReport[0].chainId = optimismChainId;
+        mockReport[0].sharePrice = uint192(newSharesPrice);
+        mockReport[0].vaultAddress = vaultAddress;
 
-    //     // Setup vault with deducted fees
-    //     uint16 deductedFees = 1000; // 10%
-    //     oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: deductedFees,
-    //         oracle: IERC4626Oracle(address(oracle))
-    //     });
+        skip(vault.SECS_PER_YEAR());
+        oracle.setValues(vaultAddress, newSharesPrice, block.timestamp);
 
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 deductedFee = 50;
 
-    //     // Invest and generate profit
-    //     uint256 investAmount = 600 * _1_USDCE;
-    //     SingleXChainSingleVaultStateReq memory req =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+        uint256 expectedPerformanceFees =
+            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
+        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
 
-    //     uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-    //     vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount)
-    // }(
-    //         req
-    //     );
-    //     _mintSuperpositions(address(vault), superformId, shares);
+        vault.setManagementFee(100);
 
-    //     // Skip time and simulate profit
-    //     skip(vault.SECS_PER_YEAR());
-    //     uint256 newSharePrice = 2 * _1_USDCE;
-
-    //     // Validate oracle fee
-    //     uint256 actualOracleFee = vault.balanceOf(users.bob) - oracleBalanceBefore;
-    //     assertApproxEqRel(
-    //         actualOracleFee,
-    //         expectedOracleFee,
-    //         1e16, // 1% tolerance
-    //         "Oracle fee calculation incorrect"
-    //     );
-    // }
+        vm.expectEmit(true, true, true, true);
+        emit Report(optimismChainId, vaultAddress, 566_695_022);
+        vault.report(mockReport, users.bob);
+        assertEq(vault.balanceOf(config.treasury), 100 * _1_USDCE);
+    }
 }

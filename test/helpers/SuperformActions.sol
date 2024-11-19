@@ -78,12 +78,20 @@ contract SuperformActions is Test {
         return shares;
     }
 
-    function _previewRedeem(uint64 chainId, address vault, uint256 shares) internal returns (uint256) {
+    function _previewRedeem(uint64 chainId, address vault, uint256 shares) internal returns (uint256 assets) {
         uint256 _tempCurrentFork = vm.activeFork();
         vm.selectFork(forks[chainId]);
-        shares = ERC4626(vault).previewRedeem(shares);
+        assets = ERC4626(vault).previewRedeem(shares);
         vm.selectFork(_tempCurrentFork);
-        return shares;
+        return assets;
+    }
+
+    function _convertToAssets(uint64 chainId, address vault, uint256 shares) internal returns (uint256 assets) {
+        uint256 _tempCurrentFork = vm.activeFork();
+        vm.selectFork(forks[chainId]);
+        assets = ERC4626(vault).convertToAssets(shares);
+        vm.selectFork(_tempCurrentFork);
+        return assets;
     }
 
     function _getSharePrice(uint64 chainId, address _vault) internal returns (uint256 sharePrice) {
