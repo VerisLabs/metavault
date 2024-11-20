@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 contract MockERC4626Oracle {
     mapping(address asset => uint256 price) public sharePrice;

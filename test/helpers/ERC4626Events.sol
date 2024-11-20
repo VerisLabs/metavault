@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
 
 contract ERC4626Events {
     /// @dev Emitted during a mint call or deposit call.

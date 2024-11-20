@@ -4,3 +4,5 @@ types/=src/types/
 crosschain/=src/crosschain/
 lib/=src/lib/
 interfaces/=src/interfaces/
+solidity-bytes-utils/=dependencies/solidity-bytes-utils
+@layerzerolabs/=external/@layerzerolabs/
