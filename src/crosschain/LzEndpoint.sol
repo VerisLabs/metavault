@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {OApp, MessagingFee, Origin} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
-import {OAppOptionsType3} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OAppOptionsType3.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import {ISharePriceOracle} from "../SharePriceOracle/ISharePriceOracle.sol";
-import {ILzEndpoint} from "./ILzEndpoint.sol";
+import { ISharePriceOracle } from "../interfaces/ISharePriceOracle.sol";
+
 import "./../lib/MsgCodec.sol";
+import { ILzEndpoint } from "../interfaces/ILzEndpoint.sol";
+import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import { MessagingFee, OApp, Origin } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+import { OAppOptionsType3 } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OAppOptionsType3.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title LzEndpoint
@@ -29,13 +30,8 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
      * @param _owner The owner of the contract
      * @param _oracle The SharePriceOracle contract address
      */
-    constructor(
-        address _endpoint,
-        address _owner,
-        address _oracle
-    ) OApp(_endpoint, _owner) Ownable(_owner) {
+    constructor(address _endpoint, address _owner, address _oracle) OApp(_endpoint, _owner) Ownable(_owner) {
         oracle = ISharePriceOracle(_oracle);
-        
     }
 
     // /** @inheritdoc ILzEndpoint */
@@ -46,17 +42,14 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
         bytes calldata _extraSendOptions,
         bytes calldata _extraReturnOptions,
         bool _payInLzToken
-    ) public view override returns (MessagingFee memory fee) {
-        bytes memory payload = MsgCodec.encodeVaultAddresses(
-            _msgType,
-            _message,
-            _extraReturnOptions
-        );
-        bytes memory options = combineOptions(
-            _dstEid,
-            _msgType,
-            _extraSendOptions
-        );
+    )
+        public
+        view
+        override
+        returns (MessagingFee memory fee)
+    {
+        bytes memory payload = MsgCodec.encodeVaultAddresses(_msgType, _message, _extraReturnOptions);
+        bytes memory options = combineOptions(_dstEid, _msgType, _extraSendOptions);
 
         return _quote(_dstEid, payload, options, _payInLzToken);
     }
@@ -69,17 +62,14 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
         bytes calldata _extraSendOptions,
         bytes calldata _extraReturnOptions,
         bool _payInLzToken
-    ) public view override returns (MessagingFee memory fee) {
-        bytes memory payload = MsgCodec.encodeVaultReports(
-            _msgType,
-            _message,
-            _extraReturnOptions
-        );
-        bytes memory options = combineOptions(
-            _dstEid,
-            _msgType,
-            _extraSendOptions
-        );
+    )
+        public
+        view
+        override
+        returns (MessagingFee memory fee)
+    {
+        bytes memory payload = MsgCodec.encodeVaultReports(_msgType, _message, _extraReturnOptions);
+        bytes memory options = combineOptions(_dstEid, _msgType, _extraSendOptions);
         return _quote(_dstEid, payload, options, _payInLzToken);
     }
 
@@ -88,27 +78,18 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
         uint32 _dstEid,
         address[] memory _vaultAddresses,
         bytes calldata _options
-    ) external payable override {
-        MsgCodec.VaultReport[] memory vaultReports = oracle.getSharePrices(
-            _vaultAddresses
-        );
-        bytes memory payload = MsgCodec.encodeVaultReports(
-            AB_TYPE,
-            vaultReports,
-            _options
-        );
+    )
+        external
+        payable
+        override
+    {
+        MsgCodec.VaultReport[] memory vaultReports = oracle.getSharePrices(_vaultAddresses);
+        bytes memory payload = MsgCodec.encodeVaultReports(AB_TYPE, vaultReports, _options);
         bytes memory options = combineOptions(_dstEid, AB_TYPE, _options);
 
-        _lzSend(
-            _dstEid,
-            payload,
-            options,
-            MessagingFee(msg.value, 0),
-            payable(msg.sender)
-        );
+        _lzSend(_dstEid, payload, options, MessagingFee(msg.value, 0), payable(msg.sender));
 
         emit VaultReportsSent(_dstEid, vaultReports);
-
     }
 
     // /** @inheritdoc ILzEndpoint */
@@ -117,25 +98,15 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
         address[] memory _vaultAddresses,
         bytes calldata _extraSendOptions,
         bytes calldata _extraReturnOptions
-    ) external payable override {
-        bytes memory payload = MsgCodec.encodeVaultAddresses(
-            ABA_TYPE,
-            _vaultAddresses,
-            _extraReturnOptions
-        );
-        bytes memory options = combineOptions(
-            _dstEid,
-            ABA_TYPE,
-            _extraSendOptions
-        );
+    )
+        external
+        payable
+        override
+    {
+        bytes memory payload = MsgCodec.encodeVaultAddresses(ABA_TYPE, _vaultAddresses, _extraReturnOptions);
+        bytes memory options = combineOptions(_dstEid, ABA_TYPE, _extraSendOptions);
 
-        _lzSend(
-            _dstEid,
-            payload,
-            options,
-            MessagingFee(msg.value, 0),
-            payable(msg.sender)
-        );
+        _lzSend(_dstEid, payload, options, MessagingFee(msg.value, 0), payable(msg.sender));
 
         emit VaultAddressesSent(_dstEid, _vaultAddresses);
     }
@@ -148,11 +119,14 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
      */
     function _lzReceive(
         Origin calldata _origin,
-        bytes32 /*guid*/,
+        bytes32, /*guid*/
         bytes calldata _message,
         address,
         bytes calldata
-    ) internal override {
+    )
+        internal
+        override
+    {
         uint16 msgType = MsgCodec.decodeMsgType(_message);
 
         if (msgType == AB_TYPE) {
@@ -169,12 +143,8 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
      * @param _origin The origin information of the message
      * @param _message The received message containing share prices
      */
-    function _handleSharePricesUpdate(
-        Origin calldata _origin,
-        bytes calldata _message
-    ) private {
-        (, MsgCodec.VaultReport[] memory vaultReports, , ) = MsgCodec
-            .decodeVaultReports(_message);
+    function _handleSharePricesUpdate(Origin calldata _origin, bytes calldata _message) private {
+        (, MsgCodec.VaultReport[] memory vaultReports,,) = MsgCodec.decodeVaultReports(_message);
         oracle.updateSharePrices(_origin.srcEid, vaultReports);
     }
 
@@ -183,28 +153,16 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
      * @param _origin The origin information of the message
      * @param _message The received message containing the request for share prices
      */
-    function _handleSharePricesRequest(
-        Origin calldata _origin,
-        bytes calldata _message
-    ) private {
-        (
-            ,
-            address[] memory vaultAddresses,
-            uint256 extraOptionsStart,
-            uint256 extraOptionsLength
-        ) = MsgCodec.decodeVaultAddresses(_message);
+    function _handleSharePricesRequest(Origin calldata _origin, bytes calldata _message) private {
+        (, address[] memory vaultAddresses, uint256 extraOptionsStart, uint256 extraOptionsLength) =
+            MsgCodec.decodeVaultAddresses(_message);
 
-        MsgCodec.VaultReport[] memory vaultReports = oracle.getSharePrices(
-            vaultAddresses
-        );
-        bytes memory _options = combineOptions(
-            _origin.srcEid,
-            AB_TYPE,
-            _message[extraOptionsStart:extraOptionsStart + extraOptionsLength]
-        );
+        MsgCodec.VaultReport[] memory vaultReports = oracle.getSharePrices(vaultAddresses);
+        bytes memory _options =
+            combineOptions(_origin.srcEid, AB_TYPE, _message[extraOptionsStart:extraOptionsStart + extraOptionsLength]);
 
         _lzSend(
-            _origin   .srcEid,
+            _origin.srcEid,
             abi.encode(AB_TYPE, vaultReports),
             _options,
             MessagingFee(msg.value, 0),
@@ -213,5 +171,5 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
     }
 
     // /** @inheritdoc ILzEndpoint */
-    receive() external payable override {}
+    receive() external payable override { }
 }

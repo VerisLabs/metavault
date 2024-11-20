@@ -28,16 +28,13 @@ library MsgCodec {
         uint16 _msgType,
         address[] memory _message,
         bytes memory _extraReturnOptions
-    ) public pure returns (bytes memory) {
+    )
+        public
+        pure
+        returns (bytes memory)
+    {
         uint256 extraOptionsLength = _extraReturnOptions.length;
-        return
-            abi.encode(
-                _msgType,
-                _message,
-                extraOptionsLength,
-                _extraReturnOptions,
-                extraOptionsLength
-            );
+        return abi.encode(_msgType, _message, extraOptionsLength, _extraReturnOptions, extraOptionsLength);
     }
 
     /// @notice Decodes a message containing vault addresses
@@ -47,22 +44,12 @@ library MsgCodec {
     /// @return message Array of decoded vault addresses
     /// @return extraOptionsStart Start index of extra options in the encoded message
     /// @return extraOptionsLength Length of extra options
-    function decodeVaultAddresses(
-        bytes calldata encodedMessage
-    )
+    function decodeVaultAddresses(bytes calldata encodedMessage)
         public
         pure
-        returns (
-            uint16 msgType,
-            address[] memory message,
-            uint256 extraOptionsStart,
-            uint256 extraOptionsLength
-        )
+        returns (uint16 msgType, address[] memory message, uint256 extraOptionsStart, uint256 extraOptionsLength)
     {
-        (msgType, message, extraOptionsLength) = abi.decode(
-            encodedMessage,
-            (uint16, address[], uint256)
-        );
+        (msgType, message, extraOptionsLength) = abi.decode(encodedMessage, (uint16, address[], uint256));
         // Calculate the start position of extra options
         extraOptionsStart = 7 * 32 + (message.length * 32);
 
@@ -79,16 +66,13 @@ library MsgCodec {
         uint16 _msgType,
         VaultReport[] memory _message,
         bytes memory _extraReturnOptions
-    ) public pure returns (bytes memory) {
+    )
+        public
+        pure
+        returns (bytes memory)
+    {
         uint256 extraOptionsLength = _extraReturnOptions.length;
-        return
-            abi.encode(
-                _msgType,
-                _message,
-                extraOptionsLength,
-                _extraReturnOptions,
-                extraOptionsLength
-            );
+        return abi.encode(_msgType, _message, extraOptionsLength, _extraReturnOptions, extraOptionsLength);
     }
 
     /// @notice Decodes a message containing vault reports
@@ -98,22 +82,12 @@ library MsgCodec {
     /// @return message Array of decoded VaultReport structs
     /// @return extraOptionsStart Start index of extra options in the encoded message
     /// @return extraOptionsLength Length of extra options
-    function decodeVaultReports(
-        bytes calldata encodedMessage
-    )
+    function decodeVaultReports(bytes calldata encodedMessage)
         public
         pure
-        returns (
-            uint16 msgType,
-            VaultReport[] memory message,
-            uint256 extraOptionsStart,
-            uint256 extraOptionsLength
-        )
+        returns (uint16 msgType, VaultReport[] memory message, uint256 extraOptionsStart, uint256 extraOptionsLength)
     {
-        (msgType, message, extraOptionsLength) = abi.decode(
-            encodedMessage,
-            (uint16, VaultReport[], uint256)
-        );
+        (msgType, message, extraOptionsLength) = abi.decode(encodedMessage, (uint16, VaultReport[], uint256));
         // Calculate the start position of extra options
         extraOptionsStart = 7 * 32 + (message.length * 128);
 
@@ -124,9 +98,7 @@ library MsgCodec {
     /// @dev This function uses assembly to efficiently extract the message type
     /// @param encodedMessage The encoded message
     /// @return msgType Decoded message type
-    function decodeMsgType(
-        bytes calldata encodedMessage
-    ) public pure returns (uint16 msgType) {
+    function decodeMsgType(bytes calldata encodedMessage) public pure returns (uint16 msgType) {
         assembly {
             // Load the first 32 bytes of the calldata
             let word := calldataload(encodedMessage.offset)

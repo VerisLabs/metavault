@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {MessagingFee, Origin} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
-import {MsgCodec} from "../lib/MsgCodec.sol";
+import { MsgCodec } from "../lib/MsgCodec.sol";
+import { MessagingFee, Origin } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 
 /**
  * @title ILzEndpoint
@@ -30,21 +30,14 @@ interface ILzEndpoint {
      * @param vaultAddresses Array of vault addresses for which prices are sent
      * @param messageFee Fee paid for the message
      */
-    event SharePricesSent(
-        uint32 indexed dstEid,
-        address[] vaultAddresses,
-        uint256 messageFee
-    );
+    event SharePricesSent(uint32 indexed dstEid, address[] vaultAddresses, uint256 messageFee);
 
     /**
      * @notice Emitted when share prices are received from another chain
      * @param srcEid The source chain ID
      * @param vaultReports Array of vault reports containing price data
      */
-    event SharePricesReceived(
-        uint32 indexed srcEid,
-        MsgCodec.VaultReport[] vaultReports
-    );
+    event SharePricesReceived(uint32 indexed srcEid, MsgCodec.VaultReport[] vaultReports);
 
     /**
      * @notice Emitted when share prices are requested from another chain
@@ -52,21 +45,14 @@ interface ILzEndpoint {
      * @param vaultAddresses Array of vault addresses for which prices are requested
      * @param messageFee Fee paid for the request
      */
-    event SharePricesRequested(
-        uint32 indexed dstEid,
-        address[] vaultAddresses,
-        uint256 messageFee
-    );
+    event SharePricesRequested(uint32 indexed dstEid, address[] vaultAddresses, uint256 messageFee);
 
     /**
      * @notice Emitted when a share price request is received from another chain
      * @param srcEid The source chain ID
      * @param vaultAddresses Array of requested vault addresses
      */
-    event SharePricesRequestReceived(
-        uint32 indexed srcEid,
-        address[] vaultAddresses
-    );
+    event SharePricesRequestReceived(uint32 indexed srcEid, address[] vaultAddresses);
 
     /**
      * @notice Emitted when a message is processed
@@ -74,11 +60,7 @@ interface ILzEndpoint {
      * @param msgType The type of message processed
      * @param guid The unique identifier of the message
      */
-    event MessageProcessed(
-        uint32 indexed srcEid,
-        uint16 msgType,
-        bytes32 guid
-    );
+    event MessageProcessed(uint32 indexed srcEid, uint16 msgType, bytes32 guid);
 
     /**
      * @notice Emitted when an error occurs
@@ -119,7 +101,10 @@ interface ILzEndpoint {
         bytes calldata _extraSendOptions,
         bytes calldata _extraReturnOptions,
         bool _payInLzToken
-    ) external view returns (MessagingFee memory fee);
+    )
+        external
+        view
+        returns (MessagingFee memory fee);
 
     /**
      * @notice Quotes the fee for sending a message with vault reports
@@ -138,7 +123,10 @@ interface ILzEndpoint {
         bytes calldata _extraSendOptions,
         bytes calldata _extraReturnOptions,
         bool _payInLzToken
-    ) external view returns (MessagingFee memory fee);
+    )
+        external
+        view
+        returns (MessagingFee memory fee);
 
     /**
      * @notice Sends share prices to another chain
@@ -150,7 +138,9 @@ interface ILzEndpoint {
         uint32 _dstEid,
         address[] memory _vaultAddresses,
         bytes calldata _options
-    ) external payable;
+    )
+        external
+        payable;
 
     /**
      * @notice Requests share prices from another chain
@@ -164,7 +154,9 @@ interface ILzEndpoint {
         address[] memory _vaultAddresses,
         bytes calldata _extraSendOptions,
         bytes calldata _extraReturnOptions
-    ) external payable;
+    )
+        external
+        payable;
 
     /**
      * @notice Fallback function to receive Ether

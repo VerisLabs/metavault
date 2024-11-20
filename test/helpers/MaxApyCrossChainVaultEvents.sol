@@ -10,6 +10,9 @@ contract MaxApyCrossChainVaultEvents {
     /// @dev Emitted when investing vault idle assets
     event Invest(uint256 amount);
 
+    /// @dev Emitted when divesting vault idle assets
+    event Divest(uint256 amount);
+
     /// @dev Emitted when cross-chain investment is settled
     event SettleXChainInvest(uint256 indexed superformId, uint256 assets);
 

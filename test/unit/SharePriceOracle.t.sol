@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Test.sol";
-import {SharePriceOracle} from "../../src/SharePriceOracle/SharePriceOracle.sol";
-import {MaxApyCrossChainVault} from "../../src/MaxApyCrossChainVault.sol";
-import {MockERC20} from "../helpers/mock/MockERC20.sol";
-import {MsgCodec} from "../../src/lib/MsgCodec.sol";
-import {ERC20} from "@solady/tokens/ERC20.sol";
-import {VaultConfig} from "../../src/types/Lib.sol";
-import {ISuperPositions} from "../../src/interfaces/ISuperPositions.sol";
-import {IBaseRouter} from "../../src/interfaces/IBaseRouter.sol";
-import {ISuperformFactory} from "../../src/interfaces/ISuperformFactory.sol";
-import {IERC1155} from "@openzeppelin-contracts/contracts/token/ERC1155/IERC1155.sol";
+import { MaxApyCrossChainVault } from "../../src/MaxApyCrossChainVault.sol";
+import { SharePriceOracle } from "../../src/crosschain/SharePriceOracle.sol";
+
+import { IBaseRouter } from "../../src/interfaces/IBaseRouter.sol";
+import { ISuperPositions } from "../../src/interfaces/ISuperPositions.sol";
+import { ISuperformFactory } from "../../src/interfaces/ISuperformFactory.sol";
+import { MsgCodec } from "../../src/lib/MsgCodec.sol";
+import { VaultConfig } from "../../src/types/Lib.sol";
+import { MockERC20 } from "../helpers/mock/MockERC20.sol";
+import { Test } from "forge-std/Test.sol";
+
+import { ERC1155 } from "solady/tokens/ERC1155.sol";
+import { ERC20 } from "solady/tokens/ERC20.sol";
 
 contract SharePriceOracleTest is Test {
     SharePriceOracle public oracle;
@@ -26,23 +28,13 @@ contract SharePriceOracleTest is Test {
     IBaseRouter public mockVaultRouter;
     ISuperformFactory public mockFactory;
 
-    event SharePricesUpdated(
-        uint32 indexed srcChainId,
-        address[] vaults,
-        uint256[] prices
-    );
+    event SharePricesUpdated(uint32 indexed srcChainId, address[] vaults, uint256[] prices);
 
     event RoleGranted(address indexed account, uint256 indexed role);
     event RoleRevoked(address indexed account, uint256 indexed role);
 
-    event LzEndpointUpdated(
-        address indexed oldEndpoint,
-        address indexed newEndpoint
-    );
-    event OwnershipTransferred(
-        address indexed previousOwner,
-        address indexed newOwner
-    );
+    event LzEndpointUpdated(address indexed oldEndpoint, address indexed newEndpoint);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     function setUp() public {
         admin = address(this);
@@ -93,9 +85,7 @@ contract SharePriceOracleTest is Test {
         });
 
         vm.mockCall(
-            address(mockSuperPositions),
-            abi.encodeWithSelector(IERC1155.setApprovalForAll.selector),
-            abi.encode(true)
+            address(mockSuperPositions), abi.encodeWithSelector(ERC1155.setApprovalForAll.selector), abi.encode(true)
         );
 
         vm.mockCall(
@@ -105,9 +95,7 @@ contract SharePriceOracleTest is Test {
         );
 
         vm.mockCall(
-            address(mockFactory),
-            abi.encodeWithSelector(ISuperformFactory.isSuperform.selector),
-            abi.encode(true)
+            address(mockFactory), abi.encodeWithSelector(ISuperformFactory.isSuperform.selector), abi.encode(true)
         );
 
         vault1 = new MaxApyCrossChainVault(config1);
@@ -120,7 +108,6 @@ contract SharePriceOracleTest is Test {
         oracle.setLzEndpoint(endpoint);
     }
 
-
     /*//////////////////////////////////////////////////////////////
                         CONSTRUCTOR TESTS
     //////////////////////////////////////////////////////////////*/
@@ -128,10 +115,7 @@ contract SharePriceOracleTest is Test {
     function testConstructor() public {
         vm.expectEmit(true, true, false, true);
         emit OwnershipTransferred(address(0), address(this));
-        SharePriceOracle newOracle = new SharePriceOracle(
-            CHAIN_ID,
-            address(this)
-        );
+        SharePriceOracle newOracle = new SharePriceOracle(CHAIN_ID, address(this));
 
         assertEq(newOracle.chainId(), CHAIN_ID);
         assertTrue(newOracle.hasRole(address(this), newOracle.ADMIN_ROLE()));
@@ -232,7 +216,7 @@ contract SharePriceOracleTest is Test {
         assertEq(reports[1].sharePrice, 1e18);
         assertEq(reports[1].chainId, CHAIN_ID);
     }
- 
+
     function testUpdateSharePrices() public {
         uint32 srcChainId = 2;
         MsgCodec.VaultReport[] memory reports = new MsgCodec.VaultReport[](2);
@@ -264,12 +248,8 @@ contract SharePriceOracleTest is Test {
         oracle.updateSharePrices(srcChainId, reports);
 
         {
-            (
-                uint64 lastUpdate1,
-                uint32 chainId1,
-                address addr1,
-                uint256 price1
-            ) = oracle.sharePrices(srcChainId, address(vault1));
+            (uint64 lastUpdate1, uint32 chainId1, address addr1, uint256 price1) =
+                oracle.sharePrices(srcChainId, address(vault1));
             assertEq(chainId1, srcChainId);
             assertEq(addr1, address(vault1));
             assertEq(price1, 1.2e18);
@@ -277,12 +257,8 @@ contract SharePriceOracleTest is Test {
         }
 
         {
-            (
-                uint64 lastUpdate2,
-                uint32 chainId2,
-                address addr2,
-                uint256 price2
-            ) = oracle.sharePrices(srcChainId, address(vault2));
+            (uint64 lastUpdate2, uint32 chainId2, address addr2, uint256 price2) =
+                oracle.sharePrices(srcChainId, address(vault2));
             assertEq(chainId2, srcChainId);
             assertEq(addr2, address(vault2));
             assertEq(price2, 1.3e18);
@@ -313,8 +289,7 @@ contract SharePriceOracleTest is Test {
         vaultAddresses[0] = address(vault1);
         vaultAddresses[1] = address(vault2);
 
-        MsgCodec.VaultReport[] memory storedReports = oracle
-            .getStoredSharePrices(srcChainId, vaultAddresses);
+        MsgCodec.VaultReport[] memory storedReports = oracle.getStoredSharePrices(srcChainId, vaultAddresses);
 
         assertEq(storedReports.length, 2);
         assertEq(storedReports[0].sharePrice, 1.2e18);
@@ -335,10 +310,7 @@ contract SharePriceOracleTest is Test {
         oracle.updateSharePrices(2, reports);
     }
 
-    function testFuzzUpdateSharePrices(
-        uint32 srcChainId,
-        uint256 sharePrice
-    ) public {
+    function testFuzzUpdateSharePrices(uint32 srcChainId, uint256 sharePrice) public {
         vm.assume(sharePrice > 0 && sharePrice < type(uint256).max);
 
         MsgCodec.VaultReport[] memory reports = new MsgCodec.VaultReport[](1);
@@ -352,10 +324,7 @@ contract SharePriceOracleTest is Test {
         vm.prank(endpoint);
         oracle.updateSharePrices(srcChainId, reports);
 
-        (, , , uint256 storedSharePrice) = oracle.sharePrices(
-            srcChainId,
-            address(vault1)
-        );
+        (,,, uint256 storedSharePrice) = oracle.sharePrices(srcChainId, address(vault1));
         assertEq(sharePrice, storedSharePrice);
     }
 
@@ -392,34 +361,24 @@ contract SharePriceOracleTest is Test {
 
     function testGetSharePricesEmpty() public {
         address[] memory emptyVaults = new address[](0);
-        MsgCodec.VaultReport[] memory reports = oracle.getSharePrices(
-            emptyVaults
-        );
+        MsgCodec.VaultReport[] memory reports = oracle.getSharePrices(emptyVaults);
         assertEq(reports.length, 0);
     }
 
     function testGetStoredSharePricesEmpty() public {
         address[] memory emptyVaults = new address[](0);
-        MsgCodec.VaultReport[] memory reports = oracle.getStoredSharePrices(
-            2,
-            emptyVaults
-        );
+        MsgCodec.VaultReport[] memory reports = oracle.getStoredSharePrices(2, emptyVaults);
         assertEq(reports.length, 0);
     }
 
-    function testFuzz_UpdateSharePricesBatch(
-        uint32 srcChainId,
-        uint256[] calldata sharePrices
-    ) public {
+    function testFuzz_UpdateSharePricesBatch(uint32 srcChainId, uint256[] calldata sharePrices) public {
         vm.assume(sharePrices.length > 0 && sharePrices.length <= 10);
 
-        MsgCodec.VaultReport[] memory reports = new MsgCodec.VaultReport[](
-            sharePrices.length
-        );
+        MsgCodec.VaultReport[] memory reports = new MsgCodec.VaultReport[](sharePrices.length);
         address[] memory vaults = new address[](sharePrices.length);
         uint256[] memory expectedPrices = new uint256[](sharePrices.length);
 
-        for (uint i = 0; i < sharePrices.length; i++) {
+        for (uint256 i = 0; i < sharePrices.length; i++) {
             vm.assume(sharePrices[i] > 0 && sharePrices[i] < type(uint256).max);
             address mockVault = address(uint160(i + 1));
             reports[i] = MsgCodec.VaultReport({
@@ -438,13 +397,8 @@ contract SharePriceOracleTest is Test {
         vm.prank(endpoint);
         oracle.updateSharePrices(srcChainId, reports);
 
-        for (uint i = 0; i < vaults.length; i++) {
-            (
-                uint64 lastUpdate,
-                uint32 chainId,
-                address addr,
-                uint256 price
-            ) = oracle.sharePrices(srcChainId, vaults[i]);
+        for (uint256 i = 0; i < vaults.length; i++) {
+            (uint64 lastUpdate, uint32 chainId, address addr, uint256 price) = oracle.sharePrices(srcChainId, vaults[i]);
 
             assertEq(chainId, srcChainId);
             assertEq(addr, vaults[i]);
@@ -453,15 +407,10 @@ contract SharePriceOracleTest is Test {
         }
     }
 
-    function testFuzz_RoleManagementSimple(
-        address account,
-        uint256 role
-    ) public {
+    function testFuzz_RoleManagementSimple(address account, uint256 role) public {
         vm.assume(account != address(0));
         vm.assume(role > 2 && role < type(uint256).max / 4);
-        vm.assume(
-            role != oracle.ADMIN_ROLE() && role != oracle.ENDPOINT_ROLE()
-        );
+        vm.assume(role != oracle.ADMIN_ROLE() && role != oracle.ENDPOINT_ROLE());
 
         vm.startPrank(admin);
 
@@ -473,82 +422,69 @@ contract SharePriceOracleTest is Test {
 
         vm.stopPrank();
     }
-   function testFuzz_GetSharePricesSimple(
-    uint256 initialBalance,
-    uint256 sharePrice
-) public {
-    initialBalance = bound(initialBalance, 1e18, 1000e18);
-    sharePrice = bound(sharePrice, 1e18, 100e18);
 
-    VaultConfig memory config = VaultConfig({
-        asset: address(underlyingAsset),
-        name: "Test Vault",
-        symbol: "TVLT",
-        factory: mockFactory,
-        superPositions: mockSuperPositions,
-        vaultRouter: mockVaultRouter,
-        treasury: makeAddr("treasury"),
-        managementFee: 100,
-        performanceFee: 1000,
-        oracleFee: 50,
-        recoveryAddress: makeAddr("recovery"),
-        sharesLockTime: 1 days,
-        processRedeemSettlement: 1 days,
-        assetHurdleRate: 500,
-        signerRelayer: makeAddr("relayer")
-    });
+    function testFuzz_GetSharePricesSimple(uint256 initialBalance, uint256 sharePrice) public {
+        initialBalance = bound(initialBalance, 1e18, 1000e18);
+        sharePrice = bound(sharePrice, 1e18, 100e18);
 
-    vm.mockCall(
-        address(mockSuperPositions),
-        abi.encodeWithSelector(IERC1155.setApprovalForAll.selector),
-        abi.encode(true)
-    );
+        VaultConfig memory config = VaultConfig({
+            asset: address(underlyingAsset),
+            name: "Test Vault",
+            symbol: "TVLT",
+            factory: mockFactory,
+            superPositions: mockSuperPositions,
+            vaultRouter: mockVaultRouter,
+            treasury: makeAddr("treasury"),
+            managementFee: 100,
+            performanceFee: 1000,
+            oracleFee: 50,
+            recoveryAddress: makeAddr("recovery"),
+            sharesLockTime: 1 days,
+            processRedeemSettlement: 1 days,
+            assetHurdleRate: 500,
+            signerRelayer: makeAddr("relayer")
+        });
 
-    vm.mockCall(
-        address(mockVaultRouter),
-        abi.encodeWithSelector(IBaseRouter.singleXChainSingleVaultDeposit.selector),
-        abi.encode()
-    );
+        vm.mockCall(
+            address(mockSuperPositions), abi.encodeWithSelector(ERC1155.setApprovalForAll.selector), abi.encode(true)
+        );
 
-    vm.mockCall(
-        address(mockFactory),
-        abi.encodeWithSelector(ISuperformFactory.isSuperform.selector),
-        abi.encode(true)
-    );
+        vm.mockCall(
+            address(mockVaultRouter),
+            abi.encodeWithSelector(IBaseRouter.singleXChainSingleVaultDeposit.selector),
+            abi.encode()
+        );
 
-    vm.mockCall(
-        address(underlyingAsset),
-        abi.encodeWithSelector(ERC20.approve.selector),
-        abi.encode(true)
-    );
+        vm.mockCall(
+            address(mockFactory), abi.encodeWithSelector(ISuperformFactory.isSuperform.selector), abi.encode(true)
+        );
 
-    MaxApyCrossChainVault testVault = new MaxApyCrossChainVault(config);
-    underlyingAsset.mint(address(testVault), initialBalance);
+        vm.mockCall(address(underlyingAsset), abi.encodeWithSelector(ERC20.approve.selector), abi.encode(true));
 
-    address[] memory vaults = new address[](1);
-    vaults[0] = address(testVault);
+        MaxApyCrossChainVault testVault = new MaxApyCrossChainVault(config);
+        underlyingAsset.mint(address(testVault), initialBalance);
 
-    MsgCodec.VaultReport[] memory updateReports = new MsgCodec.VaultReport[](1);
-    updateReports[0] = MsgCodec.VaultReport({
-        lastUpdate: uint64(block.timestamp),
-        chainId: CHAIN_ID,
-        vaultAddress: address(testVault),
-        sharePrice: sharePrice
-    });
+        address[] memory vaults = new address[](1);
+        vaults[0] = address(testVault);
 
-    vm.prank(endpoint);
-    oracle.updateSharePrices(CHAIN_ID, updateReports);
+        MsgCodec.VaultReport[] memory updateReports = new MsgCodec.VaultReport[](1);
+        updateReports[0] = MsgCodec.VaultReport({
+            lastUpdate: uint64(block.timestamp),
+            chainId: CHAIN_ID,
+            vaultAddress: address(testVault),
+            sharePrice: sharePrice
+        });
 
-    MsgCodec.VaultReport[] memory storedReports = oracle.getStoredSharePrices(CHAIN_ID, vaults);
-    assertEq(storedReports[0].sharePrice, sharePrice, "Share price mismatch");
-    assertEq(storedReports[0].vaultAddress, address(testVault), "Vault address mismatch");
-    assertEq(storedReports[0].chainId, CHAIN_ID, "Chain ID mismatch");
-}
+        vm.prank(endpoint);
+        oracle.updateSharePrices(CHAIN_ID, updateReports);
 
-    function testFuzz_EndpointManagement(
-        address newEndpoint,
-        uint256 role
-    ) public {
+        MsgCodec.VaultReport[] memory storedReports = oracle.getStoredSharePrices(CHAIN_ID, vaults);
+        assertEq(storedReports[0].sharePrice, sharePrice, "Share price mismatch");
+        assertEq(storedReports[0].vaultAddress, address(testVault), "Vault address mismatch");
+        assertEq(storedReports[0].chainId, CHAIN_ID, "Chain ID mismatch");
+    }
+
+    function testFuzz_EndpointManagement(address newEndpoint, uint256 role) public {
         vm.assume(newEndpoint != address(0));
         vm.assume(newEndpoint != endpoint);
         vm.assume(role > oracle.ENDPOINT_ROLE());
