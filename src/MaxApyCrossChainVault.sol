@@ -35,8 +35,6 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
-import {console2} from "forge-std/console2.sol";
-
 /// @title MaxApyCrossChainVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
@@ -1668,7 +1666,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @notice Mints shares to the treasury
     function _assessMangementFees(address managementFeeReceiver, address oracleFeeReceiver, uint256 duration) private {
         uint256 managementFees = (totalAssets() * duration * managementFee) / SECS_PER_YEAR / MAX_BPS;
-        console2.log("TA :" ,totalAssets());
         uint256 managementFeeShares = convertToShares(managementFees);
 
         uint256 oracleFees = (totalAssets() * duration * oracleFee) / SECS_PER_YEAR / MAX_BPS;
