@@ -1102,7 +1102,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             uint256 totalAssetsBefore = vault.convertToAssetsCachedSharePrice(sharesBalance);
 
             // Update the vault's share price with the new reported value
-            VaultReport memory report = vault.oracle.getSharePrice(_vault.chainId, _vault.vaultAddress);
+            VaultReport memory report = vault.oracle.getLatestSharePrice(_vault.chainId, _vault.vaultAddress);
 
             vaults[superformId].lastReportedSharePrice = uint192(report.sharePrice);
 

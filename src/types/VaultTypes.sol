@@ -70,7 +70,7 @@ library VaultLib {
         returns (uint256 assets)
     {
         if (self.chainId != _chainId()) {
-            VaultReport memory report = self.oracle.getSharePrice(self.chainId, self.vaultAddress);
+            VaultReport memory report = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress);
             (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
@@ -112,7 +112,7 @@ library VaultLib {
         returns (uint256 shares)
     {
         if (self.chainId != _chainId()) {
-            VaultReport memory report = self.oracle.getSharePrice(self.chainId, self.vaultAddress);
+            VaultReport memory report = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress);
             (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
@@ -129,7 +129,7 @@ library VaultLib {
     /// @return The current share price
     function sharePrice(VaultData memory self) internal view returns (uint256) {
         if (self.chainId != _chainId()) {
-            VaultReport memory report = self.oracle.getSharePrice(self.chainId, self.vaultAddress);
+            VaultReport memory report = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress);
             (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
             return sharePrice_;
         } else {

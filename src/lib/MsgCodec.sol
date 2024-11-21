@@ -1,23 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
+
+import { VaultReport } from "../types/VaultTypes.sol";
 
 /// @title MsgCodec Library
 /// @notice A library for encoding and decoding messages used in cross-chain communication
 /// @dev This library provides functions to encode and decode vault addresses and reports
 library MsgCodec {
-    /// @notice Struct to represent a vault report
-    /// @dev This struct is used to store and transmit information about a vault
-    /// @param lastUpdate Timestamp of the last update
-    /// @param chainId ID of the chain where the vault is located
-    /// @param vaultAddress Address of the vault
-    /// @param sharePrice Current share price of the vault
-    struct VaultReport {
-        uint64 lastUpdate;
-        uint32 chainId;
-        address vaultAddress;
-        uint256 sharePrice;
-    }
-
     /// @notice Encodes vault addresses along with message type and extra options
     /// @dev This function is used to prepare vault addresses for cross-chain transmission
     /// @param _msgType Type of the message
@@ -87,9 +76,10 @@ library MsgCodec {
         pure
         returns (uint16 msgType, VaultReport[] memory message, uint256 extraOptionsStart, uint256 extraOptionsLength)
     {
-        (msgType, message, extraOptionsLength) = abi.decode(encodedMessage, (uint16, VaultReport[], uint256));
-        // Calculate the start position of extra options
-        extraOptionsStart = 7 * 32 + (message.length * 128);
+        bytes memory messageInMemory = encodedMessage;
+        (msgType, message, extraOptionsLength) = abi.decode(messageInMemory, (uint16, VaultReport[], uint256));
+
+        extraOptionsStart = 7 * 32 + (message.length * 32);
 
         return (msgType, message, extraOptionsStart, extraOptionsLength);
     }

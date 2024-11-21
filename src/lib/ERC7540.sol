@@ -1,7 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
-import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/Lib.sol";
+import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/ERC7540Types.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";

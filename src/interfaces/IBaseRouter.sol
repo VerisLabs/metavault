@@ -1,7 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
-import "../types/SuperformTypes.sol";
+import "types/Lib.sol";
 
 interface IBaseRouter {
     //////////////////////////////////////////////////////////////

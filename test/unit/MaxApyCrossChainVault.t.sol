@@ -851,7 +851,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
-        VaultReport memory report = oracle.getSharePrice(optimismChainId, vaultAddress);
+        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         // Execute divest
