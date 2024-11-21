@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "../interfaces/IERC4626Oracle.sol";
 import { MsgCodec } from "../lib/MsgCodec.sol";
-import "../interfaces/ISharePriceOracle.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { VaultReport } from "src/types/Lib.sol";
 
-contract SharePriceOracle is ISharePriceOracle, OwnableRoles {
+contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
     using MsgCodec for *;
 
     ////////////////////////////////////////////////////////////////
@@ -103,6 +104,8 @@ contract SharePriceOracle is ISharePriceOracle, OwnableRoles {
 
         return reports;
     }
+
+    function getSharePrice(uint64 chainId, address vaultAddress) public view override returns (VaultReport memory) { }
 
     function updateSharePrices(
         uint32 _srcChainId,

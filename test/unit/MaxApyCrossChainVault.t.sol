@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
- pragma solidity ^0.8.0;
+pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
 
@@ -33,6 +33,7 @@ import {
 } from "src/helpers/AddressBook.sol";
 import { IERC4626Oracle } from "src/interfaces/Lib.sol";
 import {
+    Harvest,
     LiqRequest,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
@@ -216,7 +217,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -261,7 +264,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -375,7 +380,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -408,7 +415,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
 
         {
-            oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+            oracle.setValues(
+                optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            );
         }
 
         {
@@ -495,24 +504,25 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(assets, 1000 * _1_USDCE);
     }
 
-    function test_revert_MaxApyCrossChainVault_report_VaultNotListed() public {
+    function test_revert_MaxApyCrossChainVault_harvest_VaultNotListed() public {
         _depositAtomic(1000 * _1_USDCE, users.alice);
         skip(vault.SECS_PER_YEAR());
-        VaultReport[] memory mockReport = new VaultReport[](1);
-        mockReport[0].chainId = uint64(1);
-        mockReport[0].sharePrice = uint192(2 * _1_USDCE);
-        mockReport[0].vaultAddress = makeAddr("random address");
+        Harvest[] memory mockHarvest = new Harvest[](1);
+        mockHarvest[0].chainId = uint64(1);
+        mockHarvest[0].vaultAddress = makeAddr("random address");
 
         vm.expectRevert(MaxApyCrossChainVault.VaultNotListed.selector);
-        vault.report(mockReport, users.bob);
+        vault.harvest(mockHarvest);
     }
 
-    function test_MaxApyCrossChainVault_report() public {
+    function test_MaxApyCrossChainVault_harvest() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -542,13 +552,12 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         _mintSuperpositions(address(vault), superformId, shares);
         vm.startPrank(users.alice);
-        VaultReport[] memory mockReport = new VaultReport[](1);
-        mockReport[0].chainId = optimismChainId;
-        mockReport[0].sharePrice = uint192(newSharesPrice);
-        mockReport[0].vaultAddress = vaultAddress;
+        Harvest[] memory mockHarvest = new Harvest[](1);
+        mockHarvest[0].chainId = optimismChainId;
+        mockHarvest[0].vaultAddress = vaultAddress;
 
         skip(vault.SECS_PER_YEAR());
-        oracle.setValues(vaultAddress, newSharesPrice, block.timestamp);
+        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
 
         uint256 deductedFee = 50;
 
@@ -558,7 +567,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         vm.expectEmit(true, true, true, true);
         emit Report(optimismChainId, vaultAddress, 566_695_022);
-        vault.report(mockReport, users.bob);
+        vault.harvest(mockHarvest);
         assertEq(vault.balanceOf(config.treasury), expectedMintedShares);
         // assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
     }
@@ -568,10 +577,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 newSuperformId = 999;
         uint64 newChainId = 42;
         uint8 newDecimals = 18;
-        oracle.setValues(newVault, 1 * _1_USDCE, block.timestamp);
         vm.expectEmit(true, true, true, true);
         emit AddVault(newChainId, newVault);
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(1)));
 
         assertTrue(vault.isVaultListed(newVault));
     }
@@ -811,7 +819,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint64 optimismChainId = 10;
 
         // Setup cross-chain vault
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -841,7 +851,8 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
-        (uint256 lastSharePrice,) = oracle.getSharePrice(vaultAddress);
+        VaultReport memory report = oracle.getSharePrice(optimismChainId, vaultAddress);
+        uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         // Execute divest
         vm.expectEmit(true, true, true, true);
@@ -861,7 +872,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        oracle.setValues(vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
@@ -891,13 +904,12 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         _mintSuperpositions(address(vault), superformId, shares);
         vm.startPrank(users.alice);
-        VaultReport[] memory mockReport = new VaultReport[](1);
-        mockReport[0].chainId = optimismChainId;
-        mockReport[0].sharePrice = uint192(newSharesPrice);
-        mockReport[0].vaultAddress = vaultAddress;
+        Harvest[] memory mockHarvest = new Harvest[](1);
+        mockHarvest[0].chainId = optimismChainId;
+        mockHarvest[0].vaultAddress = vaultAddress;
 
         skip(vault.SECS_PER_YEAR());
-        oracle.setValues(vaultAddress, newSharesPrice, block.timestamp);
+        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
 
         uint256 deductedFee = 50;
 
@@ -909,7 +921,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         vm.expectEmit(true, true, true, true);
         emit Report(optimismChainId, vaultAddress, 566_695_022);
-        vault.report(mockReport, users.bob);
+        vault.harvest(mockHarvest);
         assertEq(vault.balanceOf(config.treasury), 100 * _1_USDCE);
     }
 }

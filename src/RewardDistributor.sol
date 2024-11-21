@@ -144,10 +144,6 @@ contract RewardDistributor is OwnableRoles {
         _setRoot(newRoot, newIpfsHash);
     }
 
-    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
-    /*                           INTERNAL                         */
-    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
     /// @notice Sets the timelock of a given distribution.
     /// @param newTimelock The new timelock.
     /// @dev This function can only be called by the owner of the distribution.
@@ -156,7 +152,9 @@ contract RewardDistributor is OwnableRoles {
         _setTimelock(newTimelock);
     }
 
-    /* INTERNAL */
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           INTERNAL                         */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Sets the `root` and `ipfsHash` to `newRoot` and `newIpfsHash`.
     /// @dev Deletes the pending root.

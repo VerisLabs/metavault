@@ -15,6 +15,7 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 
 import {
+    Harvest,
     LiqRequest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -1078,20 +1079,18 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Updates the share prices of vaults based on oracle reports
     /// @dev This function can only be called by addresses with the ORACLE_ROLE
-    /// @param reports An array of VaultReport structures containing updated share prices
-    /// @param source The address of the oracle providing the report
-    function report(VaultReport[] calldata reports, address source) external updateWatermark onlyRoles(ORACLE_ROLE) {
+    function harvest(Harvest[] calldata harvests) external updateWatermark {
         uint256 duration = block.timestamp - lastReport;
         uint256 sharePrice_ = sharePrice();
-        for (uint256 i = 0; i < reports.length; i++) {
+        for (uint256 i = 0; i < harvests.length; i++) {
             // Cache the current report for efficiency
-            VaultReport memory _report = reports[i];
+            Harvest memory _vault = harvests[i];
 
             // Ensure the reported vault is in the approved list
-            if (!isVaultListed(_report.vaultAddress)) revert VaultNotListed();
+            if (!isVaultListed(_vault.vaultAddress)) revert VaultNotListed();
 
             // Retrieve the superform ID for the vault
-            uint256 superformId = _vaultToSuperformId[_report.vaultAddress];
+            uint256 superformId = _vaultToSuperformId[_vault.vaultAddress];
 
             // Cache the vault data for easier access
             VaultData memory vault = vaults[superformId];
@@ -1103,7 +1102,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
             uint256 totalAssetsBefore = vault.convertToAssetsCachedSharePrice(sharesBalance);
 
             // Update the vault's share price with the new reported value
-            vaults[superformId].lastReportedSharePrice = _report.sharePrice;
+            VaultReport memory report = vault.oracle.getSharePrice(_vault.chainId, _vault.vaultAddress);
+
+            vaults[superformId].lastReportedSharePrice = uint192(report.sharePrice);
 
             // Calculate the total assets value after applying the new share price
             uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance, true);
@@ -1125,10 +1126,13 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                     }
                 }
             }
+
+            // Calculate and distribute management fees based on the change in total assets
+            _assessOracleFees(report.reporter, duration);
             emit Report(vault.chainId, vault.vaultAddress, vaultDelta);
         }
         // Calculate and distribute management fees based on the change in total assets
-        _assessMangementFees(treasury, source, duration);
+        _assessManagementFees(treasury, duration);
         // Update timestamp of last report
         lastReport = block.timestamp;
     }
@@ -1664,13 +1668,19 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Applies annualized fees to vault assets
     /// @notice Mints shares to the treasury
-    function _assessMangementFees(address managementFeeReceiver, address oracleFeeReceiver, uint256 duration) private {
+    function _assessManagementFees(address managementFeeReceiver, uint256 duration) private {
         uint256 managementFees = (totalAssets() * duration * managementFee) / SECS_PER_YEAR / MAX_BPS;
         uint256 managementFeeShares = convertToShares(managementFees);
 
+        _mint(managementFeeReceiver, managementFeeShares);
+    }
+
+    /// @notice Applies annualized fees to vault assets
+    /// @notice Mints shares to the treasury
+    function _assessOracleFees(address oracleFeeReceiver, uint256 duration) private {
         uint256 oracleFees = (totalAssets() * duration * oracleFee) / SECS_PER_YEAR / MAX_BPS;
         uint256 oracleFeeShares = convertToShares(oracleFees);
-        _mint(managementFeeReceiver, managementFeeShares);
+
         _mint(oracleFeeReceiver, oracleFeeShares);
     }
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { ISharePriceOracle } from "../interfaces/ISharePriceOracle.sol";
+import { IERC4626Oracle } from "../interfaces/IERC4626Oracle.sol";
 
+import { ILzEndpoint } from "../interfaces/Lib.sol";
 import "./../lib/MsgCodec.sol";
-import { ILzEndpoint } from "../interfaces/ILzEndpoint.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import { MessagingFee, OApp, Origin } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import { OAppOptionsType3 } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OAppOptionsType3.sol";
@@ -22,7 +22,7 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
     uint8 private constant AB_TYPE = 1;
     uint8 private constant ABA_TYPE = 2;
 
-    ISharePriceOracle public immutable oracle;
+    IERC4626Oracle public immutable oracle;
 
     /**
      * @notice Constructs the LzEndpoint contract
@@ -31,7 +31,7 @@ contract LzEndpoint is OApp, OAppOptionsType3, ILzEndpoint {
      * @param _oracle The SharePriceOracle contract address
      */
     constructor(address _endpoint, address _owner, address _oracle) OApp(_endpoint, _owner) Ownable(_owner) {
-        oracle = ISharePriceOracle(_oracle);
+        oracle = IERC4626Oracle(_oracle);
     }
 
     // /** @inheritdoc ILzEndpoint */

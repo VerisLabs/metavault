@@ -70,7 +70,8 @@ library VaultLib {
         returns (uint256 assets)
     {
         if (self.chainId != _chainId()) {
-            (uint256 sharePrice_, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
+            VaultReport memory report = self.oracle.getSharePrice(self.chainId, self.vaultAddress);
+            (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
             }
@@ -111,7 +112,8 @@ library VaultLib {
         returns (uint256 shares)
     {
         if (self.chainId != _chainId()) {
-            (uint256 sharePrice_, uint256 lastUpdated) = self.oracle.getSharePrice(self.vaultAddress);
+            VaultReport memory report = self.oracle.getSharePrice(self.chainId, self.vaultAddress);
+            (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
             }
@@ -127,7 +129,8 @@ library VaultLib {
     /// @return The current share price
     function sharePrice(VaultData memory self) internal view returns (uint256) {
         if (self.chainId != _chainId()) {
-            (uint256 sharePrice_,) = self.oracle.getSharePrice(self.vaultAddress);
+            VaultReport memory report = self.oracle.getSharePrice(self.chainId, self.vaultAddress);
+            (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
             return sharePrice_;
         } else {
             // If it's on this chain, fetch the share price directly
@@ -157,14 +160,16 @@ library VaultLib {
     }
 }
 
-/// @notice A struct passed to the vault aggregator to report new data about a vault
-/// @dev Used to provide updates about vault share prices and other data
 struct VaultReport {
-    /// @dev The ID of the source chain
-    uint64 chainId;
-    /// @dev The last fetched share price of the vault
     uint192 sharePrice;
-    /// @dev The address of the vault
+    uint64 lastUpdate;
+    uint64 chainId;
+    address reporter;
+    address vaultAddress;
+}
+
+struct Harvest {
+    uint64 chainId;
     address vaultAddress;
 }
 
