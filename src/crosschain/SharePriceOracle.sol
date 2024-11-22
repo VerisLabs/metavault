@@ -136,7 +136,14 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
         return reports;
     }
 
-    function getLatestSharePrice(uint64 _srcChainId, address _vaultAddress) external view returns (VaultReport memory) {
+    function getLatestSharePrice(
+        uint64 _srcChainId,
+        address _vaultAddress
+    )
+        external
+        view
+        returns (VaultReport memory)
+    {
         bytes32 key = getPriceKey(_srcChainId, _vaultAddress);
         return sharePrices[key];
     }

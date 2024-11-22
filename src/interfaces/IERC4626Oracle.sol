@@ -7,6 +7,7 @@ import { MsgCodec } from "lib/MsgCodec.sol";
  * @title IERC4626Oracle
  * @notice Interface for the SharePriceOracle contract
  */
+
 interface IERC4626Oracle {
     /*//////////////////////////////////////////////////////////////
                             VIEW FUNCTIONS
