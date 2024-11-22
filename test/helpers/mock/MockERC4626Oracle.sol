@@ -6,7 +6,7 @@ import { VaultReport } from "src/types/Lib.sol";
 contract MockERC4626Oracle {
     mapping(uint64 chainId => mapping(address asset => VaultReport)) public reports;
 
-    function getSharePrice(uint64 chainId, address vaultAddress) public view returns (VaultReport memory) {
+    function getLatestSharePrice(uint64 chainId, address vaultAddress) public view returns (VaultReport memory) {
         return reports[chainId][vaultAddress];
     }
 

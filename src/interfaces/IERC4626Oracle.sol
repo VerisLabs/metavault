@@ -30,14 +30,6 @@ interface IERC4626Oracle {
         view
         returns (VaultReport memory);
 
-    function sharePrices(
-        uint64 _srcChainId,
-        address _vaultAddress
-    )
-        external
-        view
-        returns (uint64 lastUpdate, uint64 chainId, address vaultAddress, uint256 sharePrice);
-
     function getStoredSharePrices(
         uint64 _srcChainId,
         address[] memory _vaultAddresses

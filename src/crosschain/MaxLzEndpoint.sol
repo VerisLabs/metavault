@@ -167,7 +167,7 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
         payable
         validVaultArray(vaultAddresses)
     {
-        VaultReport[] memory reports = oracle.getLatestSharePrices(vaultAddresses);
+        VaultReport[] memory reports = oracle.getSharePrices(vaultAddresses);
         bytes memory message = MsgCodec.encodeVaultReports(AB_TYPE, reports, options);
         bytes memory combinedOptions = _getCombinedOptions(dstEid, AB_TYPE, options);
 
@@ -298,7 +298,7 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     function _handleABAResponse(Origin calldata origin, bytes calldata message, bytes calldata extraData) private {
         (, address[] memory vaultAddresses, uint256 start, uint256 length) = MsgCodec.decodeVaultAddresses(message);
 
-        VaultReport[] memory reports = oracle.getLatestSharePrices(vaultAddresses);
+        VaultReport[] memory reports = oracle.getSharePrices(vaultAddresses);
         bytes memory returnOptions = message[start:start + length];
         bytes memory returnMessage = MsgCodec.encodeVaultReports(AB_TYPE, reports, returnOptions);
 

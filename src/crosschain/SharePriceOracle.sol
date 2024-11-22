@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import { IERC4626Oracle } from "interfaces/Lib.sol";
+import {ERC4626} from "solady/tokens/ERC4626.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { VaultReport } from "types/Lib.sol";
 
@@ -110,6 +111,28 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
     ////////////////////////////////////////////////////////////////
     ///                 EXTERNAL VIEW FUNCTIONS                   ///
     ////////////////////////////////////////////////////////////////
+    function getSharePrices(address[] memory vaultAddresses) 
+        public 
+        view 
+        override 
+        returns (VaultReport[] memory) 
+    {
+        VaultReport[] memory reports = new VaultReport[](vaultAddresses.length);
+        
+        for (uint256 i = 0; i < vaultAddresses.length; i++) {
+            ERC4626 vault = ERC4626(vaultAddresses[i]);
+            reports[i] = VaultReport({
+                lastUpdate: uint64(block.timestamp),
+                chainId: chainId,
+                vaultAddress: vaultAddresses[i],
+                sharePrice: uint192(vault.convertToAssets(10 ** vault.decimals())),
+                reporter: msg.sender
+            });
+        }
+        
+        return reports;
+    }
+
     function getStoredSharePrices(
         uint64 _srcChainId,
         address[] calldata _vaultAddresses
@@ -145,7 +168,7 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
         returns (VaultReport memory)
     {
         bytes32 key = getPriceKey(_srcChainId, _vaultAddress);
-        return sharePrices[key];
+        return sharePrices[key][sharePrices[key].length - 1];
     }
 
     function getPriceKey(uint64 _srcChainId, address _vault) public pure returns (bytes32) {
