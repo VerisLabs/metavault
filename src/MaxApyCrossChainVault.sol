@@ -33,11 +33,11 @@ import {
     VaultReport
 } from "./types/Lib.sol";
 
-/// @title MaxApyCrossChainVault
+/// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
+contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/

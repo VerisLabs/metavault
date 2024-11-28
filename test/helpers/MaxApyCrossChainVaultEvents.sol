@@ -1,6 +1,6 @@
 pragma solidity ^0.8.19;
 
-contract MaxApyCrossChainVaultEvents {
+contract MetaVaultEvents {
     /// @dev Emitted when a redeem request is processed
     event ProcessRedeemRequest(address indexed controller, uint256 shares);
 

@@ -23,11 +23,11 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
-/// @title MaxApyCrossChainVault
+/// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-interface IMaxApyCrossChainVault {
+interface IMetaVault {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       PUBLIC GETTERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/

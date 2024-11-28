@@ -1,7 +1,7 @@
 // import { Script } from "forge-std/Script.sol";
 
 // import { IBaseRouter, ISuperPositions, ISuperformFactory } from "interfaces/Lib.sol";
-// import { MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+// import { MetaVault } from "src/MetaVault.sol";
 // import {
 //     SUPERFORM_FACTORY_BASE,
 //     SUPERFORM_ROUTER_BASE,
@@ -11,7 +11,7 @@
 // import { VaultConfig } from "types/Lib.sol";
 
 // contract EthereumDeploymentScript is Script {
-//     MaxApyCrossChainVault vault;
+//     MetaVault vault;
 //     VaultConfig config;
 //     address deployerAddress;
 //     address signerRelayer;
@@ -60,7 +60,7 @@
 
 //         vm.startBroadcast(deployerPrivateKey);
 
-//         vault = new MaxApyCrossChainVault(config);
+//         vault = new MetaVault(config);
 
 //         vault.grantRoles(manager, vault.MANAGER_ROLE());
 //         vault.grantRoles(relayer, vault.RELAYER_ROLE());

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { ERC20Receiver } from "./ERC20Receiver.sol";
-import { IBaseRouter, IMaxApyCrossChainVault, ISuperPositions } from "interfaces/Lib.sol";
+import { IBaseRouter, IMetaVault, ISuperPositions } from "interfaces/Lib.sol";
 
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { Initializable } from "solady/utils/Initializable.sol";
@@ -46,7 +46,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
     /// @notice Superform router
     IBaseRouter public superformRouter;
     /// @notice underlying vault
-    IMaxApyCrossChainVault public vault;
+    IMetaVault public vault;
     /// @notice asset of underying vault
     address public asset;
     /// @notice Receiver delegation for withdrawals
@@ -65,7 +65,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
     constructor() { }
 
     function initialize(
-        IMaxApyCrossChainVault _vault,
+        IMetaVault _vault,
         address _owner,
         IBaseRouter _superformRouter,
         ISuperPositions _superPositions

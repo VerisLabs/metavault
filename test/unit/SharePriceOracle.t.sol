@@ -1,7 +1,7 @@
 // // SPDX-License-Identifier: MIT
 // pragma solidity ^0.8.19;
 
-// import { MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+// import { MetaVault } from "src/MetaVault.sol";
 // import { SharePriceOracle } from "src/crosschain/SharePriceOracle.sol";
 
 // import { MockERC20 } from "../helpers/mock/MockERC20.sol";
@@ -21,8 +21,8 @@
 //     address public admin;
 //     address public endpoint;
 //     uint32 public constant CHAIN_ID = 1;
-//     MaxApyCrossChainVault public vault1;
-//     MaxApyCrossChainVault public vault2;
+//     MetaVault public vault1;
+//     MetaVault public vault2;
 //     MockERC20 public underlyingAsset;
 
 //     ISuperPositions public mockSuperPositions;
@@ -99,8 +99,8 @@
 //             address(mockFactory), abi.encodeWithSelector(ISuperformFactory.isSuperform.selector), abi.encode(true)
 //         );
 
-//         vault1 = new MaxApyCrossChainVault(config1);
-//         vault2 = new MaxApyCrossChainVault(config2);
+//         vault1 = new MetaVault(config1);
+//         vault2 = new MetaVault(config2);
 
 //         underlyingAsset.mint(address(vault1), 1000e18);
 //         underlyingAsset.mint(address(vault2), 1000e18);
@@ -463,7 +463,7 @@
 
 //         vm.mockCall(address(underlyingAsset), abi.encodeWithSelector(ERC20.approve.selector), abi.encode(true));
 
-//         MaxApyCrossChainVault testVault = new MaxApyCrossChainVault(config);
+//         MetaVault testVault = new MetaVault(config);
 //         underlyingAsset.mint(address(testVault), initialBalance);
 
 //         address[] memory vaults = new address[](1);

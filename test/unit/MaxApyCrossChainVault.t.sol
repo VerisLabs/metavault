@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
 
-import { MaxApyCrossChainVaultEvents } from "../helpers/MaxApyCrossChainVaultEvents.sol";
+import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
 
@@ -13,10 +13,10 @@ import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
 import { SuperformGateway } from "crosschain/Lib.sol";
-import { IMaxApyCrossChainVault, ISuperformGateway } from "interfaces/Lib.sol";
+import { IMetaVault, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { ERC4626, ERC7540, MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+import { ERC4626, ERC7540, MetaVault } from "src/MetaVault.sol";
 
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
@@ -47,7 +47,7 @@ import {
     VaultReport
 } from "src/types/Lib.sol";
 
-contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCrossChainVaultEvents {
+contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
 
     MockERC4626Oracle public oracle;
@@ -60,7 +60,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         relayer = MockSignerRelayer(address(config.signerRelayer));
         config.signerRelayer = relayer.signerAddress();
 
-        vault = new MaxApyCrossChainVault(config);
+        vault = new MetaVault(config);
         gateway = deployGatewayBase(address(vault), users.alice);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
         vault.setGateway(ISuperformGateway(address(gateway)));
@@ -85,7 +85,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vm.label(SUPERFORM_CORE_STATE_REGISTRY_BASE, "CoreStateRegistry");
         //      vm.label(LAYERZERO_ULTRALIGHT_NODE_BASE, "UltraLightNode");
         vm.label(SUPERFORM_ROUTER_BASE, "SuperRouter");
-        vm.label(address(vault), "MaxApyCrossChainVault");
+        vm.label(address(vault), "MetaVault");
         vm.label(USDCE_BASE, "USDC");
         vm.label(address(oracle), "SharePriceOracle");
         vm.label(address(relayer), "Relayer");
@@ -99,7 +99,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         _setupContractLabels();
     }
 
-    function test_MaxApyCrossChainVault_initialization() public view {
+    function test_MetaVault_initialization() public view {
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.asset(), USDCE_BASE);
         assertEq(vault.decimals(), 6);
@@ -113,7 +113,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.treasury(), config.treasury);
     }
 
-    function test_MaxApyCrossChainVault_depositAtomic() public {
+    function test_MetaVault_depositAtomic() public {
         uint256 amount = 1000 * _1_USDCE;
         vm.expectEmit(true, true, true, true);
         emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
@@ -125,7 +125,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.balanceOf(users.alice), amount);
     }
 
-    function test_MaxApyCrossChainVault_mintAtomic() public {
+    function test_MetaVault_mintAtomic() public {
         uint256 amount = 1000 * _1_USDCE;
         vm.expectEmit(true, true, true, true);
         emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
@@ -137,7 +137,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.balanceOf(users.alice), amount);
     }
 
-    function test_MaxApyCrossChainVault_investSingleDirectSingleVault() public {
+    function test_MetaVault_investSingleDirectSingleVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
 
         vault.addVault({
@@ -151,7 +151,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
-        vm.expectRevert(MaxApyCrossChainVault.InsufficientAssets.selector);
+        vm.expectRevert(MetaVault.InsufficientAssets.selector);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview + 1);
 
         vm.expectEmit(true, true, true, true);
@@ -164,7 +164,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(yUsdce.balanceOf(address(vault)), depositPreview);
     }
 
-    function test_MaxApyCrossChainVault_investSingleDirectMultiVault() public {
+    function test_MetaVault_investSingleDirectMultiVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         MockERC4626 smUsdce = new MockERC4626(USDCE_BASE, "Sommelier USDCE", "smUSDCe", true, 0);
 
@@ -203,7 +203,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         minAmountsOut[1] += 1;
 
-        vm.expectRevert(MaxApyCrossChainVault.InsufficientAssets.selector);
+        vm.expectRevert(MetaVault.InsufficientAssets.selector);
         vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
 
         minAmountsOut[1] -= 1;
@@ -218,7 +218,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(smUsdce.balanceOf(address(vault)), minAmountsOut[1]);
     }
 
-    function test_MaxApyCrossChainVault_investSingleXChainSingleVault() public {
+    function test_MetaVault_investSingleXChainSingleVault() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
@@ -265,7 +265,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
     }
 
-    function test_MaxApyCrossChainVault_refund_gas() public {
+    function test_MetaVault_refund_gas() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
@@ -294,17 +294,17 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(address(vault).balance, 0);
     }
 
-    function test_revert_MaxApyCrossChainVault_redeem_requestNotProcessed() public {
+    function test_revert_MetaVault_redeem_requestNotProcessed() public {
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
 
         skip(config.sharesLockTime);
         vm.startPrank(users.alice);
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
-        vm.expectRevert(MaxApyCrossChainVault.RedeemNotProcessed.selector);
+        vm.expectRevert(MetaVault.RedeemNotProcessed.selector);
         vault.redeem(sharesBalance, users.alice, users.alice);
     }
 
-    function test_MaxApyCrossChainVault_processRedeemRequest_from_idle() public {
+    function test_MetaVault_processRedeemRequest_from_idle() public {
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
         skip(config.sharesLockTime);
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
@@ -327,7 +327,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(assets, 1000 * _1_USDCE);
     }
 
-    function test_MaxApyCrossChainVault_processRedeemRequest_from_local_queue() public {
+    function test_MetaVault_processRedeemRequest_from_local_queue() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         vault.addVault({
             chainId: baseChainId,
@@ -367,7 +367,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(assets, totalAssetsAfterLock);
     }
 
-    function test_MaxApyCrossChainVault_processRedeemRequest_from_local_and_xchain_queue() public {
+    function test_MetaVault_processRedeemRequest_from_local_and_xchain_queue() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         vault.addVault({
             chainId: baseChainId,
@@ -462,7 +462,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.totalIdle(), 0);
     }
 
-    function test_MaxApyCrossChainVault_processRedeemRequest_signature() public {
+    function test_MetaVault_processRedeemRequest_signature() public {
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
         skip(config.sharesLockTime);
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
@@ -510,18 +510,18 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(assets, 1000 * _1_USDCE);
     }
 
-    function test_revert_MaxApyCrossChainVault_harvest_VaultNotListed() public {
+    function test_revert_MetaVault_harvest_VaultNotListed() public {
         _depositAtomic(1000 * _1_USDCE, users.alice);
         skip(vault.SECS_PER_YEAR());
         Harvest[] memory mockHarvest = new Harvest[](1);
         mockHarvest[0].chainId = uint64(1);
         mockHarvest[0].vaultAddress = makeAddr("random address");
 
-        vm.expectRevert(MaxApyCrossChainVault.VaultNotListed.selector);
+        vm.expectRevert(MetaVault.VaultNotListed.selector);
         vault.harvest(mockHarvest);
     }
 
-    function test_MaxApyCrossChainVault_harvest() public {
+    function test_MetaVault_harvest() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
@@ -578,7 +578,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         // assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
     }
 
-    function test_MaxApyCrossChainVault_addVault() public {
+    function test_MetaVault_addVault() public {
         address newVault = address(0x123);
         uint256 newSuperformId = 999;
         uint64 newChainId = 42;
@@ -591,7 +591,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertTrue(vault.isVaultListed(newVault));
     }
 
-    function test_MaxApyCrossChainVault_addVault_ZeroSharePrice() public {
+    function test_MetaVault_addVault_ZeroSharePrice() public {
         address newVault = address(0x123);
         uint256 newSuperformId = 999;
         uint64 newChainId = 42;
@@ -601,7 +601,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
     }
 
-    function test_revert_MaxApyCrossChainVault_addVault_alreadyListed() public {
+    function test_revert_MetaVault_addVault_alreadyListed() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         uint8 decimals = yUsdce.decimals();
         vault.addVault({
@@ -612,7 +612,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
             deductedFees: 0,
             oracle: IERC4626Oracle(address(0))
         });
-        vm.expectRevert(MaxApyCrossChainVault.VaultAlreadyListed.selector);
+        vm.expectRevert(MetaVault.VaultAlreadyListed.selector);
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
@@ -623,7 +623,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         });
     }
 
-    function test_MaxApyCrossChainVault_setOracle() public {
+    function test_MetaVault_setOracle() public {
         address newOracle = address(0x789);
         uint64 chainId = 42;
 
@@ -632,7 +632,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.setOracle(chainId, newOracle);
     }
 
-    function test_MaxApyCrossChainVault_setSharesLockTime() public {
+    function test_MetaVault_setSharesLockTime() public {
         uint24 newLockTime = 60 days;
 
         vm.expectEmit(true, true, true, true);
@@ -642,7 +642,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.sharesLockTime(), newLockTime);
     }
 
-    function test_MaxApyCrossChainVault_setManagementFee() public {
+    function test_MetaVault_setManagementFee() public {
         uint16 newFee = 3000;
 
         vm.expectEmit(true, true, true, true);
@@ -652,7 +652,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.managementFee(), newFee);
     }
 
-    function test_MaxApyCrossChainVault_setOracleFee() public {
+    function test_MetaVault_setOracleFee() public {
         uint16 newFee = 2500;
 
         vm.expectEmit(true, true, true, true);
@@ -662,14 +662,14 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.oracleFee(), newFee);
     }
 
-    function test_revert_MaxApyCrossChainVault_emergencyShutdown() public {
+    function test_revert_MetaVault_emergencyShutdown() public {
         vault.setEmergencyShutdown(true);
 
-        vm.expectRevert(MaxApyCrossChainVault.VaultShutdown.selector);
+        vm.expectRevert(MetaVault.VaultShutdown.selector);
         vault.requestDeposit(100 * _1_USDCE, users.alice, users.alice);
     }
 
-    function test_revert_MaxApyCrossChainVault_invalidController() public {
+    function test_revert_MetaVault_invalidController() public {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
 
@@ -678,7 +678,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.deposit(amount, users.bob, users.alice);
     }
 
-    function test_MaxApyCrossChainVault_setOperator() public {
+    function test_MetaVault_setOperator() public {
         uint256 amount = 100 * _1_USDCE;
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
@@ -694,7 +694,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.deposit(amount, users.alice, users.alice);
     }
 
-    function test_revert_MaxApyCrossChainVault_setOperator_invalidOperator() public {
+    function test_revert_MetaVault_setOperator_invalidOperator() public {
         vm.expectRevert(ERC7540.InvalidOperator.selector);
         vault.setOperator(users.alice, true);
     }
@@ -849,7 +849,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
     }
 
-    function test_MaxApyCrossChainVault_management_fees() public {
+    function test_MetaVault_management_fees() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;

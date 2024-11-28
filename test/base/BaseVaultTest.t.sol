@@ -5,7 +5,7 @@ import { SuperformGateway } from "crosschain/Lib.sol";
 import {
     IBaseRouter,
     IERC4626Oracle,
-    IMaxApyCrossChainVault,
+    IMetaVault,
     ISuperPositions,
     ISuperformFactory,
     ISuperformGateway
@@ -13,7 +13,7 @@ import {
 
 import { ProxyAdmin } from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-import { MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+import { MetaVault } from "src/MetaVault.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     SUPERFORM_FACTORY_BASE,
@@ -29,7 +29,7 @@ import { VaultConfig } from "types/Lib.sol";
 
 contract BaseVaultTest is BaseTest {
     VaultConfig public config;
-    MaxApyCrossChainVault public vault;
+    MetaVault public vault;
 
     function polygonUsdceVaultConfig() public returns (VaultConfig memory) {
         return VaultConfig({
@@ -100,7 +100,7 @@ contract BaseVaultTest is BaseTest {
     function _depositAtomic(uint256 assets, address receiver) internal returns (uint256 _shares) {
         bytes[] memory callDatas = new bytes[](2);
         callDatas[0] =
-            abi.encodeWithSelector(MaxApyCrossChainVault.requestDeposit.selector, assets, receiver, users.alice);
+            abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
         callDatas[1] = abi.encodeWithSignature("deposit(uint256,address)", assets, receiver);
         bytes[] memory returnData = vault.multicall(callDatas);
         return abi.decode(returnData[1], (uint256));
@@ -110,7 +110,7 @@ contract BaseVaultTest is BaseTest {
         bytes[] memory callDatas = new bytes[](2);
         uint256 assets = vault.convertToAssets(shares);
         callDatas[0] =
-            abi.encodeWithSelector(MaxApyCrossChainVault.requestDeposit.selector, assets, receiver, users.alice);
+            abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
         callDatas[1] = abi.encodeWithSignature("mint(uint256,address)", shares, receiver);
         bytes[] memory returnData = vault.multicall(callDatas);
         return abi.decode(returnData[1], (uint256));

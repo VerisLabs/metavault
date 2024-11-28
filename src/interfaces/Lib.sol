@@ -8,7 +8,7 @@ import {
 } from "./ILayerZeroEndpointV2.sol";
 import { ILayerZeroReceiver } from "./ILayerZeroReceiver.sol";
 
-import { IMaxApyCrossChainVault } from "./IMaxApyCrossChainVault.sol";
+import { IMetaVault } from "./IMetaVault.sol";
 import { ISuperPositions } from "./ISuperPositions.sol";
 import { ISuperformFactory } from "./ISuperformFactory.sol";
 import { ISuperformGateway } from "./ISuperformGateway.sol";

@@ -10,7 +10,7 @@ import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { ERC4626, ERC7540, MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
+import { ERC4626, ERC7540, MetaVault } from "src/MetaVault.sol";
 
 import { SuperformGateway } from "crosschain/SuperformGateway.sol";
 import "src/helpers/AddressBook.sol";
@@ -43,7 +43,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
         config = polygonUsdceVaultConfig();
-        vault = new MaxApyCrossChainVault(config);
+        vault = new MetaVault(config);
         SuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
         vault.setGateway(ISuperformGateway(address(gateway)));
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
@@ -114,7 +114,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         uint256 amount = 100 * _1_USDCE;
         vault.requestDeposit(amount, users.alice, users.alice);
         uint256 shares = vault.deposit(amount, users.alice);
-        vm.expectRevert(MaxApyCrossChainVault.SharesLocked.selector);
+        vm.expectRevert(MetaVault.SharesLocked.selector);
         vault.requestRedeem(shares, users.alice, users.alice);
     }
 
