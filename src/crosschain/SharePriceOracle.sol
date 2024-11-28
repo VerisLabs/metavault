@@ -2,8 +2,9 @@
 pragma solidity ^0.8.20;
 
 import { IERC4626Oracle } from "interfaces/Lib.sol";
-import {ERC4626} from "solady/tokens/ERC4626.sol";
+
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultReport } from "types/Lib.sol";
 
 contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
@@ -111,14 +112,9 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
     ////////////////////////////////////////////////////////////////
     ///                 EXTERNAL VIEW FUNCTIONS                   ///
     ////////////////////////////////////////////////////////////////
-    function getSharePrices(address[] memory vaultAddresses) 
-        public 
-        view 
-        override 
-        returns (VaultReport[] memory) 
-    {
+    function getSharePrices(address[] memory vaultAddresses) public view override returns (VaultReport[] memory) {
         VaultReport[] memory reports = new VaultReport[](vaultAddresses.length);
-        
+
         for (uint256 i = 0; i < vaultAddresses.length; i++) {
             ERC4626 vault = ERC4626(vaultAddresses[i]);
             reports[i] = VaultReport({
@@ -129,7 +125,7 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
                 reporter: msg.sender
             });
         }
-        
+
         return reports;
     }
 

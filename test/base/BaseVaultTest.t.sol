@@ -1,6 +1,18 @@
 import { BaseTest } from "./BaseTest.t.sol";
 
-import { IBaseRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory } from "interfaces/Lib.sol";
+import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
+import { SuperformGateway } from "crosschain/Lib.sol";
+import {
+    IBaseRouter,
+    IERC4626Oracle,
+    IMaxApyCrossChainVault,
+    ISuperPositions,
+    ISuperformFactory,
+    ISuperformGateway
+} from "interfaces/Lib.sol";
+
+import { ProxyAdmin } from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
+import { TransparentUpgradeableProxy } from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
@@ -31,11 +43,9 @@ contract BaseVaultTest is BaseTest {
             sharesLockTime: 30 days,
             processRedeemSettlement: 1 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
-            vaultRouter: IBaseRouter(SUPERFORM_ROUTER_POLYGON),
-            factory: ISuperformFactory(SUPERFORM_FACTORY_POLYGON),
             treasury: makeAddr("treasury"),
             recoveryAddress: makeAddr("recoveryAddress"),
-            signerRelayer: address(1)
+            signerRelayer: address(new MockSignerRelayer(0xA111ce))
         });
     }
 
@@ -51,12 +61,40 @@ contract BaseVaultTest is BaseTest {
             sharesLockTime: 30 days,
             processRedeemSettlement: 1 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
-            vaultRouter: IBaseRouter(SUPERFORM_ROUTER_BASE),
-            factory: ISuperformFactory(SUPERFORM_FACTORY_BASE),
             treasury: makeAddr("treasury"),
             recoveryAddress: makeAddr("recoveryAddress"),
-            signerRelayer: address(1)
+            signerRelayer: address(new MockSignerRelayer(0xA111ce))
         });
+    }
+
+    function deployGatewayPolygon(address vault, address owner) public returns (SuperformGateway) {
+        ProxyAdmin admin = new ProxyAdmin(owner);
+        SuperformGateway implementation = new SuperformGateway();
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+            address(implementation),
+            owner,
+            abi.encodeWithSelector(
+                SuperformGateway.initialize.selector,
+                vault,
+                owner,
+                SUPERFORM_ROUTER_POLYGON,
+                SUPERFORM_SUPERPOSITIONS_POLYGON
+            )
+        );
+        return SuperformGateway(address(proxy));
+    }
+
+    function deployGatewayBase(address vault, address owner) public returns (SuperformGateway) {
+        ProxyAdmin admin = new ProxyAdmin(owner);
+        SuperformGateway implementation = new SuperformGateway();
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+            address(implementation),
+            owner,
+            abi.encodeWithSelector(
+                SuperformGateway.initialize.selector, vault, owner, SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE
+            )
+        );
+        return SuperformGateway(address(proxy));
     }
 
     function _depositAtomic(uint256 assets, address receiver) internal returns (uint256 _shares) {

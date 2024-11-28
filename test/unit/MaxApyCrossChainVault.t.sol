@@ -12,6 +12,8 @@ import { MockERC4626Oracle } from "../helpers/mock/MockERC4626Oracle.sol";
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
+import { SuperformGateway } from "crosschain/Lib.sol";
+import { IMaxApyCrossChainVault, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC4626, ERC7540, MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
@@ -50,14 +52,18 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
     MockERC4626Oracle public oracle;
     MockSignerRelayer public relayer;
+    SuperformGateway public gateway;
     uint64 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
-        relayer = new MockSignerRelayer(0xA111ce);
+        relayer = MockSignerRelayer(address(config.signerRelayer));
         config.signerRelayer = relayer.signerAddress();
 
         vault = new MaxApyCrossChainVault(config);
+        gateway = deployGatewayBase(address(vault), users.alice);
+        gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
+        vault.setGateway(ISuperformGateway(address(gateway)));
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
         vault.grantRoles(users.alice, vault.ORACLE_ROLE());
@@ -250,9 +256,9 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.totalXChainAssets(), 0);
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
-        _mintSuperpositions(address(vault), superformId, shares);
-        assertEq(vault.totalAssets(), 999_999_482);
-        assertEq(vault.totalWithdrawableAssets(), 999_999_482);
+        _mintSuperpositions(address(gateway), superformId, shares);
+        assertEq(vault.totalAssets(), 999999482);
+        assertEq(vault.totalWithdrawableAssets(), 999999482);
         assertEq(vault.totalXChainAssets(), 599_999_482);
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalIdle(), 400 * _1_USDCE);
@@ -404,7 +410,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
             req
         );
 
-        _mintSuperpositions(address(vault), superformId, shares);
+        _mintSuperpositions(address(gateway), superformId, shares);
 
         vm.startPrank(users.alice);
 
@@ -440,14 +446,14 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         }
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
-        address receiver = vault.receivers(users.alice);
+        address receiver = gateway.getReceiver(users.alice, abi.encode(superformId));
         assertEq(USDCE_BASE.balanceOf(receiver), 0);
         assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
         assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
 
         deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
         skip(config.processRedeemSettlement);
-        vault.fulfillSettledRequests(users.alice);
+        gateway.settleLiquidation(users.alice, superformId);
         assertEq(vault.claimableRedeemRequest(users.alice), 1000 * _1_USDCE);
         uint256 assets = vault.redeem(aliceBalance, users.alice, users.alice);
         assertEq(assets, 400 * _1_USDCE + 588 * _1_USDCE);
@@ -550,7 +556,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
             req
         );
 
-        _mintSuperpositions(address(vault), superformId, shares);
+        _mintSuperpositions(address(gateway), superformId, shares);
         vm.startPrank(users.alice);
         Harvest[] memory mockHarvest = new Harvest[](1);
         mockHarvest[0].chainId = optimismChainId;
@@ -577,9 +583,10 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 newSuperformId = 999;
         uint64 newChainId = 42;
         uint8 newDecimals = 18;
+        oracle.setValues(newChainId, address(newVault), 1e6, block.timestamp, address(1));
         vm.expectEmit(true, true, true, true);
         emit AddVault(newChainId, newVault);
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(1)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
 
         assertTrue(vault.isVaultListed(newVault));
     }
@@ -660,30 +667,6 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         vm.expectRevert(MaxApyCrossChainVault.VaultShutdown.selector);
         vault.requestDeposit(100 * _1_USDCE, users.alice, users.alice);
-    }
-
-    function test_MaxApyCrossChainVault_onERC1155Received() public {
-        uint256 superformId = 1;
-        uint256 bridgedAssets = 1000 * _1_USDCE;
-
-        vm.expectEmit(true, true, true, true);
-        emit SettleXChainInvest(superformId, 0);
-        vault.onERC1155Received(address(0), address(0), superformId, bridgedAssets, "");
-    }
-
-    function test_MaxApyCrossChainVault_onERC1155BatchReceived() public {
-        uint256[] memory superformIds = new uint256[](2);
-        superformIds[0] = 1;
-        superformIds[1] = 2;
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 500 * _1_USDCE;
-        amounts[1] = 500 * _1_USDCE;
-
-        vm.expectEmit(true, true, true, true);
-        emit SettleXChainInvest(superformIds[0], 0);
-        vm.expectEmit(true, true, true, true);
-        emit SettleXChainInvest(superformIds[1], 0);
-        vault.onERC1155BatchReceived(address(0), address(0), superformIds, amounts, "");
     }
 
     function test_revert_MaxApyCrossChainVault_invalidController() public {
@@ -843,7 +826,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             investReq
         );
-        _mintSuperpositions(address(vault), superformId, shares);
+        _mintSuperpositions(address(gateway), superformId, shares);
 
         uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
 
@@ -863,8 +846,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
-        assertEq(vault.pendingXChainDivests(superformId), expectedDivestedValue);
-        assertEq(vault.totalPendingXChainDivests(), expectedDivestedValue);
+        assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
     }
 
     function test_MaxApyCrossChainVault_management_fees() public {
@@ -902,7 +884,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
             req
         );
 
-        _mintSuperpositions(address(vault), superformId, shares);
+        _mintSuperpositions(address(gateway), superformId, shares);
         vm.startPrank(users.alice);
         Harvest[] memory mockHarvest = new Harvest[](1);
         mockHarvest[0].chainId = optimismChainId;

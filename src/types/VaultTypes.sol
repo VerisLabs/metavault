@@ -7,6 +7,7 @@ import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { IBaseRouter } from "src/interfaces/IBaseRouter.sol";
 import { ISuperPositions } from "src/interfaces/ISuperPositions.sol";
 import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
+import { ISuperformGateway } from "src/interfaces/ISuperformGateway.sol";
 
 /// @dev The maximum allowable staleness for oracle data before being considered outdated
 uint256 constant ORACLE_STALENESS_TOLERANCE = 8 hours;
@@ -43,8 +44,6 @@ struct VaultConfig {
     uint24 sharesLockTime;
     uint24 processRedeemSettlement;
     ISuperPositions superPositions;
-    IBaseRouter vaultRouter;
-    ISuperformFactory factory;
     address treasury;
     address recoveryAddress;
     address signerRelayer;
