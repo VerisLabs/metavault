@@ -73,6 +73,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
     /// @dev Emitted when cross-chain investment is settled
     event SettleXChainInvest(uint256 indexed superformId, uint256 assets);
 
+    /// @dev Emitted when cross-chain investment is settled
+    event SettleXChainDivest(uint256 indexed superformId, uint256 assets);
+
     /// @dev Emitted when investing vault idle assets
     event Report(uint64 indexed chainId, address indexed vault, int256 amount);
 
@@ -112,12 +115,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice Thrown when attempting to add a vault that is already listed
     error VaultAlreadyListed();
-
-    /// @notice Thrown when trying to perform an operation while cross-chain deposits are still pending
-    error XChainDepositsPending();
-
-    /// @notice Thrown when trying to perform an operation while cross-chain withdraws are still pending
-    error XChainWithdrawsPending();
 
     /// @notice Thrown when attempting to withdraw more assets than are currently available
     error InsufficientAvailableAssets();
@@ -291,9 +288,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         processRedeemSettlement = config.processRedeemSettlement;
         lastReport = block.timestamp;
         hurdleRate = config.assetHurdleRate;
-        gateway = config.gateway;
-        // Update the ATH share price
-        sharePriceWaterMark = sharePrice();
 
         // Try to get asset decimals, fallback to default if unsuccessful
         (bool success, uint8 result) = _tryGetAssetDecimals(config.asset);
@@ -304,10 +298,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         for (uint256 i = 0; i != N_CHAINS; i++) {
             chainIndexes[DST_CHAINS[i]] = i;
         }
-        // Approve vault gateway to spend the asset
-        asset().safeApprove(address(config.gateway), type(uint256).max);
-        // Approve vault gateway to burn superpositions
-        config.superPositions.setApprovalForAll(address(config.gateway), true);
 
         // Initialize ownership and grant admin role
         _initializeOwner(msg.sender);
@@ -315,6 +305,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
         // Initialize signer relayer
         signerRelayer = config.signerRelayer;
+    }
+
+    function setGateway(ISuperformGateway _gateway) external onlyRoles(ADMIN_ROLE) {
+        gateway = _gateway;
+        asset().safeApprove(address(_gateway), type(uint256).max);
+        gateway.superPositions().setApprovalForAll(address(_gateway), true);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -395,7 +391,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     /// @notice helper function to see if a vault is listed
     function isVaultListed(uint256 superformId) public view returns (bool) {
-        return vaults[superformId].vaultAddress != 0;
+        return vaults[superformId].vaultAddress != address(0);
+    }
+
+    function getVault(uint256 superformId) public view returns (VaultData memory vault) {
+        return vaults[superformId];
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -736,7 +736,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        gateway.singleXChainSingleVaultDeposit{ value: msg.value }(req);
+        gateway.investSingleXChainSingleVault{ value: msg.value }(req);
 
         // Update the vault's internal accounting
         uint256 amount = req.superformData.amount;
@@ -753,7 +753,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.singleXChainMultiVaultDeposit{ value: msg.value }(req);
+        uint256 totalAmount = gateway.investSingleXChainMultiVault{ value: msg.value }(req);
         _totalIdle -= totalAmount.toUint128();
         emit Invest(totalAmount);
     }
@@ -765,7 +765,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        uint256 totalAmount = gateway.investMultiXChainSingleVault{ value: msg.value }(req);
         _totalIdle -= totalAmount.toUint128();
         emit Invest(totalAmount);
     }
@@ -846,9 +846,10 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 sharesValue = gateway.singleXChainSingleVaultWithdraw{ value: msg.value }(req);
-        _totalDebt -= sharesValue.toUint128();
-        vaults[req.superformId] -= sharesValue;
+        uint256 sharesValue = gateway.divestSingleXChainSingleVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
+        vaults[req.superformData.superformId].totalDebt =
+            _sub0(vaults[req.superformData.superformId].totalDebt, sharesValue).toUint128();
         emit Divest(sharesValue);
     }
 
@@ -857,19 +858,19 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        for (uint256 i = 0; i < req.superformData.superformIds.length;) {
-            uint256 superformId = req.superformData.superformIds[i];
+        for (uint256 i = 0; i < req.superformsData.superformIds.length;) {
+            uint256 superformId = req.superformsData.superformIds[i];
             VaultData memory vault = vaults[superformId];
             uint256 sharesBalance = _sharesBalance(vault);
             uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
-            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue);
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
             vaults[superformId] = vault;
             unchecked {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
-        _totalDebt = _sub0(_totalDebt, totalAmount.toUint128());
+        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
         emit Divest(totalAmount);
     }
 
@@ -879,18 +880,18 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         onlyRoles(MANAGER_ROLE)
     {
         for (uint256 i = 0; i < req.superformsData.length;) {
-            uint256 superformId = req.superformsData[i].superformIds;
+            uint256 superformId = req.superformsData[i].superformId;
             VaultData memory vault = vaults[superformId];
             uint256 sharesBalance = _sharesBalance(vault);
             uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
-            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue);
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
             vaults[superformId] = vault;
             unchecked {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.multiDstSingleVaultDeposit{ value: msg.value }(req);
-        _totalDebt = _sub0(_totalDebt, totalAmount.toUint128());
+        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
         emit Divest(totalAmount);
     }
 
@@ -906,7 +907,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                 VaultData memory vault = vaults[superformId];
                 uint256 sharesBalance = _sharesBalance(vault);
                 uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
-                vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue);
+                vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
                 vaults[superformId] = vault;
                 unchecked {
                     ++j;
@@ -916,8 +917,8 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.multiDstMultiVaultDeposit{ value: msg.value }(req);
-        _totalDebt = _sub0(_totalDebt, totalAmount.toUint128());
+        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
 
         emit Divest(totalAmount);
     }
@@ -1087,9 +1088,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         emit SetRecoveryAddress(_recoveryAddress);
     }
 
-    // function fulfillSettledRequests(address controller) public {
-    //     if (msg.sender != controller && hasAnyRole(controller, RELAYER_ROLE)) revert Unauthorized();
-    // }
+    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 fulfilledAssets) public {
+        if (msg.sender != controller && hasAnyRole(controller, RELAYER_ROLE)) revert Unauthorized();
+        uint256 shares = convertToShares(requestedAssets);
+        _fulfillRedeemRequest(shares, fulfilledAssets, controller);
+        emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
+    }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       PRIVATE FUNCTIONS                    */
@@ -1346,7 +1350,7 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
                             // Withdraw from one vault asynchronously(crosschain)
                             _liquidateSingleXChainSingleVault(
-                                chainId, superformId, amount, config.controller, config.sXsV
+                                chainId, superformId, amount, config.controller, config.sXsV, cache.assetsPerVault[i][0]
                             );
                             // reduce vault debt
                             vaults[superformId].totalDebt =
@@ -1365,18 +1369,20 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                             chainId = DST_CHAINS[i];
                             superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
                             amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
-                            // Withdraw from multiple vaults asynchronously(crosschain)
-                            _liquidateSingleXChainMultiVault(
-                                chainId, superformIds, amounts, config.controller, config.sXmV
-                            );
+                            uint256 totalDebtReduction;
                             // reduce vault debt
                             for (uint256 j = 0; j < superformIds.length;) {
                                 vaults[superformIds[j]].totalDebt =
                                     _sub0(vaults[superformIds[j]].totalDebt, cache.assetsPerVault[i][j]).toUint128();
+                                totalDebtReduction += cache.assetsPerVault[i][j];
                                 unchecked {
                                     ++j;
                                 }
                             }
+                            // Withdraw from multiple vaults asynchronously(crosschain)
+                            _liquidateSingleXChainMultiVault(
+                                chainId, superformIds, amounts, config.controller, config.sXmV, totalDebtReduction
+                            );
                             settle = true;
                             break;
                         }
@@ -1403,8 +1409,9 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                             ++lastChainsIndex;
                         }
                     }
-
+                    uint256[] memory totalDebtReduction = new uint256[](chainsLen);
                     for (uint256 i = 0; i < chainsLen; i++) {
+                        totalDebtReduction[i] = cache.assetsPerVault[i][0];
                         singleVaultDatas[i] = SingleVaultSFData({
                             superformId: cache.dstVaults[i][0],
                             amount: cache.sharesPerVault[i][0],
@@ -1420,9 +1427,11 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                         });
                         ambIds[i] = config.mXsV.ambIds[i];
                         vaults[cache.dstVaults[i][0]].totalDebt =
-                            _sub0(vaults[cache.dstVaults[i][0]].totalDebt, cache.sharesPerVault[i][0]).toUint128();
+                            _sub0(vaults[cache.dstVaults[i][0]].totalDebt, cache.assetsPerVault[i][0]).toUint128();
                     }
-                    _liquidateMultiDstSingleVault(ambIds, dstChainIds, singleVaultDatas, config.mXsV.value);
+                    _liquidateMultiDstSingleVault(
+                        ambIds, dstChainIds, singleVaultDatas, config.mXsV.value, totalDebtReduction
+                    );
                     settle = true;
                 }
                 // If its multi-vault
@@ -1445,11 +1454,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                             ++lastChainsIndex;
                         }
                     }
-
+                    uint256[] memory totalDebtReduction = new uint256[](chainsLen);
                     for (uint256 i = 0; i < chainsLen; i++) {
                         bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
+                        uint256[] memory superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
                         multiVaultDatas[i] = MultiVaultSFData({
-                            superformIds: _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]),
+                            superformIds: superformIds,
                             amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
                             outputAmounts: config.mXmV.outputAmounts[i],
                             maxSlippages: config.mXmV.maxSlippages[i],
@@ -1462,9 +1472,20 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
                             extraFormData: ""
                         });
                         ambIds[i] = config.mXmV.ambIds[i];
+
+                        for (uint256 j = 0; j < superformIds.length;) {
+                            vaults[superformIds[j]].totalDebt =
+                                _sub0(vaults[superformIds[j]].totalDebt, cache.assetsPerVault[i][j]).toUint128();
+                            totalDebtReduction[i] += cache.assetsPerVault[i][j];
+                            unchecked {
+                                ++j;
+                            }
+                        }
                     }
                     // Withdraw from multiple vaults and chains asynchronously
-                    _liquidateMultiDstMultiVault(ambIds, dstChainIds, multiVaultDatas, config.mXmV.value);
+                    _liquidateMultiDstMultiVault(
+                        ambIds, dstChainIds, multiVaultDatas, config.mXmV.value, totalDebtReduction
+                    );
                     settle = true;
                 }
             }
@@ -1493,17 +1514,6 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         // Fulfill request with instant withdrawals only
         _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, config.controller);
     }
-
-    // /// @notice fulfills the already settled redeem requests
-    // /// @param controller controller address
-    // function _fulfillSettledRequests(address controller) private {
-    //     ERC20Receiver receiverContract = ERC20Receiver(_receiver(controller));
-    //     uint256 claimableXChain = receiverContract.balance();
-    //     receiverContract.pull(claimableXChain);
-    //     uint256 shares = pendingRedeemRequest(controller);
-    //     _fulfillRedeemRequest(shares, claimableXChain, controller);
-    //     emit FulfillRedeemRequest(controller, shares, claimableXChain);
-    // }
 
     /// @notice the number of decimals of the underlying token
     function _underlyingDecimals() internal view override returns (uint8) {
@@ -1633,11 +1643,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint256 superformId,
         uint256 amount,
         address receiver,
-        SingleXChainSingleVaultWithdraw memory config
+        SingleXChainSingleVaultWithdraw memory config,
+        uint256 totalDebtReduction
     )
         private
     {
-        gateway.liquidateSingleXChainSingleVault{ value: config.value }(chainId, superformId, amount, receiver, config);
+        gateway.liquidateSingleXChainSingleVault{ value: config.value }(
+            chainId, superformId, amount, receiver, config, totalDebtReduction
+        );
     }
 
     /// @dev Initiates withdrawals from multiple vaults on a single different chain
@@ -1651,11 +1664,14 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint256[] memory superformIds,
         uint256[] memory amounts,
         address receiver,
-        SingleXChainMultiVaultWithdraw memory config
+        SingleXChainMultiVaultWithdraw memory config,
+        uint256 totalDebtReduction
     )
         private
     {
-        gateway.liquidateSingleXChainMultiVault{ value: config.value }(chainId, superformIds, amounts, receiver, config);
+        gateway.liquidateSingleXChainMultiVault{ value: config.value }(
+            chainId, superformIds, amounts, receiver, config, totalDebtReduction
+        );
     }
 
     /// @dev Initiates withdrawals from a single vault on multiple different chains
@@ -1667,11 +1683,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         SingleVaultSFData[] memory singleVaultDatas,
-        uint256 value
+        uint256 value,
+        uint256[] memory totalDebtReduction
     )
         private
     {
-        gateway.liquidateMultiDstSingleVault{ value: value }(ambIds, dstChainIds, singleVaultDatas);
+        gateway.liquidateMultiDstSingleVault{ value: value }(ambIds, dstChainIds, singleVaultDatas, totalDebtReduction);
     }
 
     /// @dev Initiates withdrawals from multiple vaults on multiple different chains
@@ -1683,11 +1700,12 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         MultiVaultSFData[] memory multiVaultDatas,
-        uint256 value
+        uint256 value,
+        uint256[] memory totalDebtReduction
     )
         private
     {
-        gateway.multiDstMultiVaultWithdraw{ value: value }(ambIds, dstChainIds, multiVaultDatas);
+        gateway.liquidateMultiDstMultiVault{ value: value }(ambIds, dstChainIds, multiVaultDatas, totalDebtReduction);
     }
 
     /// @dev Helper function to convert a fixed array to dynamic
@@ -1763,8 +1781,68 @@ contract MaxApyCrossChainVault is ERC7540, OwnableRoles, ReentrancyGuard, Multic
 
     function settleXChainDivest(uint256 superformId, uint256 withdrawnAssets) public {
         if (msg.sender != address(gateway)) revert();
-        _totalDebt += bridgedAssets.toUint128();
-        vaults[superformId].totalDebt += bridgedAssets.toUint128();
-        emit SettleXChainInvest(superformId, bridgedAssets);
+        _totalIdle += withdrawnAssets.toUint128();
+        emit SettleXChainDivest(superformId, withdrawnAssets);
+    }
+
+    /// @dev Supports ERC1155 interface detection
+    /// @param interfaceId The interface identifier, as specified in ERC-165
+    /// @return isSupported True if the contract supports the interface, false otherwise
+    function supportsInterface(bytes4 interfaceId) public pure returns (bool isSupported) {
+        if (interfaceId == 0x4e2312e0) return true;
+    }
+
+    /// @notice Handles the receipt of a single ERC1155 token type
+    /// @dev This function is called at the end of a `safeTransferFrom` after the balance has been updated
+    /// @param operator The address which initiated the transfer (i.e. msg.sender)
+    /// @param from The address which previously owned the token
+    /// @param superformId The ID of the token being transferred
+    /// @param value The amount of tokens being transferred
+    /// @param data Additional data with no specified format
+    /// @return bytes4 `bytes4(keccak256("onERC1155Received(address,address,uint,uint,bytes)"))`
+    function onERC1155Received(
+        address operator,
+        address from,
+        uint256 superformId,
+        uint256 value,
+        bytes memory data
+    )
+        public
+        returns (bytes4)
+    {
+        // Silence compiler warnings
+        operator;
+        from;
+        value;
+        data;
+        return this.onERC1155Received.selector;
+    }
+
+    /// @notice Handles the receipt of multiple ERC1155 token types
+    /// @dev This function is called at the end of a `safeBatchTransferFrom` after the balances have been updated
+    /// @param operator The address which initiated the batch transfer (i.e. msg.sender)
+    /// @param from The address which previously owned the tokens
+    /// @param superformIds An array containing ids of each token being transferred (order and length must match values
+    /// array)
+    /// @param values An array containing amounts of each token being transferred (order and length must match ids
+    /// array)
+    /// @param data Additional data with no specified format
+    /// @return bytes4 `bytes4(keccak256("onERC1155BatchReceived(address,address,uint[],uint[],bytes)"))`
+    function onERC1155BatchReceived(
+        address operator,
+        address from,
+        uint256[] memory superformIds,
+        uint256[] memory values,
+        bytes memory data
+    )
+        public
+        returns (bytes4)
+    {
+        // Silence compiler warnings
+        operator;
+        from;
+        values;
+        data;
+        return this.onERC1155BatchReceived.selector;
     }
 }

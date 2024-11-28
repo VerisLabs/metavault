@@ -43,7 +43,7 @@ struct VaultConfig {
     uint16 assetHurdleRate;
     uint24 sharesLockTime;
     uint24 processRedeemSettlement;
-    ISuperformGateway gateway;
+    ISuperPositions superPositions;
     address treasury;
     address recoveryAddress;
     address signerRelayer;

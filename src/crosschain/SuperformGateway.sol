@@ -1,9 +1,14 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import { ERC20Receiver } from "./ERC20Receiver.sol";
 import { IBaseRouter, IMaxApyCrossChainVault, ISuperPositions } from "interfaces/Lib.sol";
 
+import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { Initializable } from "solady/utils/Initializable.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+
 import {
     Harvest,
     MultiDstMultiVaultStateReq,
@@ -23,39 +28,57 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
-contract SuperformGateway {
+contract SuperformGateway is Initializable, OwnableRoles {
     using VaultLib for VaultData;
-    // Deploy and set the receiver implementation
+    using SafeTransferLib for address;
 
-    ERC20Receiver receiverImplementation;
-    ISuperPositions private _superPositions;
-    IBaseRouter private _vaultRouter;
+    error XChainDepositsPending();
+    error XChainWithdrawsPending();
+    error VaultNotListed();
+
+    /// @notice Role identifier for admin privileges
+    uint256 public constant ADMIN_ROLE = _ROLE_0;
+    uint256 public constant RELAYER_ROLE = _ROLE_0;
+
+    address public receiverImplementation;
+    ISuperPositions public superPositions;
+    IBaseRouter public superformRouter;
     IMaxApyCrossChainVault public vault;
+    address public asset;
     /// @notice Receiver delegation for withdrawals
-    mapping(address => mapping(uint256 => address)) public receivers;
+    mapping(address => mapping(bytes => address)) public receivers;
+    mapping(address => mapping(bytes => uint256)) public requestedAssets;
     /// @notice Cached value of total assets that are being bridged at the moment
     uint256 public totalpendingXChainInvests;
     /// @notice Cached value of total assets that are being bridged at the moment
-    uint256 public totalPendingXChainWithdraws;
-    /// @notice Cached value of total assets that are being bridged at the moment
     uint256 public totalPendingXChainDivests;
-    /// @notice pending bridged assets for each vault
-    mapping(uint256 superformId => uint256 amount) public pendingXChainInvests;
-    /// @notice pending bridged assets for each vault
-    mapping(uint256 superformId => uint256 amount) public pendingXChainWithdraws;
-    // @notice pending bridged assets for each vault
-    mapping(uint256 superformId => uint256 amount) public pendingXChainDivests;
+    /// @notice Gap for upgradeability
+    uint256[20] private __gap;
 
-    constructor(IMaxApyCrossChainVault _vault, IBaseRouter _vaultRouter_, ISuperPositions _superPositions_) {
+    constructor() { }
+
+    function initialize(
+        IMaxApyCrossChainVault _vault,
+        address _owner,
+        IBaseRouter _superformRouter,
+        ISuperPositions _superPositions
+    )
+        external
+        initializer
+    {
         vault = _vault;
-        _vaultRouter = _vaultRouter_;
-        _superPositions = _superPositions_;
+        asset = vault.asset();
+        superformRouter = _superformRouter;
+        superPositions = _superPositions;
         // Deploy and set the receiver implementation
-        receiverImplementation = address(new ERC20Receiver(config.asset));
+        receiverImplementation = address(new ERC20Receiver(asset));
+        asset.safeApprove(address(superformRouter), type(uint256).max);
+        superPositions.setApprovalForAll(address(superformRouter), true);
+        _initializeOwner(_owner);
     }
 
     modifier onlyVault() {
-        if (msg.sender != vault) {
+        if (msg.sender != address(vault)) {
             revert();
         }
         _;
@@ -87,13 +110,13 @@ contract SuperformGateway {
     }
 
     function balanceOf(address account, uint256 superformId) external view returns (uint256) {
-        return _superPositions.balanceOf(account, superformId);
+        return superPositions.balanceOf(account, superformId);
     }
 
     /// @notice Invests assets from this vault into a single target vault on a different chain
     /// @dev Only callable by addresses with the MANAGER_ROLE
     /// @param req Crosschain deposit request
-    function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+    function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
         payable
         onlyVault
@@ -101,56 +124,46 @@ contract SuperformGateway {
     {
         uint256 superformId = req.superformData.superformId;
 
-        // We cannot invest more till the previous investment is successfully completed
-        if (pendingXChainInvests[superformId] != 0) revert XChainDepositsPending();
+        VaultData memory vaultObj = vault.getVault(superformId);
 
-        VaultData memory vault = vault.vaults(superformId);
-        if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+        if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
         uint256 amount = req.superformData.amount;
 
-        vault.asset().safeTransferFrom(address(vault), address(this), amount);
+        asset.safeTransferFrom(address(vault), address(this), amount);
 
         req.superformData.receiverAddressSP = address(this);
         // Initiate the cross-chain deposit via the vault router
-        _vaultRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
+        superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
 
-        // Account assets as pending
-        pendingXChainInvests[superformId] = amount;
         totalpendingXChainInvests += amount;
     }
 
     /// @notice Placeholder for investing in multiple vaults across chains
     /// @param req Crosschain deposit request
-    function investSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+    function investSingleXChainMultiVault(SingleXChainMultiVaultStateReq memory req)
         external
         payable
         onlyVault
         refundGas
         returns (uint256 totalAmount)
     {
+        req.superformsData.receiverAddressSP = address(this);
         for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
             uint256 superformId = req.superformsData.superformIds[i];
 
-            req.superformsData.receiverAddressSP[i] = address(this);
-
             // Cant invest in a vault that is not in the portfolio
-            VaultData memory vault = vault.vaults(superformId);
-            if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
-
-            // We cannot invest more till the previous investment is successfully completed
-            if (pendingXChainInvests[superformId] != 0) revert XChainDepositsPending();
-            // Account assets as pending
-            pendingXChainInvests[superformId] = req.superformsData.amounts[i];
+            VaultData memory vaultObj = vault.getVault(superformId);
+            if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
         }
         totalpendingXChainInvests += totalAmount;
-        vault.asset().safeTransferFrom(address(vault), address(this), totalAmount);
-        _vaultRouter.singleXChainMultiVaultDeposit{ value: msg.value }(req);
+        asset.safeTransferFrom(address(vault), address(this), totalAmount);
+        superformRouter.singleXChainMultiVaultDeposit{ value: msg.value }(req);
     }
 
     /// @notice Placeholder for investing multiple assets in a single vault across chains
     /// @dev Not implemented yet
-    function investMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+    function investMultiXChainSingleVault(MultiDstSingleVaultStateReq memory req)
         external
         payable
         onlyVault
@@ -164,26 +177,22 @@ contract SuperformGateway {
             req.superformsData[i].receiverAddressSP = address(this);
 
             // Cant invest in a vault that is not in the portfolio
-            VaultData memory vault = vault.vaults(superformId);
-            if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+            VaultData memory vaultObj = vault.getVault(superformId);
+            if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
-            // We cannot invest more till the previous investment is successfully completed
-            if (pendingXChainInvests[superformId] != 0) revert XChainDepositsPending();
-            // Account assets as pending
-            pendingXChainInvests[superformId] = amount;
             totalAmount += amount;
             unchecked {
                 ++i;
             }
         }
-        vault.asset().safeTransferFrom(address(vault), address(this), totalAmount);
-        _vaultRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        asset.safeTransferFrom(address(vault), address(this), totalAmount);
+        superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
         totalpendingXChainInvests += totalAmount;
     }
 
     /// @notice Placeholder for investing multiple assets in multiple vaults across chains
     /// @dev Not implemented yet
-    function investMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+    function investMultiXChainMultiVault(MultiDstMultiVaultStateReq memory req)
         external
         payable
         onlyVault
@@ -200,21 +209,18 @@ contract SuperformGateway {
                 req.superformsData[i].receiverAddressSP = address(this);
 
                 // Cant invest in a vault that is not in the portfolio
-                VaultData memory vault = vault.vaults(superformId);
-                if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
-                // We cannot invest more till the previous investment is successfully completed
-                if (pendingXChainInvests[superformId] != 0) revert XChainDepositsPending();
-                // Account assets as pending
-                pendingXChainInvests[superformId] = amount;
+                VaultData memory vaultObj = vault.getVault(superformId);
+                if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
+
                 totalAmount += amount;
             }
         }
-        vault.asset().safeTransferFrom(address(vault), address(this), totalAmount);
-        _vaultRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
         totalpendingXChainInvests += totalAmount;
+        asset.safeTransferFrom(address(vault), address(this), totalAmount);
+        superformRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
     }
 
-    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
         payable
         onlyVault
@@ -223,29 +229,24 @@ contract SuperformGateway {
     {
         uint256 superformId = req.superformData.superformId;
 
-        address receiver = receiver(address(this), abi.encode(superformId));
+        address receiver = getReceiver(address(this), abi.encode(superformId));
 
-        VaultData memory vault = vault.vaults(superformId);
-        if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
-
-        if (pendingXChainWithdraws[superformId] != 0) revert XChainWithdrawsPending();
+        VaultData memory vaultObj = vault.getVault(superformId);
+        if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
         req.superformData.receiverAddress = receiver;
 
-        _superPositions.safeTransferFrom(address(vault), address(this), superformId, req.superformData.amount, 0);
-
-        _vaultRouter.singleXChainSingleVaultWithdraw{ value: msg.value }(req);
-
         // Update the vault's internal accounting
-        sharesValue = vault.convertToAssets(req.superformData.amount, true);
-        uint128 amountUint128 = sharesValue.toUint128();
+        sharesValue = vaultObj.convertToAssets(req.superformData.amount, true);
 
-        // Account assets as pending
-        pendingXChainDivests[superformId] = amountUint128;
-        totalPendingXChainDivests += amountUint128;
+        totalPendingXChainDivests += sharesValue;
+
+        superPositions.safeTransferFrom(address(vault), address(this), superformId, req.superformData.amount, "");
+
+        superformRouter.singleXChainSingleVaultWithdraw{ value: msg.value }(req);
     }
 
-    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq memory req)
         external
         payable
         onlyVault
@@ -256,95 +257,87 @@ contract SuperformGateway {
             uint256 superformId = req.superformsData.superformIds[i];
 
             // Cant invest in a vault that is not in the portfolio
-            VaultData memory vault = vault.vaults(superformId);
-            if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
-            // We cannot invest more till the previous investment is successfully completed
-            if (pendingXChainWithdraws[superformId] != 0) revert XChainWithdrawsPending();
-            uint256 amount = vault.convertToAssets(req.superformsData.amounts[i], true);
-            // Account assets as pending
-            pendingXChainWithdraws[superformId] = amount;
+            VaultData memory vaultObj = vault.getVault(superformId);
+            if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
+
+            uint256 amount = vaultObj.convertToAssets(req.superformsData.amounts[i], true);
+
             // Update the vault's internal accounting
             totalAmount += amount;
         }
 
-        address receiver = receiver(address(this), abi.encode(req.superformsData.superformIds));
+        address receiver = getReceiver(address(this), abi.encode(req.superformsData.superformIds));
         req.superformsData.receiverAddress = receiver;
 
-        _superPositions.safeBatchTransferFrom(
+        superPositions.safeBatchTransferFrom(
             address(vault), address(this), req.superformsData.superformIds, req.superformsData.amounts, ""
         );
-        _vaultRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
-        totalPendingXChainWithdraws += totalAmount;
+        superformRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
+        totalPendingXChainDivests += totalAmount;
     }
 
-    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq memory req)
         external
         payable
         onlyVault
         refundGas
+        returns (uint256 totalAmount)
     {
-        uint256 totalAmount;
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
-            address receiver = receiver(address(this), abi.encode(superformId));
+            address receiver = getReceiver(address(this), abi.encode(superformId));
 
             req.superformsData[i].receiverAddress = receiver;
 
             // Retrieve the vault data for the target vault
-            VaultData memory vault = vault.vaults(superformId);
+            VaultData memory vaultObj = vault.getVault(superformId);
             // Cant invest in a vault that is not in the portfolio
-            if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
-            uint256 amount = vault.convertToAssets(req.superformsData[i].amount, true);
+            if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
+            uint256 amount = vaultObj.convertToAssets(req.superformsData[i].amount, true);
 
-            // We cannot invest more till the previous investment is successfully completed
-            if (pendingXChainWithdraws[superformId] != 0) revert XChainDepositsPending();
-            // Account assets as pending
-            pendingXChainWithdraws[superformId] = amount;
             totalAmount += amount;
 
-            _superPositions.safeTransferFrom(address(vault), address(this), superformId, amount, "");
+            superPositions.safeTransferFrom(address(vault), address(this), superformId, amount, "");
 
             unchecked {
                 ++i;
             }
         }
 
-        _vaultRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
-        totalPendingXChainWithdraws += totalAmount;
+        superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        totalPendingXChainDivests += totalAmount;
+        return totalAmount;
     }
 
-    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq memory req)
         external
         payable
         onlyVault
         refundGas
+        returns (uint256 totalAmount)
     {
-        uint256 totalAmount;
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
-            address receiver = receiver(address(this), abi.encode(superformIds));
+            address receiver = getReceiver(address(this), abi.encode(superformIds));
             req.superformsData[i].receiverAddress = receiver;
-            _superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
+            superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
 
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
 
                 // Cant invest in a vault that is not in the portfolio
-                VaultData memory vault = vault.vaults(superformId);
-                if (!vault.isVaultListed(vault.vaultAddress)) revert VaultNotListed();
+                VaultData memory vaultObj = vault.getVault(superformId);
+                if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
-                uint256 amount = vault.convertToAssets(amounts[j], true);
-                // Account assets as pending
-                pendingXChainWithdraws[superformId] = amount;
+                uint256 amount = vaultObj.convertToAssets(amounts[j], true);
 
-                // We cannot invest more till the previous investment is successfully completed
-                if (pendingXChainWithdraws[superformId] != 0) revert XChainDepositsPending();
                 totalAmount += amount;
             }
         }
-        _vaultRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
-        totalPendingXChainWithdraws += totalAmount;
+        superformRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
+        totalPendingXChainDivests += totalAmount;
+        return totalAmount;
     }
 
     /// @dev Initiates a withdrawal from a single vault on a different chain
@@ -358,14 +351,16 @@ contract SuperformGateway {
         uint256 superformId,
         uint256 amount,
         address receiver,
-        SingleXChainSingleVaultWithdraw memory config
+        SingleXChainSingleVaultWithdraw memory config,
+        uint256 totalRequestedAssets
     )
         external
         payable
         onlyVault
         refundGas
     {
-        _superPositions.safeTransferFrom(address(vault), address(this), superformId, 0, "");
+        superPositions.safeTransferFrom(address(vault), address(this), superformId, 0, "");
+        bytes memory key = abi.encode(superformId);
         SingleXChainSingleVaultStateReq memory params = SingleXChainSingleVaultStateReq({
             ambIds: config.ambIds,
             dstChainId: chainId,
@@ -375,15 +370,16 @@ contract SuperformGateway {
                 outputAmount: config.outputAmount,
                 maxSlippage: config.maxSlippage,
                 liqRequest: config.liqRequest,
-                permit2data: _getEmptyBytes(),
+                permit2data: "",
                 hasDstSwap: config.hasDstSwap,
                 retain4626: false,
-                receiverAddress: controller(receiver, abi.encode(superformId)),
+                receiverAddress: getReceiver(receiver, key),
                 receiverAddressSP: address(0),
-                extraFormData: _getEmptyBytes()
+                extraFormData: ""
             })
         });
-        _vaultRouter.singleXChainSingleVaultWithdraw{ value: config.value }(params);
+        superformRouter.singleXChainSingleVaultWithdraw{ value: config.value }(params);
+        requestedAssets[receiver][key] += totalRequestedAssets;
     }
 
     /// @dev Initiates withdrawals from multiple vaults on a single different chain
@@ -397,7 +393,8 @@ contract SuperformGateway {
         uint256[] memory superformIds,
         uint256[] memory amounts,
         address receiver,
-        SingleXChainMultiVaultWithdraw memory config
+        SingleXChainMultiVaultWithdraw memory config,
+        uint256 totalRequestedAssets
     )
         external
         payable
@@ -405,7 +402,8 @@ contract SuperformGateway {
         refundGas
     {
         uint256 len = superformIds.length;
-        _superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
+        bytes memory key = abi.encode(superformIds);
+        superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
         SingleXChainMultiVaultStateReq memory params = SingleXChainMultiVaultStateReq({
             ambIds: config.ambIds,
             dstChainId: chainId,
@@ -415,15 +413,16 @@ contract SuperformGateway {
                 outputAmounts: config.outputAmounts,
                 maxSlippages: config.maxSlippages,
                 liqRequests: config.liqRequests,
-                permit2data: _getEmptyBytes(),
+                permit2data: "",
                 hasDstSwaps: config.hasDstSwaps,
                 retain4626s: _getEmptyBoolArray(len),
-                receiverAddress: receiver(receiver, abi.encode(superformIds)),
+                receiverAddress: getReceiver(receiver, key),
                 receiverAddressSP: address(0),
-                extraFormData: _getEmptyBytes()
+                extraFormData: ""
             })
         });
-        _vaultRouter.singleXChainMultiVaultWithdraw{ value: config.value }(params);
+        superformRouter.singleXChainMultiVaultWithdraw{ value: config.value }(params);
+        requestedAssets[receiver][key] += totalRequestedAssets;
     }
 
     /// @dev Initiates withdrawals from a single vault on multiple different chains
@@ -433,7 +432,8 @@ contract SuperformGateway {
     function liquidateMultiDstSingleVault(
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
-        SingleVaultSFData[] memory singleVaultDatas
+        SingleVaultSFData[] memory singleVaultDatas,
+        uint256[] memory totalRequestedAssets
     )
         external
         payable
@@ -442,15 +442,17 @@ contract SuperformGateway {
     {
         for (uint256 i = 0; i < singleVaultDatas.length;) {
             uint256 superformId = singleVaultDatas[i].superformId;
-            singleVaultDatas[i].receiver = receiver(singleVaultDatas[i].receiver, superformId);
-            _superPositions.safeTransferFrom(address(vault), address(this), superformId, singleVaultDatas[i].amount, "");
+            bytes memory key = abi.encode(superformId);
+            singleVaultDatas[i].receiverAddress = getReceiver(singleVaultDatas[i].receiverAddress, key);
+            requestedAssets[singleVaultDatas[i].receiverAddress][key] = totalRequestedAssets[i];
+            superPositions.safeTransferFrom(address(vault), address(this), superformId, singleVaultDatas[i].amount, "");
             unchecked {
                 ++i;
             }
         }
         MultiDstSingleVaultStateReq memory params =
             MultiDstSingleVaultStateReq({ ambIds: ambIds, dstChainIds: dstChainIds, superformsData: singleVaultDatas });
-        _vaultRouter.multiDstSingleVaultWithdraw{ value: msg.value }(params);
+        superformRouter.multiDstSingleVaultWithdraw{ value: msg.value }(params);
     }
 
     /// @dev Initiates withdrawals from multiple vaults on multiple different chains
@@ -460,7 +462,8 @@ contract SuperformGateway {
     function liquidateMultiDstMultiVault(
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
-        MultiVaultSFData[] memory multiVaultDatas
+        MultiVaultSFData[] memory multiVaultDatas,
+        uint256[] memory totalRequestedAssets
     )
         external
         payable
@@ -468,10 +471,12 @@ contract SuperformGateway {
         refundGas
     {
         for (uint256 i = 0; i < multiVaultDatas.length;) {
-            uint256 superformIds = multiVaultDatas[i].superformIds;
-            multiVaultDatas[i].receiver = receiver(multiVaultDatas[i].receiver, superformIds);
-            _superPositions.safeBatchTransferFrom(
-                address(vault), address(this), superformIds, singleVaultDatas[i].amounts, ""
+            uint256[] memory superformIds = multiVaultDatas[i].superformIds;
+            bytes memory key = abi.encode(superformIds);
+            multiVaultDatas[i].receiverAddress = getReceiver(multiVaultDatas[i].receiverAddress, key);
+            requestedAssets[multiVaultDatas[i].receiverAddress][key] += totalRequestedAssets[i];
+            superPositions.safeBatchTransferFrom(
+                address(vault), address(this), superformIds, multiVaultDatas[i].amounts, ""
             );
             unchecked {
                 ++i;
@@ -479,7 +484,7 @@ contract SuperformGateway {
         }
         MultiDstMultiVaultStateReq memory params =
             MultiDstMultiVaultStateReq({ ambIds: ambIds, dstChainIds: dstChainIds, superformsData: multiVaultDatas });
-        _vaultRouter.multiDstMultiVaultWithdraw{ value: msg.value }(params);
+        superformRouter.multiDstMultiVaultWithdraw{ value: msg.value }(params);
     }
 
     /// @dev Supports ERC1155 interface detection
@@ -512,11 +517,11 @@ contract SuperformGateway {
         from;
         value;
         data;
-        uint256 bridgedAssets = pendingXChainInvests[superformId];
-        delete pendingXChainInvests[superformId];
+        VaultData memory vaultObj = vault.getVault(superformId);
+        uint256 bridgedAssets = vaultObj.convertToAssets(value, false);
         totalpendingXChainInvests -= bridgedAssets;
-        _superPositions.safeTransferFrom(address(this), address(vault), superformId, value);
-        vault.settleXChainInvest(superformId, bridgetAssets);
+        superPositions.safeTransferFrom(address(this), address(vault), superformId, value, "");
+        vault.settleXChainInvest(superformId, bridgedAssets);
         return this.onERC1155Received.selector;
     }
 
@@ -554,26 +559,65 @@ contract SuperformGateway {
     /// @dev Returns the delegatee of a owner to receive the assets
     /// @dev If it doesnt exist it deploys it at the moment
     /// @notice receiverAddress returns delegatee
-    function receiver(address controller, bytes memory key) public returns (address receiverAddress) {
+    function getReceiver(address controller, bytes memory key) public returns (address receiverAddress) {
         address current = receivers[controller][key];
         if (current != address(0)) {
             return current;
         } else {
-            receiverAddress = LibClone.clone(
-                receiverImplementation, abi.encodeWithSignature("initialize(address)", controller, superformId)
-            );
+            receiverAddress =
+                LibClone.clone(receiverImplementation, abi.encodeWithSignature("initialize(address)", controller, key));
             receivers[controller][key] = receiverAddress;
         }
     }
 
-    /// @notice fulfills the already settled redeem requests
-    /// @param controller controller address
-    function _fulfillSettledRequests(address controller) private {
-        ERC20Receiver receiverContract = ERC20Receiver(receiver(controller));
-        uint256 claimableXChain = receiverContract.balance();
-        receiverContract.pull(claimableXChain);
-        uint256 shares = pendingRedeemRequest(controller);
-        _fulfillRedeemRequest(shares, claimableXChain, controller);
-        emit FulfillRedeemRequest(controller, shares, claimableXChain);
+    function settleLiquidation(address controller, uint256 superformId) external {
+        bytes memory key = abi.encode(superformId);
+        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(controller, key));
+        uint256 settledAssets = receiverContract.balance();
+        uint256 requestedAssets = requestedAssets[controller][key];
+        receiverContract.pull(settledAssets);
+        asset.safeTransfer(address(vault), settledAssets);
+        vault.fulfillSettledRequest(controller, requestedAssets, settledAssets);
+    }
+
+    function settleLiquidation(address controller, uint256[] calldata superformIds) external {
+        bytes memory key = abi.encode(superformIds);
+        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(controller, key));
+        uint256 settledAssets = receiverContract.balance();
+        uint256 requestedAssets = requestedAssets[controller][key];
+        receiverContract.pull(settledAssets);
+        asset.safeTransfer(address(vault), settledAssets);
+        vault.fulfillSettledRequest(controller, requestedAssets, settledAssets);
+    }
+
+    function settleDivest(uint256 superformId) external {
+        bytes memory key = abi.encode(superformId);
+        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(address(this), key));
+        uint256 settledAssets = receiverContract.balance();
+        receiverContract.pull(settledAssets);
+        totalPendingXChainDivests -= settledAssets;
+        asset.safeTransfer(address(vault), settledAssets);
+        vault.settleXChainDivest(superformId, settledAssets);
+    }
+
+    function settleDivest(uint256[] calldata superformIds) external {
+        bytes memory key = abi.encode(superformIds);
+        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(address(this), key));
+        uint256 settledAssets = receiverContract.balance();
+
+        receiverContract.pull(settledAssets);
+        totalPendingXChainDivests -= settledAssets;
+        asset.safeTransfer(address(vault), settledAssets);
+        for (uint256 i = 0; i < superformIds.length;) {
+            vault.settleXChainDivest(superformIds[i], settledAssets);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @dev Helper function to get a empty bools array
+    function _getEmptyBoolArray(uint256 len) private pure returns (bool[] memory) {
+        return new bool[](len);
     }
 }

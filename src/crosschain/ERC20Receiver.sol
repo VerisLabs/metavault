@@ -9,7 +9,7 @@ contract ERC20Receiver {
     address immutable _deployer;
     address immutable _asset;
     address public owner;
-    uint256 public superformId;
+    bytes public key;
 
     constructor(address _asset_) {
         _asset = _asset_;
@@ -24,8 +24,8 @@ contract ERC20Receiver {
         _asset.safeTransfer(_deployer, amount);
     }
 
-    function initialize(address _owner, uint256 _superformId) external {
+    function initialize(address _owner, bytes memory _key) external {
         owner = _owner;
-        superformId = _superformId;
+        key = _key;
     }
 }

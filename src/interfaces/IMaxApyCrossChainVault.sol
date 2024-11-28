@@ -32,61 +32,50 @@ interface IMaxApyCrossChainVault {
     /*                       PUBLIC GETTERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    function name() external view override returns (string memory);
+    function name() external view returns (string memory);
 
-    function symbol() external view override returns (string memory);
-    function asset() external view override returns (address);
-    function totalAssets() external view override returns (uint256 assets);
+    function symbol() external view returns (string memory);
+
+    function asset() external view returns (address);
+
+    function totalAssets() external view returns (uint256 assets);
 
     function totalWithdrawableAssets() external view returns (uint256 assets);
 
     function totalLocalAssets() external view returns (uint256 assets);
+
     function totalXChainAssets() external view returns (uint256 assets);
+
     function sharePrice() external view returns (uint256);
+
     function totalIdle() external view returns (uint256 assets);
+
     function totalDebt() external view returns (uint256 assets);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
+
     function isVaultListed(uint256 superformId) external view returns (bool);
+
+    function getVault(uint256 superformId) external view returns (VaultData memory vault);
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       ERC7540 ACTIONS                      */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    function requestDeposit(
-        uint256 assets,
-        address controller,
-        address owner
-    )
-        external
-        override
-        returns (uint256 requestId);
-    function deposit(uint256 assets, address to) external override returns (uint256 shares);
+    function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256 requestId);
 
-    function deposit(uint256 assets, address to, address controller) external override returns (uint256 shares);
+    function deposit(uint256 assets, address to) external returns (uint256 shares);
 
-    function mint(uint256 shares, address to) external override returns (uint256 assets);
+    function deposit(uint256 assets, address to, address controller) external returns (uint256 shares);
 
-    function mint(uint256 shares, address to, address controller) external override returns (uint256 assets);
+    function mint(uint256 shares, address to) external returns (uint256 assets);
 
-    function requestRedeem(
-        uint256 shares,
-        address controller,
-        address owner
-    )
-        external
-        override
-        returns (uint256 requestId);
+    function mint(uint256 shares, address to, address controller) external returns (uint256 assets);
 
-    function redeem(uint256 shares, address receiver, address controller) external override returns (uint256 assets);
+    function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
 
-    function withdraw(
-        uint256 assets,
-        address receiver,
-        address controller
-    )
-        external
-        override
-        returns (uint256 shares);
+    function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets);
+
+    function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares);
 
     function processRedeemRequest(
         address controller,
@@ -167,7 +156,9 @@ interface IMaxApyCrossChainVault {
 
     function setRecoveryAddress(address _recoveryAddress) external;
 
-    function fulfillSettledRequests(address controller) external;
+    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 settledAssets) external;
 
-    function settleXChainInvest(uint256 superformId) external;
+    function settleXChainInvest(uint256 superformId, uint256 bridgedAssets) external;
+
+    function settleXChainDivest(uint256 superformId, uint256 withdrawn) external;
 }

@@ -12,8 +12,15 @@ import { Test, console2 } from "forge-std/Test.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC4626, ERC7540, MaxApyCrossChainVault } from "src/MaxApyCrossChainVault.sol";
 
+import { SuperformGateway } from "crosschain/SuperformGateway.sol";
 import "src/helpers/AddressBook.sol";
-import { IBaseRouter as ISuperformRouter, ISuperPositions, ISuperformFactory } from "src/interfaces/Lib.sol";
+
+import {
+    IBaseRouter as ISuperformRouter,
+    ISuperPositions,
+    ISuperformFactory,
+    ISuperformGateway
+} from "src/interfaces/Lib.sol";
 import {
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
@@ -37,6 +44,8 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
         config = polygonUsdceVaultConfig();
         vault = new MaxApyCrossChainVault(config);
+        SuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
+        vault.setGateway(ISuperformGateway(address(gateway)));
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
     }
