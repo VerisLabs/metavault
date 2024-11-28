@@ -8,7 +8,6 @@ import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { Initializable } from "solady/utils/Initializable.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-
 import {
     Harvest,
     MultiDstMultiVaultStateReq,
@@ -38,18 +37,26 @@ contract SuperformGateway is Initializable, OwnableRoles {
 
     /// @notice Role identifier for admin privileges
     uint256 public constant ADMIN_ROLE = _ROLE_0;
+    /// @notice Role identifier for relayer
     uint256 public constant RELAYER_ROLE = _ROLE_0;
-
+    /// @notice ERC20Receiver contract implementation to clone
     address public receiverImplementation;
+    /// @notice Superpositions
     ISuperPositions public superPositions;
+    /// @notice Superform router
     IBaseRouter public superformRouter;
+    /// @notice underlying vault
     IMaxApyCrossChainVault public vault;
+    /// @notice asset of underying vault
     address public asset;
     /// @notice Receiver delegation for withdrawals
     mapping(address => mapping(bytes => address)) public receivers;
+    /// @notice Assets requested in each liquidation
     mapping(address => mapping(bytes => uint256)) public requestedAssets;
     /// @notice Cached value of total assets that are being bridged at the moment
     uint256 public totalpendingXChainInvests;
+    /// @notice Cached value of total assets per id that are being bridged at the moment
+    mapping(uint256 => uint256) public pendingXChainInvests;
     /// @notice Cached value of total assets that are being bridged at the moment
     uint256 public totalPendingXChainDivests;
     /// @notice Gap for upgradeability
@@ -136,7 +143,8 @@ contract SuperformGateway is Initializable, OwnableRoles {
         // Initiate the cross-chain deposit via the vault router
         superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
 
-        totalpendingXChainInvests += amount;
+        pendingXChainInvests[superformId] += amount;
+        totalpendingXChainInvests = amount;
     }
 
     /// @notice Placeholder for investing in multiple vaults across chains
@@ -151,6 +159,12 @@ contract SuperformGateway is Initializable, OwnableRoles {
         req.superformsData.receiverAddressSP = address(this);
         for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
             uint256 superformId = req.superformsData.superformIds[i];
+
+            uint256 amount = req.superformsData.amounts[i];
+
+            pendingXChainInvests[superformId] = amount;
+
+            totalAmount += amount;
 
             // Cant invest in a vault that is not in the portfolio
             VaultData memory vaultObj = vault.getVault(superformId);
@@ -180,6 +194,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
             VaultData memory vaultObj = vault.getVault(superformId);
             if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
+            pendingXChainInvests[superformId] = amount;
             totalAmount += amount;
             unchecked {
                 ++i;
@@ -212,6 +227,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
                 VaultData memory vaultObj = vault.getVault(superformId);
                 if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
+                pendingXChainInvests[superformId] = amount;
                 totalAmount += amount;
             }
         }
@@ -518,8 +534,10 @@ contract SuperformGateway is Initializable, OwnableRoles {
         value;
         data;
         VaultData memory vaultObj = vault.getVault(superformId);
+        uint256 investedAssets = pendingXChainInvests[superformId]; 
+        delete pendingXChainInvests[superformId]; 
         uint256 bridgedAssets = vaultObj.convertToAssets(value, false);
-        totalpendingXChainInvests -= bridgedAssets;
+        totalpendingXChainInvests -= investedAssets;
         superPositions.safeTransferFrom(address(this), address(vault), superformId, value, "");
         vault.settleXChainInvest(superformId, bridgedAssets);
         return this.onERC1155Received.selector;

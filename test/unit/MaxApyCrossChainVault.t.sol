@@ -62,6 +62,7 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
 
         vault = new MaxApyCrossChainVault(config);
         gateway = deployGatewayBase(address(vault), users.alice);
+        gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
         vault.setGateway(ISuperformGateway(address(gateway)));
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
@@ -256,8 +257,8 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         _mintSuperpositions(address(gateway), superformId, shares);
-        assertEq(vault.totalAssets(), 999_999_482);
-        assertEq(vault.totalWithdrawableAssets(), 999_999_482);
+        assertEq(vault.totalAssets(), 999999482);
+        assertEq(vault.totalWithdrawableAssets(), 999999482);
         assertEq(vault.totalXChainAssets(), 599_999_482);
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalIdle(), 400 * _1_USDCE);
@@ -582,9 +583,10 @@ contract MaxApyCrossChainVaultTest is BaseVaultTest, SuperformActions, MaxApyCro
         uint256 newSuperformId = 999;
         uint64 newChainId = 42;
         uint8 newDecimals = 18;
+        oracle.setValues(newChainId, address(newVault), 1e6, block.timestamp, address(1));
         vm.expectEmit(true, true, true, true);
         emit AddVault(newChainId, newVault);
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(1)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
 
         assertTrue(vault.isVaultListed(newVault));
     }
