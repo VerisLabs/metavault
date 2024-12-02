@@ -257,8 +257,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         _mintSuperpositions(address(gateway), superformId, shares);
-        assertEq(vault.totalAssets(), 999999482);
-        assertEq(vault.totalWithdrawableAssets(), 999999482);
+        assertEq(vault.totalAssets(), 999_999_482);
+        assertEq(vault.totalWithdrawableAssets(), 999_999_482);
         assertEq(vault.totalXChainAssets(), 599_999_482);
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalIdle(), 400 * _1_USDCE);

@@ -99,8 +99,7 @@ contract BaseVaultTest is BaseTest {
 
     function _depositAtomic(uint256 assets, address receiver) internal returns (uint256 _shares) {
         bytes[] memory callDatas = new bytes[](2);
-        callDatas[0] =
-            abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
+        callDatas[0] = abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
         callDatas[1] = abi.encodeWithSignature("deposit(uint256,address)", assets, receiver);
         bytes[] memory returnData = vault.multicall(callDatas);
         return abi.decode(returnData[1], (uint256));
@@ -109,8 +108,7 @@ contract BaseVaultTest is BaseTest {
     function _mintAtomic(uint256 shares, address receiver) internal returns (uint256 _assets) {
         bytes[] memory callDatas = new bytes[](2);
         uint256 assets = vault.convertToAssets(shares);
-        callDatas[0] =
-            abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
+        callDatas[0] = abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
         callDatas[1] = abi.encodeWithSignature("mint(uint256,address)", shares, receiver);
         bytes[] memory returnData = vault.multicall(callDatas);
         return abi.decode(returnData[1], (uint256));

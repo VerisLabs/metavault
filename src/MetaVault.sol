@@ -337,6 +337,11 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         return gateway.totalpendingXChainInvests() + gateway.totalPendingXChainDivests() + totalWithdrawableAssets();
     }
 
+    /// @notice Returns the total amount of the underlying asset that have been deposited into the vault.
+    function totalDeposits() public view returns (uint256 assets) {
+        return totalIdle() + totalDebt();
+    }
+
     /// @notice Returns the total amount of the underlying assets that are settled.
     function totalWithdrawableAssets() public view returns (uint256 assets) {
         return totalLocalAssets() + totalXChainAssets();
@@ -1844,5 +1849,10 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         values;
         data;
         return this.onERC1155BatchReceived.selector;
+    }
+
+    function donate(uint256 assets) external {
+        asset().safeTransferFrom(msg.sender, address(this), assets);
+        _totalIdle += assets.toUint128();
     }
 }

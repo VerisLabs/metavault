@@ -534,8 +534,8 @@ contract SuperformGateway is Initializable, OwnableRoles {
         value;
         data;
         VaultData memory vaultObj = vault.getVault(superformId);
-        uint256 investedAssets = pendingXChainInvests[superformId]; 
-        delete pendingXChainInvests[superformId]; 
+        uint256 investedAssets = pendingXChainInvests[superformId];
+        delete pendingXChainInvests[superformId];
         uint256 bridgedAssets = vaultObj.convertToAssets(value, false);
         totalpendingXChainInvests -= investedAssets;
         superPositions.safeTransferFrom(address(this), address(vault), superformId, value, "");
@@ -588,38 +588,28 @@ contract SuperformGateway is Initializable, OwnableRoles {
         }
     }
 
-    function settleLiquidation(address controller, uint256 superformId) external {
-        bytes memory key = abi.encode(superformId);
-        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(controller, key));
-        uint256 settledAssets = receiverContract.balance();
-        uint256 requestedAssets = requestedAssets[controller][key];
-        receiverContract.pull(settledAssets);
-        asset.safeTransfer(address(vault), settledAssets);
-        vault.fulfillSettledRequest(controller, requestedAssets, settledAssets);
-    }
-
     function settleLiquidation(address controller, uint256[] calldata superformIds) external {
-        bytes memory key = abi.encode(superformIds);
+        bytes memory key;
+        if (superformIds.length == 1) {
+            bytes memory key = abi.encode(superformIds[0]);
+        } else {
+            bytes memory key = abi.encode(superformIds);
+        }
         ERC20Receiver receiverContract = ERC20Receiver(getReceiver(controller, key));
         uint256 settledAssets = receiverContract.balance();
         uint256 requestedAssets = requestedAssets[controller][key];
         receiverContract.pull(settledAssets);
         asset.safeTransfer(address(vault), settledAssets);
         vault.fulfillSettledRequest(controller, requestedAssets, settledAssets);
-    }
-
-    function settleDivest(uint256 superformId) external {
-        bytes memory key = abi.encode(superformId);
-        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(address(this), key));
-        uint256 settledAssets = receiverContract.balance();
-        receiverContract.pull(settledAssets);
-        totalPendingXChainDivests -= settledAssets;
-        asset.safeTransfer(address(vault), settledAssets);
-        vault.settleXChainDivest(superformId, settledAssets);
     }
 
     function settleDivest(uint256[] calldata superformIds) external {
-        bytes memory key = abi.encode(superformIds);
+        bytes memory key;
+        if (superformIds.length == 1) {
+            bytes memory key = abi.encode(superformIds[0]);
+        } else {
+            bytes memory key = abi.encode(superformIds);
+        }
         ERC20Receiver receiverContract = ERC20Receiver(getReceiver(address(this), key));
         uint256 settledAssets = receiverContract.balance();
 
