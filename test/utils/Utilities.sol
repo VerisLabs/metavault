@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.19;
 
-import { Vm } from "forge-std/Vm.sol";
-import { StdCheats } from "forge-std/StdCheats.sol";
 import { IERC20Metadata } from "../interfaces/IERC20Metadata.sol";
+import { StdCheats } from "forge-std/StdCheats.sol";
+import { Vm } from "forge-std/Vm.sol";
 
 contract Utilities is StdCheats {
     address constant HEVM_ADDRESS = address(bytes20(uint160(uint256(keccak256("hevm cheat code")))));

@@ -1,0 +1,1973 @@
+/// SPDX-License-Identifer: MIT
+pragma solidity ^0.8.19;
+
+import { IERC4626Oracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
+import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
+import { Multicallable } from "solady/utils/Multicallable.sol";
+import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
+
+import {
+    Harvest,
+    LiqRequest,
+    MultiDstMultiVaultStateReq,
+    MultiDstSingleVaultStateReq,
+    MultiVaultSFData,
+    MultiXChainMultiVaultWithdraw,
+    MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestWithSignatureParams,
+    SingleDirectMultiVaultStateReq,
+    SingleDirectSingleVaultStateReq,
+    SingleVaultSFData,
+    SingleXChainMultiVaultStateReq,
+    SingleXChainMultiVaultWithdraw,
+    SingleXChainSingleVaultStateReq,
+    SingleXChainSingleVaultWithdraw,
+    VaultConfig,
+    VaultData,
+    VaultLib,
+    VaultReport
+} from "./types/Lib.sol";
+
+/// @title MetaVault
+/// @author Unlockd
+/// @notice A ERC750 vault implementation for cross-chain yield
+/// aggregation
+contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           LIBRARIES                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @dev Safe casting operations for uint
+    using SafeCastLib for uint256;
+
+    /// @dev Safe transfer operations for ERC20 tokens
+    using SafeTransferLib for address;
+
+    /// @dev Library for vault-related operations
+    using VaultLib for VaultData;
+
+    /// @dev Library for math
+    using Math for uint256;
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           EVENTS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @dev Emitted when a redeem request is processed
+    event ProcessRedeemRequest(address indexed controller, uint256 shares);
+
+    /// @dev Emitted when a redeem request is fulfilled after being processed
+    event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
+
+    /// @dev Emitted when investing vault idle assets
+    event Invest(uint256 amount);
+
+    /// @dev Emitted when divesting vault idle assets
+    event Divest(uint256 amount);
+
+    /// @dev Emitted when cross-chain investment is settled
+    event SettleXChainInvest(uint256 indexed superformId, uint256 assets);
+
+    /// @dev Emitted when cross-chain investment is settled
+    event SettleXChainDivest(uint256 indexed superformId, uint256 assets);
+
+    /// @dev Emitted when investing vault idle assets
+    event Report(uint64 indexed chainId, address indexed vault, int256 amount);
+
+    /// @dev Emitted when adding a new vault to the portfolio
+    event AddVault(uint64 indexed chainId, address vault);
+
+    /// @dev Emitted when setting a new oracle for a chain
+    event SetOracle(uint64 indexed chainId, address oracle);
+
+    /// @dev Emitted when updating the shares lock time
+    event SetSharesLockTime(uint24 time);
+
+    /// @dev Emitted when updating the management fee
+    event SetManagementFee(uint16 fee);
+
+    /// @dev Emitted when updating the performance fee
+    event SetPerformanceFee(uint16 fee);
+
+    /// @dev Emitted when updating the oracle fee
+    event SetOracleFee(uint16 fee);
+
+    // @dev Emitted when updating the recovery address
+    event SetRecoveryAddress(address recoveryAddress);
+
+    /// @dev Emitted when the emergency shutdown state is changed
+    event EmergencyShutdown(bool enabled);
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           ERRORS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Thrown when {msg.value} cannot cover the crosschain transaction cost
+    error InsufficientGas();
+
+    /// @notice Thrown when attempting to interact with a vault that is not listed in the portfolio
+    error VaultNotListed();
+
+    /// @notice Thrown when attempting to add a vault that is already listed
+    error VaultAlreadyListed();
+
+    /// @notice Thrown when attempting to withdraw more assets than are currently available
+    error InsufficientAvailableAssets();
+
+    /// @notice Thrown when trying to perform an operation on a request that has not been settled yet
+    error RequestNotSettled();
+
+    /// @notice Thrown when trying to redeem a non processed request
+    error RedeemNotProcessed();
+
+    /// @notice Thrown when attempting to redeem shares that are still locked
+    error SharesLocked();
+
+    /// @notice Thrown when there are not enough assets to fulfill a request
+    error InsufficientAssets();
+
+    /// @notice Thrown when attempting to perform an operation while the vault is in emergency shutdown
+    error VaultShutdown();
+
+    error SignatureExpired();
+
+    error InvalidSignature();
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           CONSTANTS                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Maximum size of the withdrawal queue
+    uint256 public constant WITHDRAWAL_QUEUE_SIZE = 30;
+
+    /// @notice Number of seconds in a year, used for APY calculations
+    uint256 public constant SECS_PER_YEAR = 31_556_952;
+
+    /// @notice Maximum basis points (100%)
+    uint256 public constant MAX_BPS = 10_000;
+
+    /// @notice Role identifier for admin privileges
+    uint256 public constant ADMIN_ROLE = _ROLE_0;
+
+    /// @notice Role identifier for emergency admin privileges
+    uint256 public constant EMERGENCY_ADMIN_ROLE = _ROLE_1;
+
+    /// @notice Role identifier for oracle privileges
+    uint256 public constant ORACLE_ROLE = _ROLE_2;
+
+    /// @notice Role identifier for manager privileges
+    uint256 public constant MANAGER_ROLE = _ROLE_3;
+
+    /// @notice Role identifier for relayer privileges
+    uint256 public constant RELAYER_ROLE = _ROLE_4;
+
+    /// @notice Delay period for redeem requests
+    uint24 public constant REQUEST_REDEEM_DELAY = 1 days;
+
+    /// @notice Chain ID of the current network
+    uint64 public THIS_CHAIN_ID;
+
+    /// @notice Number of supported chains
+    uint256 public constant N_CHAINS = 7;
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           STORAGE                          */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Cached value of total assets in this vault
+    uint128 private _totalIdle;
+    /// @notice Cached value of total allocated assets
+    uint128 private _totalDebt;
+    /// @notice Asset decimals
+    uint8 _decimals;
+    /// @notice Protocol fee
+    uint16 public managementFee;
+    /// @notice Protocol fee
+    uint16 public performanceFee;
+    /// @notice Protocol fee
+    uint16 public oracleFee;
+    /// @notice Hurdle rate of underlying asset
+    uint16 public hurdleRate;
+    /// @notice Minimum time users must wait to redeem shares
+    uint24 public sharesLockTime;
+    /// @notice Delay from processing a redeem till its claimed
+    uint24 public processRedeemSettlement;
+    /// @notice Wether the vault is paused
+    bool public emergencyShutdown;
+    /// @notice Fee receiver
+    address public treasury;
+    /// @notice Underlying asset
+    address private immutable _asset;
+    /// @notice Gateway contract to interact with superform
+    ISuperformGateway public gateway;
+    /// @notice ERC20 name
+    string private _name;
+    /// @notice ERC20 symbol
+    string private _symbol;
+    /// @notice maps the assets and data of each allocated vault
+    /// @notice Vaults portfolio on this same chain
+    uint256[WITHDRAWAL_QUEUE_SIZE] public localWithdrawalQueue;
+    /// @notice Vaults portfolio in external chains
+    uint256[WITHDRAWAL_QUEUE_SIZE] public xChainWithdrawalQueue;
+    /// @notice Implementation contract of the receiver contract
+    address public receiverImplementation;
+    /// @notice Superform recovery address
+    address public recoveryAddress;
+    /// @notice Timestamp of last report
+    uint256 public lastReport;
+    /// @notice The ATH share price
+    uint256 public sharePriceWaterMark;
+    /// @notice Signer address to process redeem requests
+    address public signerRelayer;
+    /// @notice Array of destination chain IDs
+    /// @dev Includes Ethereum Mainnet, Polygon, BNB Chain, Optimism, Base, Arbitrum One, and Avalanche
+    uint64[N_CHAINS] public DST_CHAINS = [
+        1, // Ethereum Mainnet
+        137, // Polygon
+        56, // BNB Chain
+        10, // Optimism
+        8453, // Base
+        42_161, // Arbitrum One
+        43_114 // Avalanche
+    ];
+    /// @notice Timestamp of deposit lock
+    mapping(address => uint256) private _depositLockCheckPoint;
+    /// @notice Storage of each vault related data
+    mapping(uint256 => VaultData) public vaults;
+    /// @notice the ERC4626 oracle of each chain
+    mapping(uint64 chain => address) public oracles;
+    /// @notice Timestamp of request redeem lock
+    mapping(address => uint256) private _requestRedeemSettlementCheckpoint;
+    /// @notice Inverse mapping vault => superformId
+    mapping(address => uint256) _vaultToSuperformId;
+    /// @notice Redeem is locked when requesting and unlocked when processing
+    mapping(address => bool) redeemLocked;
+    /// @notice Nonce of each controller
+    mapping(address controller => uint256 nonce) private _controllerNonces;
+    /// @notice Mapping of chain IDs to their respective indexes
+    mapping(uint64 => uint256) chainIndexes;
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           MODIFIERS                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Modifier to prevent execution during emergency shutdown
+    /// @dev Reverts the transaction if emergencyShutdown is true
+    modifier noEmergencyShutdown() {
+        if (emergencyShutdown) {
+            revert VaultShutdown();
+        }
+        _;
+    }
+
+    /// @notice Modifier to update the share price water-mark before running a function
+    modifier updateWatermark() {
+        _;
+        uint256 sp = sharePrice();
+        assembly {
+            let spwm := sload(sharePriceWaterMark.slot)
+            if lt(spwm, sp) { sstore(sharePriceWaterMark.slot, sp) }
+        }
+    }
+
+    constructor(VaultConfig memory config) {
+        _asset = config.asset;
+        _name = config.name;
+        _symbol = config.symbol;
+        treasury = config.treasury;
+        managementFee = config.managementFee;
+        performanceFee = config.performanceFee;
+        oracleFee = config.oracleFee;
+        recoveryAddress = config.recoveryAddress;
+        sharesLockTime = config.sharesLockTime;
+        processRedeemSettlement = config.processRedeemSettlement;
+        lastReport = block.timestamp;
+        hurdleRate = config.assetHurdleRate;
+
+        // Try to get asset decimals, fallback to default if unsuccessful
+        (bool success, uint8 result) = _tryGetAssetDecimals(config.asset);
+        _decimals = success ? result : _DEFAULT_UNDERLYING_DECIMALS;
+        // Set the chain ID for the current network
+        THIS_CHAIN_ID = uint64(block.chainid);
+        // Initialize chainIndexes mapping
+        for (uint256 i = 0; i != N_CHAINS; i++) {
+            chainIndexes[DST_CHAINS[i]] = i;
+        }
+
+        // Initialize ownership and grant admin role
+        _initializeOwner(msg.sender);
+        _grantRoles(msg.sender, ADMIN_ROLE);
+
+        // Initialize signer relayer
+        signerRelayer = config.signerRelayer;
+    }
+
+    /// @notice Sets the gateway contract for cross-chain communication
+    /// @param _gateway The address of the new gateway contract
+    /// @dev Only callable by addresses with ADMIN_ROLE
+    function setGateway(ISuperformGateway _gateway) external onlyRoles(ADMIN_ROLE) {
+        gateway = _gateway;
+        asset().safeApprove(address(_gateway), type(uint256).max);
+        gateway.superPositions().setApprovalForAll(address(_gateway), true);
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       PUBLIC GETTERS                       */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Returns the name of the vault shares token.
+    function name() public view override returns (string memory) {
+        return _name;
+    }
+
+    /// @notice Returns the symbol of the token.
+    function symbol() public view override returns (string memory) {
+        return _symbol;
+    }
+
+    /// @notice Returns the address of the underlying asset.
+    function asset() public view override returns (address) {
+        return _asset;
+    }
+
+    /// @notice Returns the total amount of the underlying asset managed by the Vault.
+    function totalAssets() public view override returns (uint256 assets) {
+        return gateway.totalpendingXChainInvests() + gateway.totalPendingXChainDivests() + totalWithdrawableAssets();
+    }
+
+    /// @notice Returns the total amount of the underlying asset that have been deposited into the vault.
+    function totalDeposits() public view returns (uint256 assets) {
+        return totalIdle() + totalDebt();
+    }
+
+    /// @notice Returns the total amount of the underlying assets that are settled.
+    function totalWithdrawableAssets() public view returns (uint256 assets) {
+        return totalLocalAssets() + totalXChainAssets();
+    }
+
+    /// @notice Returns the total amount of the underlying asset that are located on this
+    /// same chain and can be transferred synchronously
+    function totalLocalAssets() public view returns (uint256 assets) {
+        assets = _totalIdle;
+        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
+            VaultData memory vault = vaults[localWithdrawalQueue[i]];
+            if (vault.vaultAddress == address(0)) break;
+            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            ++i;
+        }
+        return assets;
+    }
+
+    /// @notice Returns the total amount of the underlying asset that are located on
+    /// other chains and need asynchronous transfers
+    function totalXChainAssets() public view returns (uint256 assets) {
+        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
+            VaultData memory vault = vaults[xChainWithdrawalQueue[i]];
+            if (vault.vaultAddress == address(0)) break;
+            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            ++i;
+        }
+        return assets;
+    }
+
+    /// @notice Returns the estimate price of 1 vault share
+    function sharePrice() public view returns (uint256) {
+        return convertToAssets(10 ** decimals());
+    }
+
+    /// @notice returns the assets that are sitting idle in this contract
+    /// @return assets amount of idle assets
+    function totalIdle() public view returns (uint256 assets) {
+        return _totalIdle;
+    }
+
+    /// @notice returns the total issued debt of underlying vaulrs
+    /// @return assets amount assets that are invested in vaults
+    function totalDebt() public view returns (uint256 assets) {
+        return _totalDebt;
+    }
+
+    /// @notice helper function to see if a vault is listed
+    function isVaultListed(address vaultAddress) public view returns (bool) {
+        return _vaultToSuperformId[vaultAddress] != 0;
+    }
+
+    /// @notice helper function to see if a vault is listed
+    function isVaultListed(uint256 superformId) public view returns (bool) {
+        return vaults[superformId].vaultAddress != address(0);
+    }
+
+    /// @notice returns the struct containtaining vault data
+    function getVault(uint256 superformId) public view returns (VaultData memory vault) {
+        return vaults[superformId];
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       ERC7540 ACTIONS                      */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Transfers assets from sender into the Vault and submits a Request for asynchronous deposit.
+    /// @param assets the amount of deposit assets to transfer from owner
+    /// @param controller the controller of the request who will be able to operate the request
+    /// @param owner the source of the deposit assets
+    /// @return requestId
+    function requestDeposit(
+        uint256 assets,
+        address controller,
+        address owner
+    )
+        public
+        override
+        noEmergencyShutdown
+        returns (uint256 requestId)
+    {
+        requestId = super.requestDeposit(assets, controller, owner);
+        // fulfill the request directly
+        _fulfillDepositRequest(controller, assets, convertToShares(assets));
+    }
+
+    /// @notice Mints shares Vault shares to receiver by claiming the Request of the controller.
+    /// @dev uses msg.sender as controller
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @return shares minted shares
+    function deposit(uint256 assets, address to) public override returns (uint256 shares) {
+        return deposit(assets, to, msg.sender);
+    }
+
+    /// @notice Mints shares Vault shares to receiver by claiming the Request of the controller.
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @param controller controller address
+    /// @return shares minted shares
+    function deposit(
+        uint256 assets,
+        address to,
+        address controller
+    )
+        public
+        override
+        noEmergencyShutdown
+        returns (uint256 shares)
+    {
+        uint256 sharesBalance = balanceOf(to);
+        shares = super.deposit(assets, to, controller);
+        // Start shares lock time
+        _lockShares(to, sharesBalance, shares);
+        _afterDeposit(assets, shares);
+    }
+
+    /// @notice Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
+    /// @dev uses msg.sender as controllerisValidSignat
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @return assets deposited assets
+    function mint(uint256 shares, address to) public override returns (uint256 assets) {
+        return mint(shares, to, msg.sender);
+    }
+
+    /// @notice Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
+    /// @param shares to mint
+    /// @param to shares receiver
+    /// @param controller controller address
+    /// @return assets deposited assets
+    function mint(
+        uint256 shares,
+        address to,
+        address controller
+    )
+        public
+        override
+        noEmergencyShutdown
+        returns (uint256 assets)
+    {
+        uint256 sharesBalance = balanceOf(to);
+        assets = super.mint(shares, to, controller);
+        _lockShares(to, sharesBalance, shares);
+        _afterDeposit(assets, shares);
+    }
+
+    /// @notice Assumes control of shares from sender into the Vault and submits a Request for asynchronous redeem.
+    /// @param shares the amount of shares to be redeemed to transfer from owner
+    /// @param controller the controller of the request who will be able to operate the request
+    /// @param owner the source of the shares to be redeemed
+    /// @return requestId id
+    function requestRedeem(
+        uint256 shares,
+        address controller,
+        address owner
+    )
+        public
+        override
+        returns (uint256 requestId)
+    {
+        // Require deposited shares arent locked
+        _checkSharesLocked(controller);
+        requestId = super.requestRedeem(shares, controller, owner);
+        // Lock redeem till the request is processed
+        redeemLocked[controller] = true;
+    }
+
+    /// @dev Redeems shares for assets, ensuring all settled requests are fulfilled
+    /// @param shares The number of shares to redeem
+    /// @param receiver The address that will receive the assets
+    /// @param controller The address that controls the redemption
+    /// @return assets The amount of assets redeemed
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address controller
+    )
+        public
+        override
+        nonReentrant
+        returns (uint256 assets)
+    {
+        _checkRedeemProcessed(controller);
+        return super.redeem(shares, receiver, controller);
+    }
+
+    /// @dev Withdraws assets, ensuring all settled requests are fulfilled
+    /// @param assets The amount of assets to withdraw
+    /// @param receiver The address that will receive the assets
+    /// @param controller The address that controls the withdrawal
+    /// @return shares The number of shares burned
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address controller
+    )
+        public
+        override
+        nonReentrant
+        returns (uint256 shares)
+    {
+        return super.withdraw(assets, receiver, controller);
+    }
+
+    /// @notice Processes a redemption request for a given controller
+    /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
+    /// including cross-chain withdrawals
+    /// @param controller The address of the controller initiating the redemption
+    function processRedeemRequest(
+        address controller,
+        SingleXChainSingleVaultWithdraw calldata sXsV,
+        SingleXChainMultiVaultWithdraw calldata sXmV,
+        MultiXChainSingleVaultWithdraw calldata mXsV,
+        MultiXChainMultiVaultWithdraw calldata mXmV
+    )
+        external
+        payable
+        nonReentrant
+        onlyRoles(RELAYER_ROLE)
+    {
+        // Retrieve the pending redeem request for the specified controller
+        // This request may involve cross-chain withdrawals from various ERC4626 vaults
+
+        // Process the redemption request asynchronously
+        // Parameters:
+        // 1. pendingRedeemRequest(controller): Fetches the pending shares
+        // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
+        _processRedeemRequest(
+            ProcessRedeemRequestConfig(pendingRedeemRequest(controller), controller, controller, sXsV, sXmV, mXsV, mXmV)
+        );
+        // Note: After processing, the redeemed assets are held by this contract
+        // The user can later claim these assets using `redeem` or `withdraw`
+    }
+
+    /// @notice Processes a redemption request for a given controller
+    /// @dev This function allows anybody with the explicit permission of the "signer relayer" to process a redeem
+    /// request
+    /// @param params as `processRedeemRequest` params + signature
+    function processRedeemRequestWithSignature(ProcessRedeemRequestWithSignatureParams calldata params)
+        external
+        payable
+        nonReentrant
+    {
+        if (block.timestamp < params.deadline) revert SignatureExpired();
+
+        bytes32 hash;
+        {
+            hash = keccak256(
+                abi.encode(
+                    params.controller,
+                    keccak256(abi.encode(params.sXsV)),
+                    keccak256(abi.encode(params.sXmV)),
+                    keccak256(abi.encode(params.mXsV)),
+                    keccak256(abi.encode(params.mXmV)),
+                    ++_controllerNonces[params.controller],
+                    params.deadline
+                )
+            );
+        }
+        // Needs explicit approval from the relayer
+        _checkSignerIsRelayer(hash, params.v, params.r, params.s);
+
+        // Retrieve the pending redeem request for the specified controller
+        // This request may involve cross-chain withdrawals from various ERC4626 vaults
+
+        // Process the redemption request asynchronously
+        // Parameters:
+        // 1. pendingRedeemRequest(controller): Fetches the pending shares
+        // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
+        // 3. address(this): The vault itself as the receiver of the redeemed assets
+        // 4. true: Retain the assets, dont send them directly to the controller
+        _processRedeemRequest(
+            ProcessRedeemRequestConfig(
+                pendingRedeemRequest(params.controller),
+                params.controller,
+                params.controller,
+                params.sXsV,
+                params.sXmV,
+                params.mXsV,
+                params.mXmV
+            )
+        );
+        // Note: After processing, the redeemed assets are held by this contract
+        // The user can later claim these assets using `redeem` or `withdraw`
+    }
+
+    /// @notice Verifies that a signature is valid and was signed by the relayer
+    /// @param hash The hash of the data that was signed
+    /// @param v The v component of the signature
+    /// @param r The r component of the signature
+    /// @param s The s component of the signature
+    /// @dev Reverts if the signature is invalid
+    function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view {
+        bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
+        if (!isValid) {
+            revert InvalidSignature();
+        }
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       VAULT MANAGEMENT                     */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @notice Simulates a withdrawal route to help relayers determine how to fulfill redemption requests
+    /// @dev This is an off-chain helper function that calculates the optimal route for processing
+    /// withdrawals across different chains and vaults. It computes:
+    /// 1. How much can be fulfilled directly from idle assets
+    /// 2. Which vaults need to be accessed for the remaining amount
+    /// 3. The distribution of withdrawals across different chains and vaults
+    /// The function follows the same withdrawal queue priority as actual withdrawals:
+    /// - First uses idle assets
+    /// - Then local chain vaults
+    /// - Finally cross-chain vaults
+    /// @param assets The amount of assets to be withdrawn
+    /// @return cachedRoute A struct containing:
+    ///         - The withdrawal route across different chains
+    ///         - The shares to be redeemed from each vault
+    ///         - The assets expected from each withdrawal
+    ///         - The amount that can be fulfilled immediately from idle assets
+    ///         - Various cached state values needed for processing
+    function previewWithdrawalRoute(uint256 assets)
+        public
+        view
+        returns (ProcessRedeemRequestCache memory cachedRoute)
+    {
+        cachedRoute.assets = assets;
+        uint256 shares = convertToShares(assets);
+        cachedRoute.totalIdle = _totalIdle;
+        cachedRoute.totalDebt = _totalDebt;
+        cachedRoute.totalAssets = totalAssets();
+
+        // Cannot process more assets than the available
+        if (cachedRoute.assets > cachedRoute.totalAssets - gateway.totalpendingXChainInvests()) {
+            revert InsufficientAvailableAssets();
+        }
+
+        // If totalIdle can covers the amount fulfill directly
+        if (cachedRoute.totalIdle >= cachedRoute.assets) {
+            cachedRoute.sharesFulfilled = shares;
+            cachedRoute.totalClaimableWithdraw = cachedRoute.assets;
+        }
+        // Otherwise perform Superform withdrawals
+        else {
+            // Cache amount to withdraw before reducing totalIdle
+            cachedRoute.amountToWithdraw = cachedRoute.assets - cachedRoute.totalIdle;
+            // Use totalIdle to fulfill the request
+            if (cachedRoute.totalIdle > 0) {
+                cachedRoute.totalClaimableWithdraw = cachedRoute.totalIdle;
+                cachedRoute.sharesFulfilled = _convertToShares(cachedRoute.totalIdle, cachedRoute.totalAssets);
+            }
+            ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
+            _prepareWithdrawalRoute(cachedRoute);
+        }
+        return cachedRoute;
+    }
+
+    /// @notice Invests assets from this vault into a single target vault within the same chain
+    /// @dev Only callable by addresses with the MANAGER_ROLE
+    /// @param vaultAddress The address of the target vault to invest in
+    /// @param assets The amount of assets to invest
+    /// @param minSharesOut The minimum amount of shares expected to receive from the investment
+    /// @return shares The number of shares received from the target vault
+    function investSingleDirectSingleVault(
+        address vaultAddress,
+        uint256 assets,
+        uint256 minSharesOut
+    )
+        public
+        onlyRoles(MANAGER_ROLE)
+        returns (uint256 shares)
+    {
+        // Ensure the target vault is in the approved list
+        if (!isVaultListed(vaultAddress)) revert VaultNotListed();
+
+        // Record the balance before deposit to calculate received shares
+        uint256 balanceBefore = vaultAddress.balanceOf(address(this));
+
+        // Deposit assets into the target vault
+        ERC4626(vaultAddress).deposit(assets, address(this));
+
+        // Calculate the number of shares received
+        shares = vaultAddress.balanceOf(address(this)) - balanceBefore;
+
+        // Ensure the received shares meet the minimum expected assets
+        if (shares < minSharesOut) {
+            revert InsufficientAssets();
+        }
+
+        // Update the vault's internal accounting
+        uint128 amountUint128 = assets.toUint128();
+        _totalIdle -= amountUint128;
+        _totalDebt += amountUint128;
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt += amountUint128;
+
+        emit Invest(assets);
+        return shares;
+    }
+
+    /// @notice Invests assets from this vault into multiple target vaults within the same chain
+    /// @dev Calls investSingleDirectSingleVault for each target vault
+    /// @param vaultAddresses An array of addresses of the target vaults to invest in
+    /// @param assets An array of amounts to invest in each corresponding vault
+    /// @param minSharesOuts An array of minimum amounts of shares expected from each investment
+    /// @return shares An array of the number of shares received from each target vault
+    function investSingleDirectMultiVault(
+        address[] calldata vaultAddresses,
+        uint256[] calldata assets,
+        uint256[] calldata minSharesOuts
+    )
+        external
+        returns (uint256[] memory shares)
+    {
+        shares = new uint256[](vaultAddresses.length);
+        for (uint256 i = 0; i < vaultAddresses.length; ++i) {
+            shares[i] = investSingleDirectSingleVault(vaultAddresses[i], assets[i], minSharesOuts[i]);
+        }
+    }
+
+    /// @notice Invests assets from this vault into a single target vault on a different chain
+    /// @dev Only callable by addresses with the MANAGER_ROLE
+    /// @param req Crosschain deposit request
+    function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        gateway.investSingleXChainSingleVault{ value: msg.value }(req);
+
+        // Update the vault's internal accounting
+        uint256 amount = req.superformData.amount;
+        uint128 amountUint128 = amount.toUint128();
+        _totalIdle -= amountUint128;
+
+        emit Invest(amount);
+    }
+
+    /// @notice Placeholder for investing in multiple vaults across chains
+    /// @param req Crosschain deposit request
+    function investSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        uint256 totalAmount = gateway.investSingleXChainMultiVault{ value: msg.value }(req);
+        _totalIdle -= totalAmount.toUint128();
+        emit Invest(totalAmount);
+    }
+
+    /// @notice Placeholder for investing multiple assets in a single vault across chains
+    /// @dev Not implemented yet
+    function investMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        uint256 totalAmount = gateway.investMultiXChainSingleVault{ value: msg.value }(req);
+        _totalIdle -= totalAmount.toUint128();
+        emit Invest(totalAmount);
+    }
+
+    /// @notice Placeholder for investing multiple assets in multiple vaults across chains
+    /// @dev Not implemented yet
+    function investMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        uint256 totalAmount = gateway.investMultiXChainMultiVault(req);
+        _totalIdle -= totalAmount.toUint128();
+        emit Invest(totalAmount);
+    }
+
+    /// @notice Withdraws assets from a single vault on the same chain
+    /// @dev This function redeems shares from an ERC4626 vault and updates internal accounting.
+    /// If all shares are withdrawn, it removes the total debt for that vault.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param vaultAddress The address of the vault to withdraw from
+    /// @param shares The amount of shares to redeem
+    /// @param minAssetsOut The minimum amount of assets expected to receive
+    /// @return assets The amount of assets actually withdrawn
+    function divestSingleDirectSingleVault(
+        address vaultAddress,
+        uint256 shares,
+        uint256 minAssetsOut
+    )
+        public
+        onlyRoles(MANAGER_ROLE)
+        returns (uint256 assets)
+    {
+        uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
+        uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
+        bool removeDebt;
+        if (shares == sharesBalance) {
+            removeDebt = true;
+        }
+
+        // Ensure the target vault is in the approved list
+        if (!isVaultListed(vaultAddress)) revert VaultNotListed();
+
+        // Record the balance before deposit to calculate received assets
+        uint256 balanceBefore = asset().balanceOf(address(this));
+
+        // Deposit assets into the target vault
+        ERC4626(vaultAddress).redeem(shares, address(this), address(this));
+
+        // Calculate the number of assets received
+        assets = asset().balanceOf(address(this)) - balanceBefore;
+
+        // Ensure the received assets meet the minimum expected amount
+        if (assets < minAssetsOut) {
+            revert InsufficientAssets();
+        }
+
+        // Update the vault's internal accounting
+        _totalIdle += assets.toUint128();
+        uint128 amountUint128 =
+            removeDebt ? vaults[_vaultToSuperformId[vaultAddress]].totalDebt : sharesValue.toUint128();
+        _totalDebt -= amountUint128;
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt -= amountUint128;
+
+        emit Divest(sharesValue);
+        return assets;
+    }
+
+    /// @notice Withdraws assets from multiple vaults on the same chain
+    /// @dev Iteratively calls divestSingleDirectSingleVault for each vault.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param vaultAddresses Array of vault addresses to withdraw from
+    /// @param shares Array of share amounts to withdraw from each vault
+    /// @param minAssetsOuts Array of minimum expected asset amounts for each withdrawal
+    /// @return assets Array of actual asset amounts withdrawn from each vault
+    function divestSingleDirectMultiVault(
+        address[] calldata vaultAddresses,
+        uint256[] calldata shares,
+        uint256[] calldata minAssetsOuts
+    )
+        external
+        payable
+        returns (uint256[] memory assets)
+    {
+        assets = new uint256[](vaultAddresses.length);
+        for (uint256 i = 0; i < vaultAddresses.length; ++i) {
+            assets[i] = divestSingleDirectSingleVault(vaultAddresses[i], shares[i], minAssetsOuts[i]);
+        }
+    }
+
+    /// @notice Withdraws assets from a single vault on a different chain
+    /// @dev Initiates a cross-chain withdrawal through the gateway contract.
+    /// Updates debt tracking for the source vault.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing target chain, vault, and amount details
+    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        uint256 sharesValue = gateway.divestSingleXChainSingleVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
+        vaults[req.superformData.superformId].totalDebt =
+            _sub0(vaults[req.superformData.superformId].totalDebt, sharesValue).toUint128();
+        emit Divest(sharesValue);
+    }
+
+    /// @notice Withdraws assets from multiple vaults on a single different chain
+    /// @dev Processes withdrawals from multiple vaults on the same target chain.
+    /// Updates debt tracking for all source vaults.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing target chain and multiple vault details
+    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        for (uint256 i = 0; i < req.superformsData.superformIds.length;) {
+            uint256 superformId = req.superformsData.superformIds[i];
+            VaultData memory vault = vaults[superformId];
+            uint256 sharesBalance = _sharesBalance(vault);
+            uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+            vaults[superformId] = vault;
+            unchecked {
+                ++i;
+            }
+        }
+        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
+        emit Divest(totalAmount);
+    }
+
+    /// @notice Withdraws assets from a single vault across multiple chains
+    /// @dev Initiates withdrawals from the same vault type across different chains.
+    /// Updates debt tracking for all source vaults.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing multiple chain and single vault details
+    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        for (uint256 i = 0; i < req.superformsData.length;) {
+            uint256 superformId = req.superformsData[i].superformId;
+            VaultData memory vault = vaults[superformId];
+            uint256 sharesBalance = _sharesBalance(vault);
+            uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+            vaults[superformId] = vault;
+            unchecked {
+                ++i;
+            }
+        }
+        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
+        emit Divest(totalAmount);
+    }
+
+    /// @notice Withdraws assets from multiple vaults across multiple chains
+    /// @dev Processes withdrawals from different vaults across multiple chains.
+    /// Updates debt tracking for all source vaults.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing multiple chain and multiple vault details
+    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+        external
+        payable
+        onlyRoles(MANAGER_ROLE)
+    {
+        for (uint256 i = 0; i < req.superformsData.length;) {
+            uint256[] memory superformIds = req.superformsData[i].superformIds;
+            for (uint256 j = 0; j < superformIds.length;) {
+                uint256 superformId = superformIds[j];
+                VaultData memory vault = vaults[superformId];
+                uint256 sharesBalance = _sharesBalance(vault);
+                uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+                vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+                vaults[superformId] = vault;
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req);
+        _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
+
+        emit Divest(totalAmount);
+    }
+
+    /// @notice Updates the share prices of vaults based on oracle reports
+    /// @dev This function can only be called by addresses with the ORACLE_ROLE
+    function harvest(Harvest[] calldata harvests) external updateWatermark {
+        uint256 duration = block.timestamp - lastReport;
+        uint256 sharePrice_ = sharePrice();
+        for (uint256 i = 0; i < harvests.length; i++) {
+            // Cache the current report for efficiency
+            Harvest memory _vault = harvests[i];
+
+            // Ensure the reported vault is in the approved list
+            if (!isVaultListed(_vault.vaultAddress)) revert VaultNotListed();
+
+            // Retrieve the superform ID for the vault
+            uint256 superformId = _vaultToSuperformId[_vault.vaultAddress];
+
+            // Cache the vault data for easier access
+            VaultData memory vault = vaults[superformId];
+
+            // Get the current balance of vault shares
+            uint256 sharesBalance = _sharesBalance(vault);
+
+            // Calculate the total assets value before applying the new share price
+            uint256 totalAssetsBefore = vault.convertToAssetsCachedSharePrice(sharesBalance);
+
+            // Update the vault's share price with the new reported value
+            VaultReport memory report = vault.oracle.getLatestSharePrice(_vault.chainId, _vault.vaultAddress);
+
+            vaults[superformId].lastReportedSharePrice = uint192(report.sharePrice);
+
+            // Calculate the total assets value after applying the new share price
+            uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance, true);
+
+            // Gains/losses of the strategy
+            int256 vaultDelta = int256(totalAssetsAfter) - int256(totalAssetsBefore);
+
+            // If it has profit apply fees
+            if (vaultDelta > 0) {
+                // Only charge fees on yield above watermark
+                if (sharePrice_ > sharePriceWaterMark) {
+                    // And only charge rees if the strategy yield is above hurdle rate
+                    uint256 rate = (uint256(vaultDelta) * MAX_BPS).mulDiv(SECS_PER_YEAR, duration) / totalAssetsBefore;
+                    if (rate > hurdleRate) {
+                        uint16 effectiveFee = performanceFee - vault.deductedFees;
+                        uint256 performanceFees = uint256(vaultDelta) * effectiveFee / MAX_BPS;
+                        uint256 performanceFeeShares = convertToShares(performanceFees);
+                        _mint(treasury, performanceFeeShares);
+                    }
+                }
+            }
+
+            // Calculate and distribute management fees based on the change in total assets
+            _assessOracleFees(report.reporter, duration);
+            emit Report(vault.chainId, vault.vaultAddress, vaultDelta);
+        }
+        // Calculate and distribute management fees based on the change in total assets
+        _assessManagementFees(treasury, duration);
+        // Update timestamp of last report
+        lastReport = block.timestamp;
+    }
+
+    /// @notice Add a new vault to the portfolio
+    /// @param chainId chainId of the vault
+    /// @param superformId id of superform in case its crosschain
+    /// @param vault vault address
+    /// @param vaultDecimals decimals of ERC4626 token
+    /// @param oracle vault shares price oracle
+    function addVault(
+        uint64 chainId,
+        uint256 superformId,
+        address vault,
+        uint8 vaultDecimals,
+        uint16 deductedFees,
+        IERC4626Oracle oracle
+    )
+        external
+        onlyRoles(ADMIN_ROLE)
+    {
+        if (superformId == 0) revert();
+        // If its already listed revert
+        if (isVaultListed(vault)) revert VaultAlreadyListed();
+
+        // Save it into storage
+        vaults[superformId].chainId = chainId;
+        vaults[superformId].superformId = superformId;
+        vaults[superformId].vaultAddress = vault;
+        vaults[superformId].decimals = vaultDecimals;
+        vaults[superformId].oracle = oracle;
+        vaults[superformId].deductedFees = deductedFees;
+        uint192 lastSharePrice = vaults[superformId].sharePrice().toUint192();
+        if (lastSharePrice == 0) revert();
+        vaults[superformId].lastReportedSharePrice = lastSharePrice;
+        _vaultToSuperformId[vault] = superformId;
+
+        if (chainId == THIS_CHAIN_ID) {
+            // Push it to the local withdrawal queue
+            uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = localWithdrawalQueue;
+            for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+                if (queue[i] == 0) {
+                    localWithdrawalQueue[i] = superformId;
+                    break;
+                }
+            }
+            // If its on the same chain perfom approval to vault
+            asset().safeApprove(vault, type(uint256).max);
+        } else {
+            // Push it to the crosschain withdrawal queue
+            uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = xChainWithdrawalQueue;
+            for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+                if (queue[i] == 0) {
+                    xChainWithdrawalQueue[i] = superformId;
+                    break;
+                }
+            }
+        }
+
+        emit AddVault(chainId, vault);
+    }
+
+    /// @notice Sets the emergency shutdown state of the vault
+    /// @dev Can only be called by addresses with the EMERGENCY_ADMIN_ROLE
+    /// @param _emergencyShutdown True to enable emergency shutdown, false to disable
+    function setEmergencyShutdown(bool _emergencyShutdown) external onlyRoles(EMERGENCY_ADMIN_ROLE) {
+        emergencyShutdown = _emergencyShutdown;
+        emit EmergencyShutdown(_emergencyShutdown);
+    }
+
+    /// @notice set the oracle for one chain
+    /// @param chainId the oracle
+    /// @param oracle for that chain
+    function setOracle(uint64 chainId, address oracle) external onlyRoles(ADMIN_ROLE) {
+        oracles[chainId] = oracle;
+        emit SetOracle(chainId, oracle);
+    }
+
+    function setSharesLockTime(uint24 time) external onlyRoles(ADMIN_ROLE) {
+        sharesLockTime = time;
+        emit SetSharesLockTime(time);
+    }
+
+    /// @notice sets the annually management fee
+    /// @param _managementFee new BPS management fee
+    function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
+        managementFee = _managementFee;
+        emit SetManagementFee(_managementFee);
+    }
+
+    /// @notice sets the annually management fee
+    /// @param _performanceFee new BPS management fee
+    function setPerformanceFee(uint16 _performanceFee) external onlyRoles(ADMIN_ROLE) {
+        performanceFee = _performanceFee;
+        emit SetPerformanceFee(_performanceFee);
+    }
+
+    /// @notice sets the annually oracle fee
+    /// @param _oracleFee new BPS oracle fee
+    function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
+        oracleFee = _oracleFee;
+        emit SetOracleFee(_oracleFee);
+    }
+
+    /// @notice Sets the recovery address for the vault
+    /// @dev The recovery address is used as a safety mechanism for recovering assets in emergency situations.
+    /// Only callable by addresses with ADMIN_ROLE.
+    /// @param _recoveryAddress The new address to be set as the recovery address
+    function setRecoveryAddress(address _recoveryAddress) external onlyRoles(ADMIN_ROLE) {
+        recoveryAddress = _recoveryAddress;
+        emit SetRecoveryAddress(_recoveryAddress);
+    }
+
+    /// @notice Fulfills a settled cross-chain redemption request
+    /// @dev Called by the gateway contract when cross-chain assets have been received.
+    /// Converts the requested assets to shares and fulfills the redemption request.
+    /// Only callable by the gateway contract.
+    /// @param controller The address that initiated the redemption request
+    /// @param requestedAssets The original amount of assets requested
+    /// @param fulfilledAssets The actual amount of assets received after bridging
+    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 fulfilledAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        uint256 shares = convertToShares(requestedAssets);
+        _fulfillRedeemRequest(shares, fulfilledAssets, controller);
+        emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
+    }
+
+    /// @notice Accepts a donation of assets to the vault
+    /// @param assets The amount of assets to donate
+    /// @dev Increases the total idle assets of the vault
+    function donate(uint256 assets) external {
+        asset().safeTransferFrom(msg.sender, address(this), assets);
+        _totalIdle += assets.toUint128();
+    }
+
+    /// @notice Settles a cross-chain investment by updating vault accounting
+    /// @param superformId The ID of the superform being settled
+    /// @param bridgedAssets The amount of assets that were bridged
+    /// @dev Only callable by the gateway contract
+    function settleXChainInvest(uint256 superformId, uint256 bridgedAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        _totalDebt += bridgedAssets.toUint128();
+        vaults[superformId].totalDebt += bridgedAssets.toUint128();
+        emit SettleXChainInvest(superformId, bridgedAssets);
+    }
+
+    /// @notice Settles a cross-chain divestment by updating vault accounting
+    /// @param superformId The ID of the superform being settled
+    /// @param withdrawnAssets The amount of assets that were withdrawn
+    /// @dev Only callable by the gateway contract
+    function settleXChainDivest(uint256 superformId, uint256 withdrawnAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        _totalIdle += withdrawnAssets.toUint128();
+        emit SettleXChainDivest(superformId, withdrawnAssets);
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       PRIVATE FUNCTIONS                    */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @dev Internal cache struct to allocate in memory
+    struct ProcessRedeemRequestCache {
+        // List of vauts to withdraw from on each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] dstVaults;
+        // List of shares to redeem on each vault in each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] sharesPerVault;
+        // List of assets to withdraw on each vault in each chain
+        uint256[WITHDRAWAL_QUEUE_SIZE][N_CHAINS] assetsPerVault;
+        // Cache length of list of each chain
+        uint256[N_CHAINS] lens;
+        // Assets to divest from other vaults
+        uint256 amountToWithdraw;
+        // Shares actually used
+        uint256 sharesFulfilled;
+        // Save assets that were withdrawn instantly
+        uint256 totalClaimableWithdraw;
+        // Cache totalAssets
+        uint256 totalAssets;
+        // Cache totalIdle
+        uint256 totalIdle;
+        // Cache totalDebt
+        uint256 totalDebt;
+        // Convert shares to assets at current price
+        uint256 assets;
+        // Wether is a single chain or multichain withdrawal
+        bool isSingleChain;
+        bool isMultiChain;
+        // Wether is a single or multivault withdrawal
+        bool isMultiVault;
+    }
+
+    /// @dev Precomputes the withdrawal route following the order of the withdrawal queue
+    /// according to the needed assets
+    /// @param cache the memory pointer of the cache
+    /// @dev writes the route to the cache struct
+    ///
+    /// Note: First it will try to fulfill the request with idle assets, after that it will
+    /// loop through the withdrawal queue and compute the destination chains and vaults on each
+    /// destionation chain, plus the shaes to redeem on each vault
+    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
+        // Use the local vaults first
+        _exhaustWithdrawalQueue(cache, localWithdrawalQueue, false);
+        // Use the crosschain vaults after
+        _exhaustWithdrawalQueue(cache, xChainWithdrawalQueue, true);
+    }
+
+    /// @notice Internal function to process a withdrawal queue and determine optimal withdrawal routes
+    /// @dev Iterates through a withdrawal queue to calculate how to fulfill a withdrawal request across multiple vaults
+    /// and chains.
+    /// The function:
+    /// 1. Processes vaults in queue order until request is fulfilled
+    /// 2. Calculates shares to withdraw from each vault
+    /// 3. Updates debt tracking
+    /// 4. Determines if withdrawal is single/multi chain and single/multi vault
+    /// 5. Maintains withdrawal state in the cache structure
+    ///
+    /// For each vault in the queue:
+    /// - Checks maximum withdrawable amount
+    /// - Calculates required shares
+    /// - Updates chain-specific withdrawal arrays
+    /// - Tracks debt reductions
+    /// - Updates withdrawal type flags (single/multi chain/vault)
+    ///
+    /// @param cache Storage structure containing withdrawal state and routing information:
+    ///        - dstVaults: Arrays of vault IDs per chain
+    ///        - sharesPerVault: Shares to withdraw per vault per chain
+    ///        - assetsPerVault: Assets to withdraw per vault per chain
+    ///        - lens: Number of vaults to process per chain
+    ///        - amountToWithdraw: Remaining assets to withdraw
+    ///        - totalDebt: Running total of vault debt
+    ///        - isSingleChain/isMultiChain/isMultiVault: Withdrawal type flags
+    /// @param queue The withdrawal queue to process (either local or cross-chain)
+    /// @param resetValues If true, resets amountToWithdraw when queue is exhausted
+    function _exhaustWithdrawalQueue(
+        ProcessRedeemRequestCache memory cache,
+        uint256[WITHDRAWAL_QUEUE_SIZE] memory queue,
+        bool resetValues
+    )
+        private
+        view
+    {
+        // Cache how many chains we need and how many vaults in each chain
+        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+            // If we exhausted the queue stop
+            if (queue[i] == 0) {
+                if (resetValues) {
+                    // reset values
+                    cache.amountToWithdraw = cache.assets - cache.totalIdle;
+                }
+                break;
+            }
+            if (resetValues) {
+                // If its fulfilled stop
+                if (cache.amountToWithdraw == 0) {
+                    break;
+                }
+            }
+            // Cache next vault from the withdrawal queue
+            VaultData memory vault = vaults[queue[i]];
+            // Calcualate the maxWithdraw of the vault
+            uint256 maxWithdraw = vault.convertToAssets(_sharesBalance(vault), true);
+
+            // Dont withdraw more than max
+            uint256 withdrawAssets = Math.min(maxWithdraw, cache.amountToWithdraw);
+            if (withdrawAssets == 0) continue;
+            // Cache chain index
+            uint256 chainIndex = chainIndexes[vault.chainId];
+            // Cache chain length
+            uint256 len = cache.lens[chainIndex];
+            // Push the superformId to the last index of the array
+            cache.dstVaults[chainIndex][len] = vault.superformId;
+
+            uint256 shares;
+            if (cache.amountToWithdraw >= maxWithdraw) {
+                uint256 balance = _sharesBalance(vault);
+                shares = balance;
+            } else {
+                shares = vault.convertToShares(withdrawAssets, true);
+            }
+
+            if (shares == 0) continue;
+            // Push the shares to redeeem of that vault
+            cache.sharesPerVault[chainIndex][len] = shares;
+            // Push the assetse to withdraw of that vault
+            cache.assetsPerVault[chainIndex][len] = withdrawAssets;
+            // Reduce the total debt by no more than the debt of this vault
+            uint256 debtReduction = Math.min(vault.totalDebt, withdrawAssets);
+            // Reduce totalDebt
+            cache.totalDebt -= debtReduction;
+            // Reduce needed assets
+            cache.amountToWithdraw -= withdrawAssets;
+
+            // Cache wether is single chain or multichain
+            if (vault.chainId != THIS_CHAIN_ID) {
+                uint256 numberOfVaults = cache.lens[chainIndex];
+                if (numberOfVaults != 0) {
+                    if (!cache.isSingleChain) {
+                        cache.isSingleChain = true;
+                    }
+
+                    if (cache.isSingleChain && !cache.isMultiChain) {
+                        cache.isMultiChain = true;
+                    }
+
+                    if (numberOfVaults > 1) {
+                        cache.isMultiVault = true;
+                    }
+                }
+            }
+
+            // Increase index for iteration
+            unchecked {
+                cache.lens[chainIndex]++;
+            }
+        }
+    }
+
+    /// @param shares to redeem and burn
+    /// @param controller controller that created the request
+    /// @param owner shares owner
+    /// @param receiver address of the assets receiver in case its a
+    struct ProcessRedeemRequestConfig {
+        uint256 shares;
+        address controller;
+        address owner;
+        SingleXChainSingleVaultWithdraw sXsV;
+        SingleXChainMultiVaultWithdraw sXmV;
+        MultiXChainSingleVaultWithdraw mXsV;
+        MultiXChainMultiVaultWithdraw mXmV;
+    }
+
+    /// @notice Executes the redeem request for a controller
+    function _processRedeemRequest(ProcessRedeemRequestConfig memory config) private {
+        // Use struct to avoid stack too deep
+        ProcessRedeemRequestCache memory cache;
+        cache.totalIdle = _totalIdle;
+        cache.totalDebt = _totalDebt;
+        cache.assets = convertToAssets(config.shares);
+        cache.totalAssets = totalAssets();
+        bool settle;
+
+        // Cannot process more assets than the
+        if (cache.assets > cache.totalAssets - gateway.totalpendingXChainInvests()) {
+            revert InsufficientAvailableAssets();
+        }
+
+        // If totalIdle can covers the amount fulfill directly
+        if (cache.totalIdle >= cache.assets) {
+            cache.sharesFulfilled = config.shares;
+            cache.totalClaimableWithdraw = cache.assets;
+        }
+        // Otherwise perform Superform withdrawals
+        else {
+            // Cache amount to withdraw before reducing totalIdle
+            cache.amountToWithdraw = cache.assets - cache.totalIdle;
+            // Use totalIdle to fulfill the request
+            if (cache.totalIdle > 0) {
+                cache.totalClaimableWithdraw = cache.totalIdle;
+                cache.sharesFulfilled = _convertToShares(cache.totalIdle, cache.totalAssets);
+            }
+            ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
+            _prepareWithdrawalRoute(cache);
+            //////////////////////////////// WITHDRAW FROM THIS CHAIN ////////////////////////////////
+            // Cache chain index
+            uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
+            if (cache.lens[chainIndex] > 0) {
+                if (cache.lens[chainIndex] == 1) {
+                    // shares to redeem
+                    uint256 sharesAmount = cache.sharesPerVault[chainIndex][0];
+                    // assets to withdraw
+                    uint256 assetsAmount = cache.assetsPerVault[chainIndex][0];
+                    // superformId(take first element fo the array)
+                    uint256 superformId = cache.dstVaults[chainIndex][0];
+                    // get actual withdrawn amount
+                    uint256 withdrawn = _liquidateSingleDirectSingleVault(
+                        vaults[superformId].vaultAddress, sharesAmount, 0, address(this)
+                    );
+                    // cache shares to burn
+                    cache.sharesFulfilled += _convertToShares(assetsAmount, cache.totalAssets);
+                    // reduce vault debt
+                    vaults[superformId].totalDebt = _sub0(vaults[superformId].totalDebt, assetsAmount).toUint128();
+                    // cache instant total withdraw
+                    cache.totalClaimableWithdraw += withdrawn;
+                    // Increase idle funds
+                    cache.totalIdle += withdrawn;
+                } else {
+                    uint256 len = cache.lens[chainIndex];
+                    // Prepare arguments for request using dynamic arrays
+                    address[] memory vaultAddresses = new address[](len);
+                    uint256[] memory amounts = new uint256[](len);
+                    // Calculate requested amount
+                    uint256 requestedAssets;
+
+                    // Cast fixed arrays to dynamic ones
+                    for (uint256 i = 0; i != len; i++) {
+                        vaultAddresses[i] = vaults[cache.dstVaults[chainIndex][i]].vaultAddress;
+                        amounts[i] = cache.sharesPerVault[chainIndex][i];
+                        // Reduce vault debt individually
+                        uint256 superformId = cache.dstVaults[chainIndex][i];
+                        // Increase total assets requested
+                        requestedAssets += cache.assetsPerVault[chainIndex][i];
+                        // Reduce vault debt
+                        vaults[superformId].totalDebt =
+                            _sub0(vaults[superformId].totalDebt, cache.assetsPerVault[chainIndex][i]).toUint128();
+                    }
+                    // Withdraw from the vault synchronously
+                    uint256 withdrawn = _liquidateSingleDirectMultiVault(
+                        vaultAddresses, amounts, _getEmptyuintArray(amounts.length), address(this)
+                    );
+                    // Increase claimable assets and fulfilled shares by the amount withdran synchronously
+                    cache.totalClaimableWithdraw += withdrawn;
+                    cache.sharesFulfilled += _convertToShares(requestedAssets, cache.totalAssets);
+                    // Increase total idle
+                    cache.totalIdle += withdrawn;
+                }
+            }
+
+            //////////////////////////////// WITHDRAW FROM EXTERNAL CHAINS ////////////////////////////////
+            // If its not multichain
+            if (!cache.isMultiChain) {
+                // If its multivault
+                if (!cache.isMultiVault) {
+                    uint256 superformId;
+                    uint256 amount;
+                    uint64 chainId;
+                    uint256 chainIndex;
+
+                    for (uint256 i = 0; i < N_CHAINS; ++i) {
+                        if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
+                        // The vaults list length should be 1(single-vault)
+                        if (cache.lens[i] > 0) {
+                            chainId = DST_CHAINS[i];
+                            chainIndex = chainIndexes[chainId];
+                            superformId = cache.dstVaults[i][0];
+                            amount = cache.sharesPerVault[i][0];
+
+                            // Withdraw from one vault asynchronously(crosschain)
+                            _liquidateSingleXChainSingleVault(
+                                chainId, superformId, amount, config.controller, config.sXsV, cache.assetsPerVault[i][0]
+                            );
+                            // reduce vault debt
+                            vaults[superformId].totalDebt =
+                                _sub0(vaults[superformId].totalDebt, cache.assetsPerVault[chainIndex][0]).toUint128();
+                            settle = true;
+                            break;
+                        }
+                    }
+                } else {
+                    uint256[] memory superformIds;
+                    uint256[] memory amounts;
+                    uint64 chainId;
+                    for (uint256 i = 0; i < cache.dstVaults.length; ++i) {
+                        if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
+                        if (cache.lens[i] > 0) {
+                            chainId = DST_CHAINS[i];
+                            superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
+                            amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
+                            uint256 totalDebtReduction;
+                            // reduce vault debt
+                            for (uint256 j = 0; j < superformIds.length;) {
+                                vaults[superformIds[j]].totalDebt =
+                                    _sub0(vaults[superformIds[j]].totalDebt, cache.assetsPerVault[i][j]).toUint128();
+                                totalDebtReduction += cache.assetsPerVault[i][j];
+                                unchecked {
+                                    ++j;
+                                }
+                            }
+                            // Withdraw from multiple vaults asynchronously(crosschain)
+                            _liquidateSingleXChainMultiVault(
+                                chainId, superformIds, amounts, config.controller, config.sXmV, totalDebtReduction
+                            );
+                            settle = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            // If its multichain
+            else {
+                // If its single vault
+                if (!cache.isMultiVault) {
+                    uint256 chainsLen;
+                    for (uint256 i = 0; i < cache.lens.length; i++) {
+                        if (cache.lens[i] > 0) chainsLen++;
+                    }
+
+                    uint8[][] memory ambIds = new uint8[][](chainsLen);
+                    uint64[] memory dstChainIds = new uint64[](chainsLen);
+                    SingleVaultSFData[] memory singleVaultDatas = new SingleVaultSFData[](chainsLen);
+                    uint256 lastChainsIndex;
+
+                    for (uint256 i = 0; i < N_CHAINS; i++) {
+                        if (cache.lens[i] > 0) {
+                            dstChainIds[lastChainsIndex] = DST_CHAINS[i];
+                            ++lastChainsIndex;
+                        }
+                    }
+                    uint256[] memory totalDebtReduction = new uint256[](chainsLen);
+                    for (uint256 i = 0; i < chainsLen; i++) {
+                        totalDebtReduction[i] = cache.assetsPerVault[i][0];
+                        singleVaultDatas[i] = SingleVaultSFData({
+                            superformId: cache.dstVaults[i][0],
+                            amount: cache.sharesPerVault[i][0],
+                            outputAmount: config.mXsV.outputAmounts[i],
+                            maxSlippage: config.mXsV.maxSlippages[i],
+                            liqRequest: config.mXsV.liqRequests[i],
+                            permit2data: "",
+                            hasDstSwap: config.mXsV.hasDstSwaps[i],
+                            retain4626: false,
+                            receiverAddress: config.controller,
+                            receiverAddressSP: address(0),
+                            extraFormData: ""
+                        });
+                        ambIds[i] = config.mXsV.ambIds[i];
+                        vaults[cache.dstVaults[i][0]].totalDebt =
+                            _sub0(vaults[cache.dstVaults[i][0]].totalDebt, cache.assetsPerVault[i][0]).toUint128();
+                    }
+                    _liquidateMultiDstSingleVault(
+                        ambIds, dstChainIds, singleVaultDatas, config.mXsV.value, totalDebtReduction
+                    );
+                    settle = true;
+                }
+                // If its multi-vault
+                else {
+                    // Cache the number of chains we will withdraw from
+                    uint256 chainsLen;
+                    for (uint256 i = 0; i < cache.lens.length; i++) {
+                        if (cache.lens[i] > 0) chainsLen++;
+                    }
+                    uint8[][] memory ambIds = new uint8[][](chainsLen);
+                    // Cacche destination chains
+                    uint64[] memory dstChainIds = new uint64[](chainsLen);
+                    // Cache multivault calls for each chain
+                    MultiVaultSFData[] memory multiVaultDatas = new MultiVaultSFData[](chainsLen);
+                    uint256 lastChainsIndex;
+
+                    for (uint256 i = 0; i < N_CHAINS; i++) {
+                        if (cache.lens[i] > 0) {
+                            dstChainIds[lastChainsIndex] = DST_CHAINS[i];
+                            ++lastChainsIndex;
+                        }
+                    }
+                    uint256[] memory totalDebtReduction = new uint256[](chainsLen);
+                    for (uint256 i = 0; i < chainsLen; i++) {
+                        bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
+                        uint256[] memory superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
+                        multiVaultDatas[i] = MultiVaultSFData({
+                            superformIds: superformIds,
+                            amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
+                            outputAmounts: config.mXmV.outputAmounts[i],
+                            maxSlippages: config.mXmV.maxSlippages[i],
+                            liqRequests: config.mXmV.liqRequests[i],
+                            permit2data: "",
+                            hasDstSwaps: config.mXmV.hasDstSwaps[i],
+                            retain4626s: emptyBoolArray,
+                            receiverAddress: config.controller,
+                            receiverAddressSP: address(0),
+                            extraFormData: ""
+                        });
+                        ambIds[i] = config.mXmV.ambIds[i];
+
+                        for (uint256 j = 0; j < superformIds.length;) {
+                            vaults[superformIds[j]].totalDebt =
+                                _sub0(vaults[superformIds[j]].totalDebt, cache.assetsPerVault[i][j]).toUint128();
+                            totalDebtReduction[i] += cache.assetsPerVault[i][j];
+                            unchecked {
+                                ++j;
+                            }
+                        }
+                    }
+                    // Withdraw from multiple vaults and chains asynchronously
+                    _liquidateMultiDstMultiVault(
+                        ambIds, dstChainIds, multiVaultDatas, config.mXmV.value, totalDebtReduction
+                    );
+                    settle = true;
+                }
+            }
+        }
+
+        // If there's any crosschain redeem going on start settlement
+        if (settle) {
+            _requestRedeemSettlementCheckpoint[config.controller] = block.timestamp;
+        } else {
+            // Adjust so no dust is left
+            cache.sharesFulfilled = config.shares;
+        }
+
+        // Unlock redeem
+        redeemLocked[config.controller] = false;
+
+        // Optimistically deduct all assets to withdraw from the total
+        _totalIdle = cache.totalIdle.toUint128();
+        _totalIdle -= cache.totalClaimableWithdraw.toUint128();
+        _totalDebt = cache.totalDebt.toUint128();
+
+        emit ProcessRedeemRequest(config.controller, config.shares);
+
+        // Burn all shares from this contract(they already have been transferred)
+        _burn(address(this), config.shares);
+        // Fulfill request with instant withdrawals only
+        _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, config.controller);
+    }
+
+    /// @notice the number of decimals of the underlying token
+    function _underlyingDecimals() internal view override returns (uint8) {
+        return _decimals;
+    }
+
+    /// @notice Applies annualized fees to vault assets
+    /// @notice Mints shares to the treasury
+    function _assessManagementFees(address managementFeeReceiver, uint256 duration) private {
+        uint256 managementFees = (totalAssets() * duration * managementFee) / SECS_PER_YEAR / MAX_BPS;
+        uint256 managementFeeShares = convertToShares(managementFees);
+
+        _mint(managementFeeReceiver, managementFeeShares);
+    }
+
+    /// @notice Applies annualized fees to vault assets
+    /// @notice Mints shares to the treasury
+    function _assessOracleFees(address oracleFeeReceiver, uint256 duration) private {
+        uint256 oracleFees = (totalAssets() * duration * oracleFee) / SECS_PER_YEAR / MAX_BPS;
+        uint256 oracleFeeShares = convertToShares(oracleFees);
+
+        _mint(oracleFeeReceiver, oracleFeeShares);
+    }
+
+    /// @dev Hook that is called after any deposit or mint.
+    function _afterDeposit(uint256 assets, uint256 /*uint shares*/ ) internal override {
+        uint128 assetsUint128 = assets.toUint128();
+        _totalIdle += assetsUint128;
+    }
+
+    function _checkRedeemProcessed(address controller) private view {
+        if (redeemLocked[controller]) {
+            revert RedeemNotProcessed();
+        }
+    }
+
+    /// @dev Reverts if deposited shares are locked
+    /// @param controller shares controller
+    function _checkSharesLocked(address controller) private view {
+        if (block.timestamp < _depositLockCheckPoint[controller] + sharesLockTime) revert SharesLocked();
+    }
+
+    /// @dev Locks the deposited shares for a fixed period
+    /// @param to shares receiver
+    /// @param sharesBalance current shares balance
+    /// @param newShares newly minted shares
+    function _lockShares(address to, uint256 sharesBalance, uint256 newShares) private {
+        uint256 newBalance = sharesBalance + newShares;
+        if (sharesBalance == 0) {
+            _depositLockCheckPoint[to] = block.timestamp;
+        } else {
+            _depositLockCheckPoint[to] = ((_depositLockCheckPoint[to] * sharesBalance) / newBalance)
+                + ((block.timestamp * newShares) / newBalance);
+        }
+    }
+
+    /// @dev Private helper to substract a - b or return 0 if it underflows
+    function _sub0(uint256 a, uint256 b) private pure returns (uint256) {
+        unchecked {
+            return a - b > a ? 0 : a - b;
+        }
+    }
+
+    /// @dev Private helper get an array uint full of zeros
+    /// @param len array length
+    /// @return
+    function _getEmptyuintArray(uint256 len) private pure returns (uint256[] memory) {
+        return new uint256[](len);
+    }
+
+    /// @dev Helper function to get a empty bools array
+    function _getEmptyBoolArray(uint256 len) private pure returns (bool[] memory) {
+        return new bool[](len);
+    }
+
+    /// @dev Withdraws assets from a single vault on the same chain
+    /// @param vault Address of the vault to withdraw from
+    /// @param amount Amount of shares to redeem
+    /// @param minAmountOut Minimum amount of assets expected to receive
+    /// @param receiver Address to receive the withdrawn assets
+    /// @return withdrawn Amount of assets actually withdrawn
+    function _liquidateSingleDirectSingleVault(
+        address vault,
+        uint256 amount,
+        uint256 minAmountOut,
+        address receiver
+    )
+        private
+        returns (uint256 withdrawn)
+    {
+        uint256 balanceBefore = asset().balanceOf(address(this));
+        ERC4626(vault).redeem(amount, address(this), receiver);
+        withdrawn = asset().balanceOf(address(this)) - balanceBefore;
+        if (withdrawn < minAmountOut) {
+            revert InsufficientAssets();
+        }
+    }
+
+    /// @dev Withdraws assets from multiple vaults on the same chain
+    /// @param vaults_ Array of vault addresses to withdraw from
+    /// @param amounts Array of share amounts to redeem from each vault
+    /// @param minAmountsOut Array of minimum amounts of assets expected from each vault
+    /// @param receiver Address to receive the withdrawn assets
+    /// @return withdrawn Total amount of assets withdrawn from all vaults
+    function _liquidateSingleDirectMultiVault(
+        address[] memory vaults_,
+        uint256[] memory amounts,
+        uint256[] memory minAmountsOut,
+        address receiver
+    )
+        private
+        returns (uint256 withdrawn)
+    {
+        for (uint256 i = 0; i < vaults_.length; ++i) {
+            withdrawn += _liquidateSingleDirectSingleVault(vaults_[i], amounts[i], minAmountsOut[i], receiver);
+        }
+    }
+
+    /// @dev Initiates a withdrawal from a single vault on a different chain
+    /// @param chainId ID of the destination chain
+    /// @param superformId ID of the superform to withdraw from
+    /// @param amount Amount of shares to withdraw
+    /// @param receiver Address to receive the withdrawn assets
+    /// @param config Configuration for the cross-chain withdrawal
+    function _liquidateSingleXChainSingleVault(
+        uint64 chainId,
+        uint256 superformId,
+        uint256 amount,
+        address receiver,
+        SingleXChainSingleVaultWithdraw memory config,
+        uint256 totalDebtReduction
+    )
+        private
+    {
+        gateway.liquidateSingleXChainSingleVault{ value: config.value }(
+            chainId, superformId, amount, receiver, config, totalDebtReduction
+        );
+    }
+
+    /// @dev Initiates withdrawals from multiple vaults on a single different chain
+    /// @param chainId ID of the destination chain
+    /// @param superformIds Array of superform IDs to withdraw from
+    /// @param amounts Array of share amounts to withdraw from each superform
+    /// @param receiver Address to receive the withdrawn assets
+    /// @param config Configuration for the cross-chain withdrawals
+    function _liquidateSingleXChainMultiVault(
+        uint64 chainId,
+        uint256[] memory superformIds,
+        uint256[] memory amounts,
+        address receiver,
+        SingleXChainMultiVaultWithdraw memory config,
+        uint256 totalDebtReduction
+    )
+        private
+    {
+        gateway.liquidateSingleXChainMultiVault{ value: config.value }(
+            chainId, superformIds, amounts, receiver, config, totalDebtReduction
+        );
+    }
+
+    /// @dev Initiates withdrawals from a single vault on multiple different chains
+    /// @param ambIds Array of AMB (Asset Management Bridge) IDs for each chain
+    /// @param dstChainIds Array of destination chain IDs
+    /// @param singleVaultDatas Array of SingleVaultSFData structures for each withdrawal
+    /// @param value Amount of native tokens to send with the transaction
+    function _liquidateMultiDstSingleVault(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        SingleVaultSFData[] memory singleVaultDatas,
+        uint256 value,
+        uint256[] memory totalDebtReduction
+    )
+        private
+    {
+        gateway.liquidateMultiDstSingleVault{ value: value }(ambIds, dstChainIds, singleVaultDatas, totalDebtReduction);
+    }
+
+    /// @dev Initiates withdrawals from multiple vaults on multiple different chains
+    /// @param ambIds Array of AMB (Asset Management Bridge) IDs for each chain
+    /// @param dstChainIds Array of destination chain IDs
+    /// @param multiVaultDatas Array of MultiVaultSFData structures for each chain's withdrawals
+    /// @param value Amount of native tokens to send with the transaction
+    function _liquidateMultiDstMultiVault(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        MultiVaultSFData[] memory multiVaultDatas,
+        uint256 value,
+        uint256[] memory totalDebtReduction
+    )
+        private
+    {
+        gateway.liquidateMultiDstMultiVault{ value: value }(ambIds, dstChainIds, multiVaultDatas, totalDebtReduction);
+    }
+
+    /// @notice Converts a fixed-size array to a dynamic array
+    /// @param arr The fixed-size array to convert
+    /// @param len The length of the new dynamic array
+    /// @return dynArr The converted dynamic array
+    /// @dev Used to prepare data for cross-chain transactions
+    function _toDynamicUint256Array(
+        uint256[WITHDRAWAL_QUEUE_SIZE] memory arr,
+        uint256 len
+    )
+        private
+        pure
+        returns (uint256[] memory dynArr)
+    {
+        dynArr = new uint256[](len);
+        for (uint256 i = 0; i < len; ++i) {
+            dynArr[i] = arr[i];
+        }
+    }
+
+    /// @notice Gets the shares balance of a vault in the portfolio
+    /// @param data The vault data structure containing chain ID and address information
+    /// @return shares The number of shares held in the vault
+    /// @dev For same-chain vaults, fetches directly from the vault; for cross-chain vaults, uses Superform ERC1155
+    function _sharesBalance(VaultData memory data) private view returns (uint256 shares) {
+        if (data.chainId == THIS_CHAIN_ID) {
+            return ERC4626(data.vaultAddress).balanceOf(address(this));
+        } else {
+            return gateway.balanceOf(address(this), data.superformId);
+        }
+    }
+
+    /// @dev Private helper to return `x + 1` without the overflow check.
+    /// Used for computing the denominator input to `FixedPointMathLib.fullMulDiv(a, b, x + 1)`.
+    /// When `x == type(uint).max`, we get `x + 1 == 0` (mod 2**256 - 1),
+    /// and `FixedPointMathLib.fullMulDiv` will revert as the denominator is zero.
+    function _inc_(uint256 x) private pure returns (uint256) {
+        unchecked {
+            return x + 1;
+        }
+    }
+
+    /// @dev Private helper to return if either value is zero.
+    function _eitherIsZero_(uint256 a, uint256 b) private pure returns (bool result) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            result := or(iszero(a), iszero(b))
+        }
+    }
+
+    /// @dev Private helper to calculate shares from any @param _totalAssets
+    function _convertToShares(uint256 assets, uint256 _totalAssets) private view returns (uint256 shares) {
+        if (!_useVirtualShares()) {
+            uint256 supply = totalSupply();
+            return _eitherIsZero_(assets, supply)
+                ? _initialConvertToShares(assets)
+                : Math.fullMulDiv(assets, supply, _totalAssets);
+        }
+        uint256 o = _decimalsOffset();
+        if (o == uint256(0)) {
+            return Math.fullMulDiv(assets, totalSupply() + 1, _inc_(_totalAssets));
+        }
+        return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
+    }
+
+    /// @dev Supports ERC1155 interface detection
+    /// @param interfaceId The interface identifier, as specified in ERC-165
+    /// @return isSupported True if the contract supports the interface, false otherwise
+    function supportsInterface(bytes4 interfaceId) public pure returns (bool isSupported) {
+        if (interfaceId == 0x4e2312e0) return true;
+    }
+
+    /// @notice Handles the receipt of a single ERC1155 token type
+    /// @dev This function is called at the end of a `safeTransferFrom` after the balance has been updated
+    /// @param operator The address which initiated the transfer (i.e. msg.sender)
+    /// @param from The address which previously owned the token
+    /// @param superformId The ID of the token being transferred
+    /// @param value The amount of tokens being transferred
+    /// @param data Additional data with no specified format
+    /// @return bytes4 `bytes4(keccak256("onERC1155Received(address,address,uint,uint,bytes)"))`
+    function onERC1155Received(
+        address operator,
+        address from,
+        uint256 superformId,
+        uint256 value,
+        bytes memory data
+    )
+        public
+        returns (bytes4)
+    {
+        // Silence compiler warnings
+        operator;
+        value;
+        data;
+        if (from != address(gateway)) revert Unauthorized();
+        return this.onERC1155Received.selector;
+    }
+
+    /// @notice Handles the receipt of multiple ERC1155 token types
+    /// @dev This function is called at the end of a `safeBatchTransferFrom` after the balances have been updated
+    /// @param operator The address which initiated the batch transfer (i.e. msg.sender)
+    /// @param from The address which previously owned the tokens
+    /// @param superformIds An array containing ids of each token being transferred (order and length must match values
+    /// array)
+    /// @param values An array containing amounts of each token being transferred (order and length must match ids
+    /// array)
+    /// @param data Additional data with no specified format
+    /// @return bytes4 `bytes4(keccak256("onERC1155BatchReceived(address,address,uint[],uint[],bytes)"))`
+    function onERC1155BatchReceived(
+        address operator,
+        address from,
+        uint256[] memory superformIds,
+        uint256[] memory values,
+        bytes memory data
+    )
+        public
+        returns (bytes4)
+    {
+        // Silence compiler warnings
+        operator;
+        values;
+        data;
+        if (from != address(gateway)) revert Unauthorized();
+        return this.onERC1155BatchReceived.selector;
+    }
+}
