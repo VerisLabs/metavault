@@ -15,6 +15,8 @@ import { Test, console2 } from "forge-std/Test.sol";
 import { SuperformGateway } from "crosschain/Lib.sol";
 import { IMetaVault, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
+
+import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { ERC4626, ERC7540, MetaVault } from "src/MetaVault.sol";
 
@@ -49,6 +51,7 @@ import {
 
 contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
+    using LibString for bytes;
 
     MockERC4626Oracle public oracle;
     MockSignerRelayer public relayer;
@@ -442,7 +445,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
             (,,,,,, totalDebt,) = vault.vaults(superformId);
-            assertEq(totalDebt, 518);
+            assertEq(totalDebt, 0);
         }
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
@@ -453,9 +456,11 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
         skip(config.processRedeemSettlement);
-        gateway.settleLiquidation(users.alice, superformId);
-        assertEq(vault.claimableRedeemRequest(users.alice), 1000 * _1_USDCE);
-        uint256 assets = vault.redeem(aliceBalance, users.alice, users.alice);
+        uint256[] memory superformIds = new uint256[](1);
+        superformIds[0] = superformId;
+        gateway.settleLiquidation(users.alice, superformIds);
+        assertEq(vault.claimableRedeemRequest(users.alice), 999_999_689);
+        uint256 assets = vault.redeem(999_999_689, users.alice, users.alice);
         assertEq(assets, 400 * _1_USDCE + 588 * _1_USDCE);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
@@ -904,6 +909,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vm.expectEmit(true, true, true, true);
         emit Report(optimismChainId, vaultAddress, 566_695_022);
         vault.harvest(mockHarvest);
-        assertEq(vault.balanceOf(config.treasury), 100 * _1_USDCE);
+        assertEq(vault.balanceOf(config.treasury), 83_387_889);
     }
 }

@@ -11,14 +11,21 @@ struct VaultReport {
 
 interface ISharePriceOracle {
     event SharePriceUpdated(uint32 indexed srcChainId, address indexed vault, uint256 price, address reporter);
+
     event LzEndpointUpdated(address oldEndpoint, address newEndpoint);
+
     event RoleGranted(address account, uint256 role);
+
     event RoleRevoked(address account, uint256 role);
 
     error InvalidAdminAddress();
+
     error ZeroAddress();
+
     error InvalidRole();
+
     error InvalidChainId(uint32 receivedChainId);
+
     error InvalidReporter();
 
     function chainId() external view returns (uint32);

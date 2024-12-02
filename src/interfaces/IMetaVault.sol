@@ -23,15 +23,7 @@ import {
     VaultReport
 } from "types/Lib.sol";
 
-/// @title MetaVault
-/// @author Unlockd
-/// @notice A ERC750 vault implementation for cross-chain yield
-/// aggregation
 interface IMetaVault {
-    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
-    /*                       PUBLIC GETTERS                       */
-    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
     function name() external view returns (string memory);
 
     function symbol() external view returns (string memory);
@@ -57,9 +49,6 @@ interface IMetaVault {
     function isVaultListed(uint256 superformId) external view returns (bool);
 
     function getVault(uint256 superformId) external view returns (VaultData memory vault);
-    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
-    /*                       ERC7540 ACTIONS                      */
-    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256 requestId);
 
@@ -91,10 +80,6 @@ interface IMetaVault {
         external
         payable;
 
-    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
-    /*                       VAULT MANAGEMENT                     */
-    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
     function investSingleDirectSingleVault(
         address vaultAddress,
         uint256 assets,
@@ -114,6 +99,7 @@ interface IMetaVault {
     function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
 
     function investSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
+
     function investMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req) external payable;
 
     function investMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
@@ -148,6 +134,7 @@ interface IMetaVault {
     function setOracle(uint64 chainId, address oracle) external;
 
     function setSharesLockTime(uint24 time) external;
+
     function setManagementFee(uint16 _managementFee) external;
 
     function setPerformanceFee(uint16 _performanceFee) external;

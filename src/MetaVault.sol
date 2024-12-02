@@ -307,6 +307,9 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         signerRelayer = config.signerRelayer;
     }
 
+    /// @notice Sets the gateway contract for cross-chain communication
+    /// @param _gateway The address of the new gateway contract
+    /// @dev Only callable by addresses with ADMIN_ROLE
     function setGateway(ISuperformGateway _gateway) external onlyRoles(ADMIN_ROLE) {
         gateway = _gateway;
         asset().safeApprove(address(_gateway), type(uint256).max);
@@ -399,6 +402,7 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         return vaults[superformId].vaultAddress != address(0);
     }
 
+    /// @notice returns the struct containtaining vault data
     function getVault(uint256 superformId) public view returns (VaultData memory vault) {
         return vaults[superformId];
     }
@@ -576,6 +580,10 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
+    /// @notice Processes a redemption request for a given controller
+    /// @dev This function allows anybody with the explicit permission of the "signer relayer" to process a redeem
+    /// request
+    /// @param params as `processRedeemRequest` params + signature
     function processRedeemRequestWithSignature(ProcessRedeemRequestWithSignatureParams calldata params)
         external
         payable
@@ -624,6 +632,12 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
+    /// @notice Verifies that a signature is valid and was signed by the relayer
+    /// @param hash The hash of the data that was signed
+    /// @param v The v component of the signature
+    /// @param r The r component of the signature
+    /// @param s The s component of the signature
+    /// @dev Reverts if the signature is invalid
     function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view {
         bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
         if (!isValid) {
@@ -635,6 +649,23 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
     /*                       VAULT MANAGEMENT                     */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @notice Simulates a withdrawal route to help relayers determine how to fulfill redemption requests
+    /// @dev This is an off-chain helper function that calculates the optimal route for processing
+    /// withdrawals across different chains and vaults. It computes:
+    /// 1. How much can be fulfilled directly from idle assets
+    /// 2. Which vaults need to be accessed for the remaining amount
+    /// 3. The distribution of withdrawals across different chains and vaults
+    /// The function follows the same withdrawal queue priority as actual withdrawals:
+    /// - First uses idle assets
+    /// - Then local chain vaults
+    /// - Finally cross-chain vaults
+    /// @param assets The amount of assets to be withdrawn
+    /// @return cachedRoute A struct containing:
+    ///         - The withdrawal route across different chains
+    ///         - The shares to be redeemed from each vault
+    ///         - The assets expected from each withdrawal
+    ///         - The amount that can be fulfilled immediately from idle assets
+    ///         - Various cached state values needed for processing
     function previewWithdrawalRoute(uint256 assets)
         public
         view
@@ -787,6 +818,14 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         emit Invest(totalAmount);
     }
 
+    /// @notice Withdraws assets from a single vault on the same chain
+    /// @dev This function redeems shares from an ERC4626 vault and updates internal accounting.
+    /// If all shares are withdrawn, it removes the total debt for that vault.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param vaultAddress The address of the vault to withdraw from
+    /// @param shares The amount of shares to redeem
+    /// @param minAssetsOut The minimum amount of assets expected to receive
+    /// @return assets The amount of assets actually withdrawn
     function divestSingleDirectSingleVault(
         address vaultAddress,
         uint256 shares,
@@ -831,6 +870,13 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         return assets;
     }
 
+    /// @notice Withdraws assets from multiple vaults on the same chain
+    /// @dev Iteratively calls divestSingleDirectSingleVault for each vault.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param vaultAddresses Array of vault addresses to withdraw from
+    /// @param shares Array of share amounts to withdraw from each vault
+    /// @param minAssetsOuts Array of minimum expected asset amounts for each withdrawal
+    /// @return assets Array of actual asset amounts withdrawn from each vault
     function divestSingleDirectMultiVault(
         address[] calldata vaultAddresses,
         uint256[] calldata shares,
@@ -846,6 +892,11 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         }
     }
 
+    /// @notice Withdraws assets from a single vault on a different chain
+    /// @dev Initiates a cross-chain withdrawal through the gateway contract.
+    /// Updates debt tracking for the source vault.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing target chain, vault, and amount details
     function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
         external
         payable
@@ -858,6 +909,11 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         emit Divest(sharesValue);
     }
 
+    /// @notice Withdraws assets from multiple vaults on a single different chain
+    /// @dev Processes withdrawals from multiple vaults on the same target chain.
+    /// Updates debt tracking for all source vaults.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing target chain and multiple vault details
     function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
         external
         payable
@@ -879,6 +935,11 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         emit Divest(totalAmount);
     }
 
+    /// @notice Withdraws assets from a single vault across multiple chains
+    /// @dev Initiates withdrawals from the same vault type across different chains.
+    /// Updates debt tracking for all source vaults.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing multiple chain and single vault details
     function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
         external
         payable
@@ -900,6 +961,11 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         emit Divest(totalAmount);
     }
 
+    /// @notice Withdraws assets from multiple vaults across multiple chains
+    /// @dev Processes withdrawals from different vaults across multiple chains.
+    /// Updates debt tracking for all source vaults.
+    /// Only callable by addresses with MANAGER_ROLE.
+    /// @param req The withdrawal request containing multiple chain and multiple vault details
     function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
         external
         payable
@@ -1088,16 +1154,56 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         emit SetOracleFee(_oracleFee);
     }
 
+    /// @notice Sets the recovery address for the vault
+    /// @dev The recovery address is used as a safety mechanism for recovering assets in emergency situations.
+    /// Only callable by addresses with ADMIN_ROLE.
+    /// @param _recoveryAddress The new address to be set as the recovery address
     function setRecoveryAddress(address _recoveryAddress) external onlyRoles(ADMIN_ROLE) {
         recoveryAddress = _recoveryAddress;
         emit SetRecoveryAddress(_recoveryAddress);
     }
 
+    /// @notice Fulfills a settled cross-chain redemption request
+    /// @dev Called by the gateway contract when cross-chain assets have been received.
+    /// Converts the requested assets to shares and fulfills the redemption request.
+    /// Only callable by the gateway contract.
+    /// @param controller The address that initiated the redemption request
+    /// @param requestedAssets The original amount of assets requested
+    /// @param fulfilledAssets The actual amount of assets received after bridging
     function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 fulfilledAssets) public {
-        if (msg.sender != controller && hasAnyRole(controller, RELAYER_ROLE)) revert Unauthorized();
+        if (msg.sender != address(gateway)) revert Unauthorized();
         uint256 shares = convertToShares(requestedAssets);
         _fulfillRedeemRequest(shares, fulfilledAssets, controller);
         emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
+    }
+
+    /// @notice Accepts a donation of assets to the vault
+    /// @param assets The amount of assets to donate
+    /// @dev Increases the total idle assets of the vault
+    function donate(uint256 assets) external {
+        asset().safeTransferFrom(msg.sender, address(this), assets);
+        _totalIdle += assets.toUint128();
+    }
+
+    /// @notice Settles a cross-chain investment by updating vault accounting
+    /// @param superformId The ID of the superform being settled
+    /// @param bridgedAssets The amount of assets that were bridged
+    /// @dev Only callable by the gateway contract
+    function settleXChainInvest(uint256 superformId, uint256 bridgedAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        _totalDebt += bridgedAssets.toUint128();
+        vaults[superformId].totalDebt += bridgedAssets.toUint128();
+        emit SettleXChainInvest(superformId, bridgedAssets);
+    }
+
+    /// @notice Settles a cross-chain divestment by updating vault accounting
+    /// @param superformId The ID of the superform being settled
+    /// @param withdrawnAssets The amount of assets that were withdrawn
+    /// @dev Only callable by the gateway contract
+    function settleXChainDivest(uint256 superformId, uint256 withdrawnAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        _totalIdle += withdrawnAssets.toUint128();
+        emit SettleXChainDivest(superformId, withdrawnAssets);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -1150,6 +1256,33 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         _exhaustWithdrawalQueue(cache, xChainWithdrawalQueue, true);
     }
 
+    /// @notice Internal function to process a withdrawal queue and determine optimal withdrawal routes
+    /// @dev Iterates through a withdrawal queue to calculate how to fulfill a withdrawal request across multiple vaults
+    /// and chains.
+    /// The function:
+    /// 1. Processes vaults in queue order until request is fulfilled
+    /// 2. Calculates shares to withdraw from each vault
+    /// 3. Updates debt tracking
+    /// 4. Determines if withdrawal is single/multi chain and single/multi vault
+    /// 5. Maintains withdrawal state in the cache structure
+    ///
+    /// For each vault in the queue:
+    /// - Checks maximum withdrawable amount
+    /// - Calculates required shares
+    /// - Updates chain-specific withdrawal arrays
+    /// - Tracks debt reductions
+    /// - Updates withdrawal type flags (single/multi chain/vault)
+    ///
+    /// @param cache Storage structure containing withdrawal state and routing information:
+    ///        - dstVaults: Arrays of vault IDs per chain
+    ///        - sharesPerVault: Shares to withdraw per vault per chain
+    ///        - assetsPerVault: Assets to withdraw per vault per chain
+    ///        - lens: Number of vaults to process per chain
+    ///        - amountToWithdraw: Remaining assets to withdraw
+    ///        - totalDebt: Running total of vault debt
+    ///        - isSingleChain/isMultiChain/isMultiVault: Withdrawal type flags
+    /// @param queue The withdrawal queue to process (either local or cross-chain)
+    /// @param resetValues If true, resets amountToWithdraw when queue is exhausted
     function _exhaustWithdrawalQueue(
         ProcessRedeemRequestCache memory cache,
         uint256[WITHDRAWAL_QUEUE_SIZE] memory queue,
@@ -1713,10 +1846,11 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         gateway.liquidateMultiDstMultiVault{ value: value }(ambIds, dstChainIds, multiVaultDatas, totalDebtReduction);
     }
 
-    /// @dev Helper function to convert a fixed array to dynamic
-    /// @param arr fixed uint array
-    /// @param len length of new dynamic array
-    /// @return dynArr new dynamic array
+    /// @notice Converts a fixed-size array to a dynamic array
+    /// @param arr The fixed-size array to convert
+    /// @param len The length of the new dynamic array
+    /// @return dynArr The converted dynamic array
+    /// @dev Used to prepare data for cross-chain transactions
     function _toDynamicUint256Array(
         uint256[WITHDRAWAL_QUEUE_SIZE] memory arr,
         uint256 len
@@ -1731,11 +1865,10 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         }
     }
 
-    /// @dev Gets the shares balance of a vault in the porfolio
-    /// @dev If its on the same chain we fetch it from the vault directly,
-    /// otherwise from the Superform ERC1155 Superpositions
-    ///
-    /// @return shares shares balance
+    /// @notice Gets the shares balance of a vault in the portfolio
+    /// @param data The vault data structure containing chain ID and address information
+    /// @return shares The number of shares held in the vault
+    /// @dev For same-chain vaults, fetches directly from the vault; for cross-chain vaults, uses Superform ERC1155
     function _sharesBalance(VaultData memory data) private view returns (uint256 shares) {
         if (data.chainId == THIS_CHAIN_ID) {
             return ERC4626(data.vaultAddress).balanceOf(address(this));
@@ -1777,19 +1910,6 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
         return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
     }
 
-    function settleXChainInvest(uint256 superformId, uint256 bridgedAssets) public {
-        if (msg.sender != address(gateway)) revert();
-        _totalDebt += bridgedAssets.toUint128();
-        vaults[superformId].totalDebt += bridgedAssets.toUint128();
-        emit SettleXChainInvest(superformId, bridgedAssets);
-    }
-
-    function settleXChainDivest(uint256 superformId, uint256 withdrawnAssets) public {
-        if (msg.sender != address(gateway)) revert();
-        _totalIdle += withdrawnAssets.toUint128();
-        emit SettleXChainDivest(superformId, withdrawnAssets);
-    }
-
     /// @dev Supports ERC1155 interface detection
     /// @param interfaceId The interface identifier, as specified in ERC-165
     /// @return isSupported True if the contract supports the interface, false otherwise
@@ -1817,9 +1937,9 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
     {
         // Silence compiler warnings
         operator;
-        from;
         value;
         data;
+        if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155Received.selector;
     }
 
@@ -1845,14 +1965,9 @@ contract MetaVault is ERC7540, OwnableRoles, ReentrancyGuard, Multicallable {
     {
         // Silence compiler warnings
         operator;
-        from;
         values;
         data;
+        if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155BatchReceived.selector;
-    }
-
-    function donate(uint256 assets) external {
-        asset().safeTransferFrom(msg.sender, address(this), assets);
-        _totalIdle += assets.toUint128();
     }
 }
