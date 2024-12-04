@@ -20,7 +20,7 @@ import { ERC7540 } from "lib/Lib.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-import { ERC7540Engine } from "src/ERC7540Engine.sol";
+import { ERC7540Engine } from "modules/Lib.sol";
 import { ERC4626, MetaVault } from "src/MetaVault.sol";
 
 import {

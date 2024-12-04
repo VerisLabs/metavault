@@ -7,4 +7,5 @@ solady/=dependencies/solady-0.0.236/src/
 types/=src/types/
 helpers/=src/helpers
 common/=src/common
+modules/=src/modules
 

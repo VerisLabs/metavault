@@ -29,7 +29,7 @@ import {
     SingleXChainSingleVaultWithdraw
 } from "src/types/Lib.sol";
 
-import { ERC7540Engine } from "src/ERC7540Engine.sol";
+import { ERC7540Engine } from "modules/Lib.sol";
 
 contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;

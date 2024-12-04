@@ -8,7 +8,6 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-import "forge-std/Test.sol";
 import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 import {
     LiqRequest,
@@ -671,8 +670,6 @@ contract ERC7540Engine is Base {
         private
         returns (uint256 withdrawn)
     {
-        console2.log("asset :  ", _asset);
-        console2.log("liquidate single ");
         uint256 balanceBefore = asset().balanceOf(address(this));
         ERC4626(vault).redeem(amount, address(this), receiver);
         withdrawn = asset().balanceOf(address(this)) - balanceBefore;
