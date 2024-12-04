@@ -7,6 +7,7 @@ import { ISuperformFactory } from "../interfaces/ISuperformFactory.sol";
 import { VaultData, VaultReport } from "../types/VaultTypes.sol";
 
 import { ERC7540 } from "./ERC7540.sol";
+import { MultiFacetProxy } from "./MultiFacetProxy.sol";
 
 import { MsgCodec } from "./MsgCodec.sol";
 import { ReentrancyGuard } from "./ReentrancyGuard.sol";

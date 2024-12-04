@@ -16,9 +16,12 @@ import { SuperformGateway } from "crosschain/Lib.sol";
 import { IMetaVault, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 
+import { ERC7540 } from "lib/Lib.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { ERC4626, ERC7540, MetaVault } from "src/MetaVault.sol";
+
+import { ERC7540Engine } from "src/ERC7540Engine.sol";
+import { ERC4626, MetaVault } from "src/MetaVault.sol";
 
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
@@ -54,6 +57,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using LibString for bytes;
 
     MockERC4626Oracle public oracle;
+    ERC7540Engine engine;
     MockSignerRelayer public relayer;
     SuperformGateway public gateway;
     uint64 baseChainId = 8453;
@@ -64,6 +68,10 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         config.signerRelayer = relayer.signerAddress();
 
         vault = new MetaVault(config);
+        engine = new ERC7540Engine();
+        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
+        vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
+        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
         gateway = deployGatewayBase(address(vault), users.alice);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
         vault.setGateway(ISuperformGateway(address(gateway)));
