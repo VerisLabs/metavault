@@ -1,13 +1,22 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
 import { ISuperformGateway } from "interfaces/Lib.sol";
 
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 
+import "forge-std/Test.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
 contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     using VaultLib for VaultData;
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                           CONSTANTS                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @notice Maximum size of the withdrawal queue
     uint256 public constant WITHDRAWAL_QUEUE_SIZE = 30;
@@ -47,9 +56,9 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @notice Cached value of total assets in this vault
-    uint128 private _totalIdle;
+    uint128 internal _totalIdle;
     /// @notice Cached value of total allocated assets
-    uint128 private _totalDebt;
+    uint128 internal _totalDebt;
     /// @notice Asset decimals
     uint8 _decimals;
     /// @notice Protocol fee
@@ -69,13 +78,13 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Fee receiver
     address public treasury;
     /// @notice Underlying asset
-    address private immutable _asset;
+    address internal _asset;
     /// @notice Gateway contract to interact with superform
     ISuperformGateway public gateway;
     /// @notice ERC20 name
-    string private _name;
+    string internal _name;
     /// @notice ERC20 symbol
-    string private _symbol;
+    string internal _symbol;
     /// @notice maps the assets and data of each allocated vault
     /// @notice Vaults portfolio on this same chain
     uint256[WITHDRAWAL_QUEUE_SIZE] public localWithdrawalQueue;
@@ -103,26 +112,30 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
         43_114 // Avalanche
     ];
     /// @notice Timestamp of deposit lock
-    mapping(address => uint256) private _depositLockCheckPoint;
+    mapping(address => uint256) internal _depositLockCheckPoint;
     /// @notice Storage of each vault related data
     mapping(uint256 => VaultData) public vaults;
     /// @notice the ERC4626 oracle of each chain
     mapping(uint64 chain => address) public oracles;
     /// @notice Timestamp of request redeem lock
-    mapping(address => uint256) private _requestRedeemSettlementCheckpoint;
+    mapping(address => uint256) internal _requestRedeemSettlementCheckpoint;
     /// @notice Inverse mapping vault => superformId
     mapping(address => uint256) _vaultToSuperformId;
     /// @notice Redeem is locked when requesting and unlocked when processing
     mapping(address => bool) redeemLocked;
     /// @notice Nonce of each controller
-    mapping(address controller => uint256 nonce) private _controllerNonces;
+    mapping(address controller => uint256 nonce) internal _controllerNonces;
     /// @notice Mapping of chain IDs to their respective indexes
     mapping(uint64 => uint256) chainIndexes;
     /// @notice Mapping of chain method selectors to implementation contracts
     mapping(bytes4 => address) selectorToImplementation;
 
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       HELPR FUNCTIONS                      */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
     /// @dev Private helper to substract a - b or return 0 if it underflows
-    function _sub0(uint256 a, uint256 b) private pure returns (uint256) {
+    function _sub0(uint256 a, uint256 b) internal pure returns (uint256) {
         unchecked {
             return a - b > a ? 0 : a - b;
         }
@@ -132,7 +145,8 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @param data The vault data structure containing chain ID and address information
     /// @return shares The number of shares held in the vault
     /// @dev For same-chain vaults, fetches directly from the vault; for cross-chain vaults, uses Superform ERC1155
-    function _sharesBalance(VaultData memory data) private view returns (uint256 shares) {
+    function _sharesBalance(VaultData memory data) internal view returns (uint256 shares) {
+        console.log("SHARES BALANCE");
         if (data.chainId == THIS_CHAIN_ID) {
             return ERC4626(data.vaultAddress).balanceOf(address(this));
         } else {
@@ -144,14 +158,14 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// Used for computing the denominator input to `FixedPointMathLib.fullMulDiv(a, b, x + 1)`.
     /// When `x == type(uint).max`, we get `x + 1 == 0` (mod 2**256 - 1),
     /// and `FixedPointMathLib.fullMulDiv` will revert as the denominator is zero.
-    function _inc_(uint256 x) private pure returns (uint256) {
+    function _inc_(uint256 x) internal pure returns (uint256) {
         unchecked {
             return x + 1;
         }
     }
 
     /// @dev Private helper to return if either value is zero.
-    function _eitherIsZero_(uint256 a, uint256 b) private pure returns (bool result) {
+    function _eitherIsZero_(uint256 a, uint256 b) internal pure returns (bool result) {
         /// @solidity memory-safe-assembly
         assembly {
             result := or(iszero(a), iszero(b))
@@ -161,7 +175,7 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @dev Private helper get an array uint full of zeros
     /// @param len array length
     /// @return
-    function _getEmptyuintArray(uint256 len) private pure returns (uint256[] memory) {
+    function _getEmptyuintArray(uint256 len) internal pure returns (uint256[] memory) {
         return new uint256[](len);
     }
 
@@ -174,7 +188,7 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
         uint256[WITHDRAWAL_QUEUE_SIZE] memory arr,
         uint256 len
     )
-        private
+        internal
         pure
         returns (uint256[] memory dynArr)
     {
@@ -185,12 +199,12 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     }
 
     /// @dev Helper function to get a empty bools array
-    function _getEmptyBoolArray(uint256 len) private pure returns (bool[] memory) {
+    function _getEmptyBoolArray(uint256 len) internal pure returns (bool[] memory) {
         return new bool[](len);
     }
 
     /// @dev Private helper to calculate shares from any @param _totalAssets
-    function _convertToShares(uint256 assets, uint256 _totalAssets) private view returns (uint256 shares) {
+    function _convertToShares(uint256 assets, uint256 _totalAssets) internal view returns (uint256 shares) {
         if (!_useVirtualShares()) {
             uint256 supply = totalSupply();
             return _eitherIsZero_(assets, supply)
@@ -202,5 +216,95 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
             return Math.fullMulDiv(assets, totalSupply() + 1, _inc_(_totalAssets));
         }
         return Math.fullMulDiv(assets, totalSupply() + 10 ** o, _inc_(_totalAssets));
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       CONTEXT GETTERS                      */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    function name() public view override returns (string memory) {
+        return _name;
+    }
+
+    /// @notice Returns the symbol of the token.
+    function symbol() public view override returns (string memory) {
+        return _symbol;
+    }
+
+    /// @notice Returns the estimate price of 1 vault share
+    function sharePrice() public view returns (uint256) {
+        return convertToAssets(10 ** decimals());
+    }
+
+    /// @notice helper function to see if a vault is listed
+    function isVaultListed(address vaultAddress) public view returns (bool) {
+        return _vaultToSuperformId[vaultAddress] != 0;
+    }
+
+    /// @notice helper function to see if a vault is listed
+    function isVaultListed(uint256 superformId) public view returns (bool) {
+        return vaults[superformId].vaultAddress != address(0);
+    }
+
+    /// @notice returns the struct containtaining vault data
+    function getVault(uint256 superformId) public view returns (VaultData memory vault) {
+        return vaults[superformId];
+    }
+
+    /// @notice Returns the address of the underlying asset.
+    function asset() public view override returns (address) {
+        return _asset;
+    }
+
+    /// @notice Returns the total amount of the underlying asset managed by the Vault.
+    function totalAssets() public view override returns (uint256 assets) {
+        return gateway.totalpendingXChainInvests() + gateway.totalPendingXChainDivests() + totalWithdrawableAssets();
+    }
+
+    /// @notice Returns the total amount of the underlying asset that have been deposited into the vault.
+    function totalDeposits() public view returns (uint256 assets) {
+        return totalIdle() + totalDebt();
+    }
+
+    /// @notice Returns the total amount of the underlying assets that are settled.
+    function totalWithdrawableAssets() public view returns (uint256 assets) {
+        return totalLocalAssets() + totalXChainAssets();
+    }
+
+    /// @notice Returns the total amount of the underlying asset that are located on this
+    /// same chain and can be transferred synchronously
+    function totalLocalAssets() public view returns (uint256 assets) {
+        assets = _totalIdle;
+        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
+            VaultData memory vault = vaults[localWithdrawalQueue[i]];
+            if (vault.vaultAddress == address(0)) break;
+            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            ++i;
+        }
+        return assets;
+    }
+
+    /// @notice Returns the total amount of the underlying asset that are located on
+    /// other chains and need asynchronous transfers
+    function totalXChainAssets() public view returns (uint256 assets) {
+        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
+            VaultData memory vault = vaults[xChainWithdrawalQueue[i]];
+            if (vault.vaultAddress == address(0)) break;
+            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            ++i;
+        }
+        return assets;
+    }
+
+    /// @notice returns the assets that are sitting idle in this contract
+    /// @return assets amount of idle assets
+    function totalIdle() public view returns (uint256 assets) {
+        return _totalIdle;
+    }
+
+    /// @notice returns the total issued debt of underlying vaulrs
+    /// @return assets amount assets that are invested in vaults
+    function totalDebt() public view returns (uint256 assets) {
+        return _totalDebt;
     }
 }

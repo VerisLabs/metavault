@@ -1,5 +1,15 @@
-// SPDX-License-Identifier: MIT 
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
+
+import { Base } from "common/Lib.sol";
+
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
+import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+
+import "forge-std/Test.sol";
+import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -18,16 +28,26 @@ import {
     VaultData,
     VaultLib,
     VaultReport
-} from "./types/Lib.sol";
-import { Base } from "src/common/Base.sol";
+} from "types/Lib.sol";
 
+/// @title ERC7540Engine
+/// @notice Implementation of a ERC4626 multi-vault deposit liquidity engine with cross-chain functionalities
+/// @dev Extends Base contract and implements advanced redeem request processing
 contract ERC7540Engine is Base {
     /// @notice Thrown when attempting to withdraw more assets than are currently available
     error InsufficientAvailableAssets();
 
+    /// @notice Thrown when signature has expired
     error SignatureExpired();
 
+    /// @notice Thrown when signature verification fails
     error InvalidSignature();
+
+    /// @notice Thrown when there are not enough assets to fulfill a request
+    error InsufficientAssets();
+
+    /// @dev Emitted when a redeem request is processed
+    event ProcessRedeemRequest(address indexed controller, uint256 shares);
 
     /// @dev Safe casting operations for uint
     using SafeCastLib for uint256;
@@ -651,6 +671,8 @@ contract ERC7540Engine is Base {
         private
         returns (uint256 withdrawn)
     {
+        console2.log("asset :  ", _asset);
+        console2.log("liquidate single ");
         uint256 balanceBefore = asset().balanceOf(address(this));
         ERC4626(vault).redeem(amount, address(this), receiver);
         withdrawn = asset().balanceOf(address(this)) - balanceBefore;

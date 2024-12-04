@@ -1,7 +1,10 @@
 openzeppelin-contracts/=dependencies/@openzeppelin-contracts-5.1.0/
-crosschain/=src/crosschain/
 forge-std/=dependencies/forge-std-1.9.2/src/
 interfaces/=src/interfaces/
+crosschain/=src/crosschain/
 lib/=src/lib/
 solady/=dependencies/solady-0.0.236/src/
 types/=src/types/
+helpers/=src/helpers
+common/=src/common
+

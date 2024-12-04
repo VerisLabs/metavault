@@ -7,7 +7,6 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { Multicallable } from "solady/utils/Multicallable.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 
 import {
     Harvest,
@@ -31,13 +30,13 @@ import {
     VaultReport
 } from "./types/Lib.sol";
 
-import { Base } from "src/common/Base.sol";
+import { MultiFacetProxy } from "common/Lib.sol";
 
 /// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-contract MetaVault is Base, MultiCallable {
+contract MetaVault is MultiFacetProxy, Multicallable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -57,9 +56,6 @@ contract MetaVault is Base, MultiCallable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           EVENTS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
-    /// @dev Emitted when a redeem request is processed
-    event ProcessRedeemRequest(address indexed controller, uint256 shares);
 
     /// @dev Emitted when a redeem request is fulfilled after being processed
     event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
@@ -107,6 +103,9 @@ contract MetaVault is Base, MultiCallable {
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @notice Thrown when there are not enough assets to fulfill a request
+    error InsufficientAssets();
+
     /// @notice Thrown when {msg.value} cannot cover the crosschain transaction cost
     error InsufficientGas();
 
@@ -127,9 +126,6 @@ contract MetaVault is Base, MultiCallable {
 
     /// @notice Thrown when attempting to redeem shares that are still locked
     error SharesLocked();
-
-    /// @notice Thrown when there are not enough assets to fulfill a request
-    error InsufficientAssets();
 
     /// @notice Thrown when attempting to perform an operation while the vault is in emergency shutdown
     error VaultShutdown();
@@ -196,97 +192,6 @@ contract MetaVault is Base, MultiCallable {
         gateway = _gateway;
         asset().safeApprove(address(_gateway), type(uint256).max);
         gateway.superPositions().setApprovalForAll(address(_gateway), true);
-    }
-
-    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
-    /*                       PUBLIC GETTERS                       */
-    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
-    /// @notice Returns the name of the vault shares token.
-    function name() public view override returns (string memory) {
-        return _name;
-    }
-
-    /// @notice Returns the symbol of the token.
-    function symbol() public view override returns (string memory) {
-        return _symbol;
-    }
-
-    /// @notice Returns the address of the underlying asset.
-    function asset() public view override returns (address) {
-        return _asset;
-    }
-
-    /// @notice Returns the total amount of the underlying asset managed by the Vault.
-    function totalAssets() public view override returns (uint256 assets) {
-        return gateway.totalpendingXChainInvests() + gateway.totalPendingXChainDivests() + totalWithdrawableAssets();
-    }
-
-    /// @notice Returns the total amount of the underlying asset that have been deposited into the vault.
-    function totalDeposits() public view returns (uint256 assets) {
-        return totalIdle() + totalDebt();
-    }
-
-    /// @notice Returns the total amount of the underlying assets that are settled.
-    function totalWithdrawableAssets() public view returns (uint256 assets) {
-        return totalLocalAssets() + totalXChainAssets();
-    }
-
-    /// @notice Returns the total amount of the underlying asset that are located on this
-    /// same chain and can be transferred synchronously
-    function totalLocalAssets() public view returns (uint256 assets) {
-        assets = _totalIdle;
-        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
-            VaultData memory vault = vaults[localWithdrawalQueue[i]];
-            if (vault.vaultAddress == address(0)) break;
-            assets += vault.convertToAssets(_sharesBalance(vault), false);
-            ++i;
-        }
-        return assets;
-    }
-
-    /// @notice Returns the total amount of the underlying asset that are located on
-    /// other chains and need asynchronous transfers
-    function totalXChainAssets() public view returns (uint256 assets) {
-        for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
-            VaultData memory vault = vaults[xChainWithdrawalQueue[i]];
-            if (vault.vaultAddress == address(0)) break;
-            assets += vault.convertToAssets(_sharesBalance(vault), false);
-            ++i;
-        }
-        return assets;
-    }
-
-    /// @notice Returns the estimate price of 1 vault share
-    function sharePrice() public view returns (uint256) {
-        return convertToAssets(10 ** decimals());
-    }
-
-    /// @notice returns the assets that are sitting idle in this contract
-    /// @return assets amount of idle assets
-    function totalIdle() public view returns (uint256 assets) {
-        return _totalIdle;
-    }
-
-    /// @notice returns the total issued debt of underlying vaulrs
-    /// @return assets amount assets that are invested in vaults
-    function totalDebt() public view returns (uint256 assets) {
-        return _totalDebt;
-    }
-
-    /// @notice helper function to see if a vault is listed
-    function isVaultListed(address vaultAddress) public view returns (bool) {
-        return _vaultToSuperformId[vaultAddress] != 0;
-    }
-
-    /// @notice helper function to see if a vault is listed
-    function isVaultListed(uint256 superformId) public view returns (bool) {
-        return vaults[superformId].vaultAddress != address(0);
-    }
-
-    /// @notice returns the struct containtaining vault data
-    function getVault(uint256 superformId) public view returns (VaultData memory vault) {
-        return vaults[superformId];
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/

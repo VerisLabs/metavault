@@ -67,14 +67,14 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         relayer = MockSignerRelayer(address(config.signerRelayer));
         config.signerRelayer = relayer.signerAddress();
 
-        vault = new MetaVault(config);
+        vault = IMetaVault(address(new MetaVault(config)));
         engine = new ERC7540Engine();
+        gateway = deployGatewayBase(address(vault), users.alice);
+        vault.setGateway(address(gateway));
         vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
         vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
         vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
-        gateway = deployGatewayBase(address(vault), users.alice);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
-        vault.setGateway(ISuperformGateway(address(gateway)));
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
         vault.grantRoles(users.alice, vault.ORACLE_ROLE());

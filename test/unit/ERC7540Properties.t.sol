@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
+import { BaseVaultTest, IMetaVault } from "../base/BaseVaultTest.t.sol";
 
 import { ERC4626Events } from "../helpers/ERC4626Events.sol";
 import { ERC7540Events } from "../helpers/ERC7540Events.sol";
@@ -29,6 +29,8 @@ import {
     SingleXChainSingleVaultWithdraw
 } from "src/types/Lib.sol";
 
+import { ERC7540Engine } from "src/ERC7540Engine.sol";
+
 contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
 
@@ -37,6 +39,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     ISuperformFactory factory;
     uint24 sharesLockTime = 30 days;
     address treasury = makeAddr("treasury");
+    ERC7540Engine engine;
 
     function setUp() public {
         super._setUp("POLYGON", 61_032_901);
@@ -44,9 +47,13 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
         config = polygonUsdceVaultConfig();
-        vault = new MetaVault(config);
+        vault = IMetaVault(address(new MetaVault(config)));
+        engine = new ERC7540Engine();
         SuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
-        vault.setGateway(ISuperformGateway(address(gateway)));
+        vault.setGateway(address(gateway));
+        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
+        vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
+        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
     }

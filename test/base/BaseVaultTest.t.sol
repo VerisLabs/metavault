@@ -29,7 +29,7 @@ import { VaultConfig } from "types/Lib.sol";
 
 contract BaseVaultTest is BaseTest {
     VaultConfig public config;
-    MetaVault public vault;
+    IMetaVault public vault;
 
     function polygonUsdceVaultConfig() public returns (VaultConfig memory) {
         return VaultConfig({
