@@ -1,7 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
-import { IERC4626Oracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { Multicallable } from "solady/utils/Multicallable.sol";
@@ -28,6 +28,7 @@ import {
     VaultData,
     VaultLib,
     VaultReport
+    
 } from "./types/Lib.sol";
 
 import { MultiFacetProxy } from "common/Lib.sol";
@@ -684,7 +685,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
             }
 
             // Calculate and distribute management fees based on the change in total assets
-            _assessOracleFees(report.reporter, duration);
+            _assessOracleFees(report.rewardsDelegate, duration);
             emit Report(vault.chainId, vault.vaultAddress, vaultDelta);
         }
         // Calculate and distribute management fees based on the change in total assets
@@ -705,7 +706,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         address vault,
         uint8 vaultDecimals,
         uint16 deductedFees,
-        IERC4626Oracle oracle
+        ISharePriceOracle oracle
     )
         external
         onlyRoles(ADMIN_ROLE)

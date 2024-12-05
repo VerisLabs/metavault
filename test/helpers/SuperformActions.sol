@@ -11,9 +11,12 @@ import {
     SUPERFORM_SUPERPOSITIONS_POLYGON
 } from "src/helpers/AddressBook.sol";
 import {
-    IBaseRouter as ISuperformRouter, IERC4626Oracle, ISuperPositions, ISuperformFactory
+    IBaseRouter as ISuperformRouter,
+    ISharePriceOracle,
+    ISuperPositions,
+    ISuperformFactory
 } from "src/interfaces/Lib.sol";
-import { LiqRequest, SingleVaultSFData, SingleXChainSingleVaultStateReq, VaultReport } from "src/types/Lib.sol";
+import { LiqRequest, SingleVaultSFData, SingleXChainSingleVaultStateReq } from "src/types/Lib.sol";
 
 contract SuperformActions is Test {
     // From superform API
