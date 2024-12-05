@@ -67,11 +67,11 @@ contract DeploymentScript is Script {
             address(engine),
             false
         );
-        vault.addFunction(
-            ERC7540Engine.processRedeemRequestWithSignature.selector,
-            address(engine),
-            false
-        );
+ //       vault.addFunction(
+ //           ERC7540Engine.processRedeemRequestWithSignature.selector,
+ //           address(engine),
+ //           false
+ //       );
         vault.addFunction(
             ERC7540Engine.previewWithdrawalRoute.selector,
             address(engine),
