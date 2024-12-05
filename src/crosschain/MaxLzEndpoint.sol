@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
+import { ISharePriceOracle, VaultReport } from "interfaces/ISharePriceOracle.sol";
 import {
-    IERC4626Oracle,
     ILayerZeroEndpointV2,
     ILayerZeroReceiver,
     MessagingFee,
@@ -11,17 +11,9 @@ import {
     Origin
 } from "interfaces/Lib.sol";
 import { MsgCodec } from "lib/Lib.sol";
-import { VaultReport } from "types/Lib.sol";
+import { Ownable } from "solady/auth/Ownable.sol";
 
-/// @title MaxLzEndpoint
-/// @notice LayerZero endpoint implementation for cross-chain share price oracle communication
-/// @dev Implements ILayerZeroReceiver for handling AB (direct) and ABA (request-response) patterns
-/// @author MaxApy Protocol
-contract MaxLzEndpoint is ILayerZeroReceiver {
-    ////////////////////////////////////////////////////////////////
-    ///                         CONSTANTS                         ///
-    ////////////////////////////////////////////////////////////////
-
+contract MaxLzEndpoint is ILayerZeroReceiver, Ownable {
     /// @notice Protocol version identifiers for LayerZero communication
     uint64 private constant SENDER_VERSION = 1;
     uint64 private constant RECEIVER_VERSION = 2;
@@ -29,7 +21,6 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     /// @notice Option types and limits for message configuration
     uint16 private constant TYPE_3 = 3; // Advanced messaging pattern support
     uint8 private constant WORKER_ID = 1; // Standard executor identifier
-    uint256 public immutable MAX_VAULT_COUNT; // Safety limit for batch operations
 
     /// @notice Message pattern identifiers
     uint8 private constant AB_TYPE = 1; // Simple send-receive
@@ -40,8 +31,7 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     ////////////////////////////////////////////////////////////////
 
     /// @notice Contract immutable state
-    address public immutable owner;
-    IERC4626Oracle public immutable oracle;
+    ISharePriceOracle public immutable oracle;
 
     /// @notice Contract storage state
     ILayerZeroEndpointV2 public endpoint;
@@ -56,16 +46,17 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     event MessageProcessed(bytes32 indexed guid, bytes message);
     event PeerSet(uint32 indexed eid, bytes32 peer);
     event EndpointUpdated(address indexed oldEndpoint, address indexed newEndpoint);
-    event SharePricesUpdated(uint32 indexed dstEid, address[] vaults);
+    event VaultAddressesSent(uint32 indexed dstEid, address[] vaults);
     event SharePricesRequested(uint32 indexed dstEid, address[] vaults);
     event EnforcedOptionsSet(EnforcedOptionParam[] params);
     event VaultReportsSent(uint32 indexed dstEid, VaultReport[] reports);
+    event RoleGranted(address indexed account, uint256 indexed role);
+    event RoleRevoked(address indexed account, uint256 indexed role);
 
     ////////////////////////////////////////////////////////////////
     ///                          ERRORS                           ///
     ////////////////////////////////////////////////////////////////
 
-    error Unauthorized();
     error MessageAlreadyProcessed();
     error InvalidMessageValue();
     error InvalidOptionType(uint16 optionType);
@@ -77,6 +68,7 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     error InsufficientFunds();
     error ZeroAddress();
     error InvalidFee();
+    error InvalidRole();
 
     ////////////////////////////////////////////////////////////////
     ///                         STRUCTS                           ///
@@ -89,43 +81,22 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     }
 
     ////////////////////////////////////////////////////////////////
-    ///                        MODIFIERS                          ///
-    ////////////////////////////////////////////////////////////////
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert Unauthorized();
-        _;
-    }
-
-    modifier validVaultArray(address[] calldata vaults) {
-        if (vaults.length == 0 || vaults.length > MAX_VAULT_COUNT) {
-            revert InvalidInput();
-        }
-        _;
-    }
-
-    ////////////////////////////////////////////////////////////////
     ///                      CONSTRUCTOR                          ///
     ////////////////////////////////////////////////////////////////
 
-    /// @notice Initializes the endpoint with owner and oracle addresses
-    /// @param owner_ Contract owner address
-    /// @param oracle_ Share price oracle contract address
-    constructor(address owner_, address lzEndpoint, address oracle_, uint256 maxVaultCount_) {
-        if (owner_ == address(0) || oracle_ == address(0)) revert ZeroAddress();
-        if (maxVaultCount_ == 0 || maxVaultCount_ > 1000) revert InvalidInput();
-        MAX_VAULT_COUNT = maxVaultCount_;
-        owner = owner_;
-        oracle = IERC4626Oracle(oracle_);
+    constructor(address admin_, address lzEndpoint, address oracle_) {
+        if (admin_ == address(0) || oracle_ == address(0)) revert ZeroAddress();
+
+        oracle = ISharePriceOracle(oracle_);
         endpoint = ILayerZeroEndpointV2(lzEndpoint);
+
+        _initializeOwner(admin_);
     }
 
     ////////////////////////////////////////////////////////////////
     ///                    ADMIN FUNCTIONS                        ///
     ////////////////////////////////////////////////////////////////
 
-    /// @notice Configures the LayerZero endpoint address
-    /// @dev Can only be set once
     function setLzEndpoint(address endpoint_) external onlyOwner {
         if (address(endpoint) != address(0)) revert EndpointExists();
         if (endpoint_ == address(0)) revert InvalidInput();
@@ -133,14 +104,12 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
         emit EndpointUpdated(address(0), endpoint_);
     }
 
-    /// @notice Sets trusted peer for cross-chain communication
     function setPeer(uint32 eid_, bytes32 peer_) external onlyOwner {
         if (peer_ == bytes32(0)) revert InvalidInput();
         peers[eid_] = peer_;
         emit PeerSet(eid_, peer_);
     }
 
-    /// @notice Configures enforced options for message types
     function setEnforcedOptions(EnforcedOptionParam[] calldata params) external onlyOwner {
         uint256 len = params.length;
         for (uint256 i = 0; i < len;) {
@@ -157,17 +126,16 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     ///                   EXTERNAL FUNCTIONS                      ///
     ////////////////////////////////////////////////////////////////
 
-    /// @notice Sends vault share prices to another chain
     function sendSharePrices(
         uint32 dstEid,
         address[] calldata vaultAddresses,
-        bytes calldata options
+        bytes calldata options,
+        address rewardsDelegate
     )
         external
         payable
-        validVaultArray(vaultAddresses)
     {
-        VaultReport[] memory reports = oracle.getSharePrices(vaultAddresses);
+        VaultReport[] memory reports = oracle.getSharePrices(vaultAddresses, rewardsDelegate);
         bytes memory message = MsgCodec.encodeVaultReports(AB_TYPE, reports, options);
         bytes memory combinedOptions = _getCombinedOptions(dstEid, AB_TYPE, options);
 
@@ -175,21 +143,20 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
         if (msg.value < fee.nativeFee) revert InvalidMessageValue();
 
         _lzSend(dstEid, message, combinedOptions, fee, msg.sender);
-        emit SharePricesUpdated(dstEid, vaultAddresses);
+        emit VaultAddressesSent(dstEid, vaultAddresses);
     }
 
-    /// @notice Requests share prices from another chain
     function requestSharePrices(
         uint32 dstEid,
         address[] calldata vaultAddresses,
         bytes calldata options,
-        bytes calldata returnOptions
+        bytes calldata returnOptions,
+        address rewardsDelegate
     )
         external
         payable
-        validVaultArray(vaultAddresses)
     {
-        bytes memory message = MsgCodec.encodeVaultAddresses(ABA_TYPE, vaultAddresses, returnOptions);
+        bytes memory message = MsgCodec.encodeVaultAddresses(ABA_TYPE, vaultAddresses, rewardsDelegate, returnOptions);
         bytes memory combinedOptions = _getCombinedOptions(dstEid, ABA_TYPE, options);
 
         MessagingFee memory fee = _quote(dstEid, message, combinedOptions);
@@ -264,16 +231,18 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
         bytes32 guid,
         bytes calldata message,
         address,
-        bytes calldata extraData
+        bytes calldata
     )
         external
         payable
         override
     {
         if (msg.sender != address(endpoint)) revert OnlyEndpoint();
+
         if (_getPeerOrRevert(origin.srcEid) != origin.sender) {
             revert PeerNotSet(origin.srcEid);
         }
+
         if (processedMessages[guid]) revert MessageAlreadyProcessed();
 
         processedMessages[guid] = true;
@@ -282,9 +251,10 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
 
         if (msgType == AB_TYPE) {
             (, VaultReport[] memory reports,,) = MsgCodec.decodeVaultReports(message);
+
             oracle.updateSharePrices(reports[0].chainId, reports);
         } else if (msgType == ABA_TYPE) {
-            _handleABAResponse(origin, message, extraData);
+            _handleABAResponse(origin, message);
         }
 
         emit MessageProcessed(guid, message);
@@ -295,17 +265,21 @@ contract MaxLzEndpoint is ILayerZeroReceiver {
     ////////////////////////////////////////////////////////////////
 
     /// @notice Handles ABA pattern response messages
-    function _handleABAResponse(Origin calldata origin, bytes calldata message, bytes calldata extraData) private {
-        (, address[] memory vaultAddresses, uint256 start, uint256 length) = MsgCodec.decodeVaultAddresses(message);
+    function _handleABAResponse(Origin calldata origin, bytes calldata message) private {
+        (, address[] memory vaultAddresses, address rewardsDelegate, uint256 start, uint256 length) =
+            MsgCodec.decodeVaultAddresses(message);
 
-        VaultReport[] memory reports = oracle.getSharePrices(vaultAddresses);
+        VaultReport[] memory reports = oracle.getSharePrices(vaultAddresses, rewardsDelegate);
+
         bytes memory returnOptions = message[start:start + length];
         bytes memory returnMessage = MsgCodec.encodeVaultReports(AB_TYPE, reports, returnOptions);
 
-        bytes memory options = _getCombinedOptions(origin.srcEid, AB_TYPE, extraData);
+        bytes memory options = _getCombinedOptions(origin.srcEid, AB_TYPE, returnOptions);
+
         MessagingFee memory fee = _quote(origin.srcEid, returnMessage, options);
 
         if (address(this).balance < fee.nativeFee) revert InsufficientFunds();
+
         _lzSend(origin.srcEid, returnMessage, options, fee, address(this));
     }
 
