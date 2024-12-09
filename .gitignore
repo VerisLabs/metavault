@@ -13,3 +13,5 @@ docs/
 
 # Dependencies
 dependencies/
+
+node_modules/

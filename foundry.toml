@@ -4,7 +4,7 @@ out = "out"
 libs = ["dependencies"]
 gas_reports = ['*']
 evm_version =  "paris"
-via_ir = true
+via_ir = false 
 
 [profile.fork]
 evm_version =  "shanghai" # we use shanghai because we are using multiple chains in our tests
@@ -49,6 +49,7 @@ polygon = "${RPC_POLYGON}"
 mainnet = { key = "${ETHERSCAN_MAINNET_KEY}" }
 goerli = { key = "${ETHERSCAN_API_KEY}" }
 polygon = { key = "${ETHERSCAN_API_KEY}" }
+base = { key = "${ETHERSCAN_API_KEY}" }
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [dependencies]
