@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { ISuperformGateway } from "interfaces/Lib.sol";
+import { ISuperformGateway } from "src/interfaces/ISuperformGateway.sol";
 
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
