@@ -238,19 +238,19 @@ abstract contract ERC7540 is ERC4626 {
         _withdraw(assets, shares, to, controller);
     }
 
-    function pendingRedeemRequest(address controller) public view returns (uint256) {
+    function pendingRedeemRequest(address controller) public virtual view returns (uint256) {
         return _pendingRedeemRequest[controller].unwrap();
     }
 
-    function pendingDepositRequest(address controller) public view returns (uint256) {
+    function pendingDepositRequest(address controller) public virtual view returns (uint256) {
         return _pendingDepositRequest[controller].unwrap();
     }
 
-    function claimableDepositRequest(address controller) public view returns (uint256) {
+    function claimableDepositRequest(address controller) public virtual view returns (uint256) {
         return maxDeposit(controller);
     }
 
-    function claimableRedeemRequest(address controller) public virtual returns (uint256) {
+    function claimableRedeemRequest(address controller) public  virtual view returns (uint256) {
         return maxRedeem(controller);
     }
 

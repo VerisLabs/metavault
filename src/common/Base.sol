@@ -7,7 +7,6 @@ import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 
-import "forge-std/Test.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
@@ -146,7 +145,6 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @return shares The number of shares held in the vault
     /// @dev For same-chain vaults, fetches directly from the vault; for cross-chain vaults, uses Superform ERC1155
     function _sharesBalance(VaultData memory data) internal view returns (uint256 shares) {
-        console.log("SHARES BALANCE");
         if (data.chainId == THIS_CHAIN_ID) {
             return ERC4626(data.vaultAddress).balanceOf(address(this));
         } else {
