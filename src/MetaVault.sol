@@ -9,7 +9,6 @@ import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import {
-    Harvest,
     LiqRequest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -28,9 +27,10 @@ import {
     VaultData,
     VaultLib,
     VaultReport
-} from "./types/Lib.sol";
+} from "types/Lib.sol";
 
 import { MultiFacetProxy } from "common/Lib.sol";
+import {ERC7540} from "lib/Lib.sol";
 
 /// @title MetaVault
 /// @author Unlockd
@@ -59,6 +59,9 @@ contract MetaVault is MultiFacetProxy, Multicallable {
 
     /// @dev Emitted when a redeem request is fulfilled after being processed
     event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
+
+    /// @dev Emitted when fees are applied to a user
+    event AssessFees(address indexed controller, uint256 managementFees, uint256 performanceFees, uint256 oracleFees);
 
     /// @dev Emitted when investing vault idle assets
     event Invest(uint256 amount);
@@ -213,7 +216,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         noEmergencyShutdown
         returns (uint256 requestId)
     {
-        requestId = super.requestDeposit(assets, controller, owner);
+        requestId = ERC7540.requestDeposit(assets, controller, owner);
         // fulfill the request directly
         _fulfillDepositRequest(controller, assets, convertToShares(assets));
     }
@@ -242,8 +245,9 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         noEmergencyShutdown
         returns (uint256 shares)
     {
+        uint256 shares = previewDeposit(assets, controller);
+        ERC7540.deposit(assets, to, controller);
         uint256 sharesBalance = balanceOf(to);
-        shares = super.deposit(assets, to, controller);
         // Start shares lock time
         _lockShares(to, sharesBalance, shares);
         _afterDeposit(assets, shares);
@@ -274,9 +278,16 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         returns (uint256 assets)
     {
         uint256 sharesBalance = balanceOf(to);
-        assets = super.mint(shares, to, controller);
+        assets = ERC7540.mint(shares, to, controller);
         _lockShares(to, sharesBalance, shares);
         _afterDeposit(assets, shares);
+    }
+
+    /// @dev Override to update the average entry price and the timestamp of last redeem
+    function _deposit(uint256 assets, uint256 shares, address receiver, address controller) internal override {
+        _updatePosition(controller, shares);
+        if (lastRedeem[controller] == 0) lastRedeem[controller] = block.timestamp;
+        ERC7540._deposit(assets, shares, receiver, controller);
     }
 
     /// @notice Assumes control of shares from sender into the Vault and submits a Request for asynchronous redeem.
@@ -295,7 +306,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     {
         // Require deposited shares arent locked
         _checkSharesLocked(controller);
-        requestId = super.requestRedeem(shares, controller, owner);
+        requestId = ERC7540.requestRedeem(shares, controller, owner);
         // Lock redeem till the request is processed
         redeemLocked[controller] = true;
     }
@@ -316,7 +327,77 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         returns (uint256 assets)
     {
         _checkRedeemProcessed(controller);
-        return super.redeem(shares, receiver, controller);
+        uint256 entrySharePrice = positions[controller];
+        uint256 currentSharePrice = sharePrice();
+        assets = ERC7540.redeem(shares, receiver, controller);
+    }
+
+    /// @dev Override to apply fees on exit
+    function _withdraw(uint256 assets, uint256 shares, address receiver, address controller) internal override {
+        // Get the average price at which the controller bought the shares
+        uint256 entrySharePrice = positions[controller];
+        // Get the price of the shares after processing the redeem request
+        uint256 withdrawalSharePrice =
+            _claimableRedeemRequest[controller].assets * decimals() / _claimableRedeemRequest[controller].shares;
+        // Get global vault share price
+        uint256 currentSharePrice = sharePrice();
+        // Consume claimable
+        unchecked {
+            _claimableRedeemRequest[controller].assets -= assets;
+            _claimableRedeemRequest[controller].shares -= shares;
+        }
+        // Calculate his assets pnl
+        int256 assetsDelta = int256(assets * withdrawalSharePrice) - int256(assets * entrySharePrice) / int256(int8(decimals()));
+
+        // Check if it has some fee excemption
+        uint256 performanceFeeExempt = performanceFeeExempt[controller];
+        uint256 managementFeeExempt = managementFeeExempt[controller];
+        uint256 oracleFeeExempt = oracleFeeExempt[controller];
+        uint256 duration = block.timestamp - lastRedeem[controller];
+        uint256 performanceFees;
+        uint256 managementFees;
+        uint256 oracleFees;
+        uint256 totalFees;
+        // If it has profit
+        if (assetsDelta > 0) {
+            // If the global share price is higher than watermark apply fees
+            if (currentSharePrice > sharePriceWaterMark) {
+                performanceFees = uint256(assetsDelta) * _sub0(performanceFee, performanceFeeExempt) / MAX_BPS;
+                managementFees = assets * duration * _sub0(managementFee, managementFeeExempt) / SECS_PER_YEAR;
+                oracleFees = assets * duration * _sub0(oracleFee, oracleFeeExempt) / SECS_PER_YEAR;
+                totalFees = performanceFees + managementFees + oracleFees;
+            }
+        }
+        // Send fees to treasury
+        asset().safeTransfer(treasury, totalFees);
+        uint256 totalAssetsAfterFee = assets - totalFees;
+        // Send assets to receiver
+        asset().safeTransfer(receiver, totalAssetsAfterFee);
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Emit the {Withdraw} event.
+            mstore(0x00, totalAssetsAfterFee)
+            mstore(0x20, shares)
+            let m := shr(96, not(0))
+            log4(
+                0x00,
+                0x40,
+                0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db,
+                and(m, controller),
+                and(m, receiver),
+                and(m, controller)
+            )
+            //  Emit the {FeesApplied} event.
+            mstore(0x00, controller)
+            log4(
+                0x00,
+                0x20,
+                0xa443e1db11cb46c65620e8e21d4830a6b9b444fa4c350f0dd0024b8a5a6b6ef5,
+                managementFees,
+                performanceFees,
+                oracleFees
+            )
+        }
     }
 
     /// @dev Withdraws assets, ensuring all settled requests are fulfilled
@@ -334,13 +415,12 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         nonReentrant
         returns (uint256 shares)
     {
-        return super.withdraw(assets, receiver, controller);
+        return ERC7540.withdraw(assets, receiver, controller);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       VAULT MANAGEMENT                     */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
     /// @notice Invests assets from this vault into a single target vault within the same chain
     /// @dev Only callable by addresses with the MANAGER_ROLE
     /// @param vaultAddress The address of the target vault to invest in
@@ -633,66 +713,6 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         emit Divest(totalAmount);
     }
 
-    /// @notice Updates the share prices of vaults based on oracle reports
-    /// @dev This function can only be called by addresses with the ORACLE_ROLE
-    function harvest(Harvest[] calldata harvests) external updateWatermark {
-        uint256 duration = block.timestamp - lastReport;
-        uint256 sharePrice_ = sharePrice();
-        for (uint256 i = 0; i < harvests.length; i++) {
-            // Cache the current report for efficiency
-            Harvest memory _vault = harvests[i];
-
-            // Ensure the reported vault is in the approved list
-            if (!isVaultListed(_vault.vaultAddress)) revert VaultNotListed();
-
-            // Retrieve the superform ID for the vault
-            uint256 superformId = _vaultToSuperformId[_vault.vaultAddress];
-
-            // Cache the vault data for easier access
-            VaultData memory vault = vaults[superformId];
-
-            // Get the current balance of vault shares
-            uint256 sharesBalance = _sharesBalance(vault);
-
-            // Calculate the total assets value before applying the new share price
-            uint256 totalAssetsBefore = vault.convertToAssetsCachedSharePrice(sharesBalance);
-
-            // Update the vault's share price with the new reported value
-            VaultReport memory report = vault.oracle.getLatestSharePrice(_vault.chainId, _vault.vaultAddress);
-
-            vaults[superformId].lastReportedSharePrice = uint192(report.sharePrice);
-
-            // Calculate the total assets value after applying the new share price
-            uint256 totalAssetsAfter = vault.convertToAssets(sharesBalance, true);
-
-            // Gains/losses of the strategy
-            int256 vaultDelta = int256(totalAssetsAfter) - int256(totalAssetsBefore);
-
-            // If it has profit apply fees
-            if (vaultDelta > 0) {
-                // Only charge fees on yield above watermark
-                if (sharePrice_ > sharePriceWaterMark) {
-                    // And only charge rees if the strategy yield is above hurdle rate
-                    uint256 rate = (uint256(vaultDelta) * MAX_BPS).mulDiv(SECS_PER_YEAR, duration) / totalAssetsBefore;
-                    if (rate > hurdleRate) {
-                        uint16 effectiveFee = performanceFee - vault.deductedFees;
-                        uint256 performanceFees = uint256(vaultDelta) * effectiveFee / MAX_BPS;
-                        uint256 performanceFeeShares = convertToShares(performanceFees);
-                        _mint(treasury, performanceFeeShares);
-                    }
-                }
-            }
-
-            // Calculate and distribute management fees based on the change in total assets
-            _assessOracleFees(report.reporter, duration);
-            emit Report(vault.chainId, vault.vaultAddress, vaultDelta);
-        }
-        // Calculate and distribute management fees based on the change in total assets
-        _assessManagementFees(treasury, duration);
-        // Update timestamp of last report
-        lastReport = block.timestamp;
-    }
-
     /// @notice Add a new vault to the portfolio
     /// @param chainId chainId of the vault
     /// @param superformId id of superform in case its crosschain
@@ -759,12 +779,19 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         emit EmergencyShutdown(_emergencyShutdown);
     }
 
-    /// @notice set the oracle for one chain
-    /// @param chainId the oracle
-    /// @param oracle for that chain
-    function setOracle(uint64 chainId, address oracle) external onlyRoles(ADMIN_ROLE) {
-        oracles[chainId] = oracle;
-        emit SetOracle(chainId, oracle);
+    /// @notice Whitelists specific clients so they pay less or zero fees
+    function setFeeExcemption(
+        address controller,
+        uint256 managementFeeExcemption,
+        uint256 performanceFeeExcemption,
+        uint256 oracleFeeExcemption
+    )
+        external
+        onlyRoles(ADMIN_ROLE)
+    {
+        performanceFeeExempt[controller] = performanceFeeExcemption;
+        managementFeeExempt[controller] = managementFeeExcemption;
+        oracleFeeExempt[controller] = oracleFeeExcemption;
     }
 
     function setSharesLockTime(uint24 time) external onlyRoles(ADMIN_ROLE) {
@@ -821,7 +848,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     /// @dev Increases the total idle assets of the vault
     function donate(uint256 assets) external {
         asset().safeTransferFrom(msg.sender, address(this), assets);
-        _totalIdle += assets.toUint128();
+        _afterDeposit(assets, 0);
     }
 
     /// @notice Settles a cross-chain investment by updating vault accounting
@@ -850,22 +877,19 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         return _decimals;
     }
 
-    /// @notice Applies annualized fees to vault assets
-    /// @notice Mints shares to the treasury
-    function _assessManagementFees(address managementFeeReceiver, uint256 duration) private {
-        uint256 managementFees = (totalAssets() * duration * managementFee) / SECS_PER_YEAR / MAX_BPS;
-        uint256 managementFeeShares = convertToShares(managementFees);
-
-        _mint(managementFeeReceiver, managementFeeShares);
-    }
-
-    /// @notice Applies annualized fees to vault assets
-    /// @notice Mints shares to the treasury
-    function _assessOracleFees(address oracleFeeReceiver, uint256 duration) private {
-        uint256 oracleFees = (totalAssets() * duration * oracleFee) / SECS_PER_YEAR / MAX_BPS;
-        uint256 oracleFeeShares = convertToShares(oracleFees);
-
-        _mint(oracleFeeReceiver, oracleFeeShares);
+    /// @notice Updates the average entry share price of a controller
+    function _updatePosition(address controller, uint256 mintedShares) internal {
+        uint256 averateEntryPrice = positions[controller];
+        uint256 currentSharePrice = sharePrice();
+        uint256 sharesBalance = balanceOf(controller);
+        if (averateEntryPrice == 0 || sharesBalance == 0) {
+            positions[controller] = currentSharePrice;
+        } else {
+            uint256 totalCost = sharesBalance * averateEntryPrice + mintedShares * currentSharePrice;
+            uint256 newTotalAmount = sharesBalance + mintedShares;
+            uint256 newAverageEntryPrice = totalCost / newTotalAmount;
+            positions[controller] = newAverageEntryPrice;
+        }
     }
 
     /// @dev Hook that is called after any deposit or mint.

@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import { IERC4626Oracle } from "./IERC4626Oracle.sol";
 import {
-    Harvest,
     LiqRequest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -94,8 +93,6 @@ interface IMetaVault {
         IERC4626Oracle oracle
     )
         external;
-
-    function harvest(Harvest[] calldata harvests) external;
 
     function vaults(uint256)
         external

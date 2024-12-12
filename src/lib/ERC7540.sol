@@ -30,14 +30,6 @@ abstract contract ERC7540 is ERC4626 {
     /// @dev Emitted when `controller` gives allowance to `operator`
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
 
-    /// @dev `keccak256(bytes("DepositRequest(address,address,uint256,address,uint256)"))`.
-    uint256 private constant _DEPOSIT_REQUEST_EVENT_SIGNATURE =
-        0xbb58420bb8ce44e11b84e214cc0de10ce5e7c24d0355b2815c3d758b514cae72;
-
-    /// @dev `keccak256(bytes("RedeemRequest(address,address,uint256,address,uint256)"))`.
-    uint256 private constant _REDEEM_REQUEST_EVENT_SIGNATURE =
-        0x1fdc681a13d8c5da54e301c7ce6542dcde4581e4725043fdab2db12ddc574506;
-
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -59,16 +51,16 @@ abstract contract ERC7540 is ERC4626 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @notice Saves the ERC7540 deposit requests when calling `requestDeposit`
-    mapping(address => ERC7540_Request) private _pendingDepositRequest;
+    mapping(address => ERC7540_Request) internal _pendingDepositRequest;
 
     /// @notice Saves the ERC7540 redeem requests when calling `requestRedeem`
-    mapping(address => ERC7540_Request) private _pendingRedeemRequest;
+    mapping(address => ERC7540_Request) internal _pendingRedeemRequest;
 
     /// @notice Saves the result of the deposit after the request has been processed
-    mapping(address => ERC7540_FilledRequest) private _claimableDepositRequest;
+    mapping(address => ERC7540_FilledRequest) internal _claimableDepositRequest;
 
     /// @notice Saves the result of the redeem after the request has been processed
-    mapping(address => ERC7540_FilledRequest) private _claimableRedeemRequest;
+    mapping(address => ERC7540_FilledRequest) internal _claimableRedeemRequest;
 
     /// @notice ERC7540 operator approvals
     mapping(address controller => mapping(address operator => bool)) public isOperator;
@@ -78,6 +70,13 @@ abstract contract ERC7540 is ERC4626 {
         assets; // silence compiler warnings
         shares; // silence compiler warnings
         revert();
+    }
+
+    /// @dev Preview functions for ERC-7540 vaults revert
+    function previewDeposit(uint256 assets, address controller) public view returns (uint256 shares) {
+        ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
+        shares = claimable.convertToSharesUp(assets);
+        return shares;
     }
 
     /// @dev Preview functions for ERC-7540 vaults revert
@@ -238,19 +237,19 @@ abstract contract ERC7540 is ERC4626 {
         _withdraw(assets, shares, to, controller);
     }
 
-    function pendingRedeemRequest(address controller) public virtual view returns (uint256) {
+    function pendingRedeemRequest(address controller) public view virtual returns (uint256) {
         return _pendingRedeemRequest[controller].unwrap();
     }
 
-    function pendingDepositRequest(address controller) public virtual view returns (uint256) {
+    function pendingDepositRequest(address controller) public view virtual returns (uint256) {
         return _pendingDepositRequest[controller].unwrap();
     }
 
-    function claimableDepositRequest(address controller) public virtual view returns (uint256) {
+    function claimableDepositRequest(address controller) public view virtual returns (uint256) {
         return maxDeposit(controller);
     }
 
-    function claimableRedeemRequest(address controller) public  virtual view returns (uint256) {
+    function claimableRedeemRequest(address controller) public view virtual returns (uint256) {
         return maxRedeem(controller);
     }
 

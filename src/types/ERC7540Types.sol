@@ -44,7 +44,7 @@ library ERC7540Lib {
     /// @param shares The amount of shares to convert to assets
     /// @return The equivalent amount of assets, rounded up
     function convertToAssets(ERC7540_FilledRequest memory self, uint256 shares) internal pure returns (uint256) {
-        return FixedPointMathLib.fullMulDivUp(self.assets, shares, self.shares);
+        return FixedPointMathLib.fullMulDiv(self.assets, shares, self.shares);
     }
 
     /// @notice Converts a given amount of shares to assets, rounding up

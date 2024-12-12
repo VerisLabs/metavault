@@ -167,11 +167,6 @@ struct VaultReport {
     address vaultAddress;
 }
 
-struct Harvest {
-    uint64 chainId;
-    address vaultAddress;
-}
-
 struct SingleXChainSingleVaultWithdraw {
     uint8[] ambIds;
     uint256 outputAmount;

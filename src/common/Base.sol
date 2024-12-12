@@ -50,6 +50,9 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
+    /// @notice mapping from address to the average share price of their deposits
+    mapping(address => uint256 averageEntryPrice) public positions;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           STORAGE                          */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -114,8 +117,6 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     mapping(address => uint256) internal _depositLockCheckPoint;
     /// @notice Storage of each vault related data
     mapping(uint256 => VaultData) public vaults;
-    /// @notice the ERC4626 oracle of each chain
-    mapping(uint64 chain => address) public oracles;
     /// @notice Timestamp of request redeem lock
     mapping(address => uint256) internal _requestRedeemSettlementCheckpoint;
     /// @notice Inverse mapping vault => superformId
@@ -128,6 +129,11 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     mapping(uint64 => uint256) chainIndexes;
     /// @notice Mapping of chain method selectors to implementation contracts
     mapping(bytes4 => address) selectorToImplementation;
+
+    mapping(address controller => uint256) public performanceFeeExempt;
+    mapping(address controller => uint256) public managementFeeExempt;
+    mapping(address controller => uint256) public oracleFeeExempt;
+    mapping(address controller => uint256) public lastRedeem;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */
