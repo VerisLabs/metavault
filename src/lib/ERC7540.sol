@@ -73,13 +73,6 @@ abstract contract ERC7540 is ERC4626 {
     }
 
     /// @dev Preview functions for ERC-7540 vaults revert
-    function previewDeposit(uint256 assets, address controller) public view returns (uint256 shares) {
-        ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
-        shares = claimable.convertToSharesUp(assets);
-        return shares;
-    }
-
-    /// @dev Preview functions for ERC-7540 vaults revert
     function previewMint(uint256 shares) public pure override returns (uint256 assets) {
         shares; // silence compiler warnings
         assets; // silence compiler warnings
@@ -189,7 +182,7 @@ abstract contract ERC7540 is ERC4626 {
         if (assets > maxDeposit(controller)) revert DepositMoreThanMax();
         ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
         shares = claimable.convertToSharesUp(assets);
-        _deposit(assets, shares, receiver, controller);
+        (shares,) = _deposit(assets, shares, receiver, controller);
     }
 
     /// @dev Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
@@ -209,7 +202,7 @@ abstract contract ERC7540 is ERC4626 {
         if (shares > maxMint(controller)) revert MintMoreThanMax();
         ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
         assets = claimable.convertToAssetsUp(shares);
-        _deposit(assets, shares, receiver, controller);
+        (, assets) = _deposit(assets, shares, receiver, controller);
     }
 
     function redeem(uint256 shares, address to, address controller) public virtual override returns (uint256 assets) {
@@ -217,7 +210,7 @@ abstract contract ERC7540 is ERC4626 {
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
         assets = claimable.convertToAssets(shares);
-        _withdraw(assets, shares, to, controller);
+        (assets,) = _withdraw(assets, shares, to, controller);
     }
 
     function withdraw(
@@ -234,7 +227,7 @@ abstract contract ERC7540 is ERC4626 {
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
         shares = claimable.convertToSharesUp(assets);
-        _withdraw(assets, shares, to, controller);
+        (, shares) = _withdraw(assets, shares, to, controller);
     }
 
     function pendingRedeemRequest(address controller) public view virtual returns (uint256) {
@@ -253,7 +246,16 @@ abstract contract ERC7540 is ERC4626 {
         return maxRedeem(controller);
     }
 
-    function _deposit(uint256 assets, uint256 shares, address receiver, address controller) internal virtual {
+    function _deposit(
+        uint256 assets,
+        uint256 shares,
+        address receiver,
+        address controller
+    )
+        internal
+        virtual
+        returns (uint256 sharesReturn, uint256 assetsReturn)
+    {
         unchecked {
             _claimableDepositRequest[controller].assets -= assets;
             _claimableDepositRequest[controller].shares -= shares;
@@ -273,9 +275,19 @@ abstract contract ERC7540 is ERC4626 {
                 and(m, receiver)
             )
         }
+        return (shares, assets);
     }
 
-    function _withdraw(uint256 assets, uint256 shares, address receiver, address controller) internal virtual {
+    function _withdraw(
+        uint256 assets,
+        uint256 shares,
+        address receiver,
+        address controller
+    )
+        internal
+        virtual
+        returns (uint256 assetsReturn, uint256 sharesReturn)
+    {
         unchecked {
             _claimableRedeemRequest[controller].assets -= assets;
             _claimableRedeemRequest[controller].shares -= shares;
@@ -296,6 +308,7 @@ abstract contract ERC7540 is ERC4626 {
                 and(m, controller)
             )
         }
+        return (assets, shares);
     }
 
     function _requestDeposit(

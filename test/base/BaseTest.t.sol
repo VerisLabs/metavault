@@ -81,4 +81,11 @@ contract BaseTest is Test {
             fail();
         }
     }
+
+    /// @dev Private helper to substract a - b or return 0 if it underflows
+    function _sub0(uint256 a, uint256 b) internal pure returns (uint256) {
+        unchecked {
+            return a - b > a ? 0 : a - b;
+        }
+    }
 }

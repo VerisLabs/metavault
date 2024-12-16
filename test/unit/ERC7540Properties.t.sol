@@ -84,9 +84,9 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         uint256 shares = vault.deposit(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
-        assertEq(vault.pendingDepositRequest(users.alice), 0);
-        assertEq(vault.totalAssets(), amount);
-        assertEq(shares, amount);
+        assertEq(vault.pendingDepositRequest(users.alice), 0, "s");
+        assertEq(vault.totalAssets(), amount, "1");
+        assertEq(shares, amount, "2");
         assertEq(vault.balanceOf(users.alice), shares);
     }
 
