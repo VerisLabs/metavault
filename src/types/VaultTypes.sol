@@ -161,9 +161,12 @@ library VaultLib {
     }
 }
 
-struct Harvest {
+
+struct VaultReport {
+    uint192 sharePrice;
+    uint64 lastUpdate;
     uint64 chainId;
-    address vaultAddress;
+    address reporter;
 }
 
 struct SingleXChainSingleVaultWithdraw {

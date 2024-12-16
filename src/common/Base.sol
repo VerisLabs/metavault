@@ -7,7 +7,6 @@ import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 
-import "forge-std/Test.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
@@ -50,6 +49,9 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
 
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
+
+    /// @notice mapping from address to the average share price of their deposits
+    mapping(address => uint256 averageEntryPrice) public positions;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           STORAGE                          */
@@ -115,8 +117,6 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     mapping(address => uint256) internal _depositLockCheckPoint;
     /// @notice Storage of each vault related data
     mapping(uint256 => VaultData) public vaults;
-    /// @notice the ERC4626 oracle of each chain
-    mapping(uint64 chain => address) public oracles;
     /// @notice Timestamp of request redeem lock
     mapping(address => uint256) internal _requestRedeemSettlementCheckpoint;
     /// @notice Inverse mapping vault => superformId
@@ -129,6 +129,11 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     mapping(uint64 => uint256) chainIndexes;
     /// @notice Mapping of chain method selectors to implementation contracts
     mapping(bytes4 => address) selectorToImplementation;
+
+    mapping(address controller => uint256) public performanceFeeExempt;
+    mapping(address controller => uint256) public managementFeeExempt;
+    mapping(address controller => uint256) public oracleFeeExempt;
+    mapping(address controller => uint256) public lastRedeem;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */
@@ -146,7 +151,6 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @return shares The number of shares held in the vault
     /// @dev For same-chain vaults, fetches directly from the vault; for cross-chain vaults, uses Superform ERC1155
     function _sharesBalance(VaultData memory data) internal view returns (uint256 shares) {
-        console.log("SHARES BALANCE");
         if (data.chainId == THIS_CHAIN_ID) {
             return ERC4626(data.vaultAddress).balanceOf(address(this));
         } else {

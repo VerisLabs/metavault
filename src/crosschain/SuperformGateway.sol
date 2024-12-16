@@ -9,7 +9,6 @@ import { Initializable } from "solady/utils/Initializable.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import {
-    Harvest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
     MultiVaultSFData,

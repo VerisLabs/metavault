@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import { ISharePriceOracle } from "./ISharePriceOracle.sol";
 import {
-    Harvest,
     LiqRequest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -26,6 +25,10 @@ import {
 interface IMetaVault {
     function initialize(VaultConfig memory) external;
 
+    function SECS_PER_YEAR() external view returns (uint256);
+
+    function MAX_BPS() external view returns (uint256);
+
     function ADMIN_ROLE() external view returns (uint256);
 
     function MANAGER_ROLE() external view returns (uint256);
@@ -33,8 +36,6 @@ interface IMetaVault {
     function RELAYER_ROLE() external view returns (uint256);
 
     function ORACLE_ROLE() external view returns (uint256);
-
-    function SECS_PER_YEAR() external view returns (uint256);
 
     function EMERGENCY_ADMIN_ROLE() external view returns (uint256);
 
@@ -93,8 +94,6 @@ interface IMetaVault {
         ISharePriceOracle oracle
     )
         external;
-
-    function harvest(Harvest[] calldata harvests) external;
 
     function vaults(uint256)
         external
@@ -190,6 +189,18 @@ interface IMetaVault {
         payable
         returns (uint256[] memory assets);
 
+    function setFeeExcemption(
+        address controller,
+        uint256 managementFeeExcemption,
+        uint256 performanceFeeExcemption,
+        uint256 oracleFeeExcemption
+    )
+        external;
+
+    function sharePriceWaterMark() external view returns (uint256);
+
+    function lastRedeem(address) external view returns (uint256);
+
     function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
 
     function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
@@ -202,7 +213,7 @@ interface IMetaVault {
 
     function setGateway(address) external;
 
-    function setOracle(uint64 chainId, address oracle) external;
+    function donate(uint256 assets) external;
 
     function setSharesLockTime(uint24 time) external;
 

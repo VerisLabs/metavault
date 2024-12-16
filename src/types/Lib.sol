@@ -6,7 +6,6 @@ import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "./ERC7540Typ
 import "./SuperformTypes.sol";
 import {VaultReport} from "./VaultTypes.sol";
 import {
-    Harvest,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
     ProcessRedeemRequestWithSignatureParams,

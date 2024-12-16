@@ -20,6 +20,7 @@ import { ERC7540 } from "lib/Lib.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
+import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
 import { ERC7540Engine } from "modules/Lib.sol";
 import { ERC4626, MetaVault } from "src/MetaVault.sol";
 
@@ -40,7 +41,6 @@ import {
 } from "src/helpers/AddressBook.sol";
 import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
-    Harvest,
     LiqRequest,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
@@ -67,7 +67,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         relayer = MockSignerRelayer(address(config.signerRelayer));
         config.signerRelayer = relayer.signerAddress();
 
-        vault = IMetaVault(address(new MetaVault(config)));
+        vault = IMetaVault(address(new MetaVaultWrapper(config)));
         engine = new ERC7540Engine();
         gateway = deployGatewayBase(address(vault), users.alice);
         vault.setGateway(address(gateway));
@@ -636,15 +636,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         });
     }
 
-    function test_MetaVault_setOracle() public {
-        address newOracle = address(0x789);
-        uint64 chainId = 42;
-
-        vm.expectEmit(true, true, true, true);
-        emit SetOracle(chainId, newOracle);
-        vault.setOracle(chainId, newOracle);
-    }
-
     function test_MetaVault_setSharesLockTime() public {
         uint24 newLockTime = 60 days;
 
@@ -862,11 +853,14 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
     }
 
-    function test_MetaVault_management_fees() public {
-        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+    function test_MetaVault_exitFees_withProfit() public {
+        // Initial deposit
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
 
+        // Simulate profit by donating to vault
+        uint256 profit = 100 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, profit);
         oracle.setValues(
             optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
         );
@@ -879,44 +873,228 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
 
-        uint256 investAmount = 600 * _1_USDCE;
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
 
-        (SingleXChainSingleVaultStateReq memory req) =
-            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-
-        req.superformData.amount = investAmount;
-
-        uint256 newSharesPrice = 2 * _1_USDCE;
-        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-
-        vm.expectEmit(true, true, true, true);
-        emit Invest(investAmount);
-        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            req
-        );
-
-        _mintSuperpositions(address(gateway), superformId, shares);
         vm.startPrank(users.alice);
-        Harvest[] memory mockHarvest = new Harvest[](1);
-        mockHarvest[0].chainId = optimismChainId;
-        mockHarvest[0].vaultAddress = vaultAddress;
 
-        skip(vault.SECS_PER_YEAR());
-        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
+        // Current share price should be higher than initial
+        assertGt(vault.sharePrice(), 1e6);
 
-        uint256 deductedFee = 50;
+        skip(config.sharesLockTime);
+
+        // Request redeem
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        // Process redeem request
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        // Calculate expected fees
+        uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
+        uint256 totalAssets = depositAmount + profit;
+
+        // Calculate hurdle return
+        uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 excessReturn = profit > hurdleReturn ? profit - hurdleReturn : 0;
+
+        uint256 expectedPerformanceFees = excessReturn * vault.performanceFee() / vault.MAX_BPS();
+        uint256 expectedManagementFees =
+            (totalAssets * duration * vault.managementFee()) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 expectedOracleFees =
+            (totalAssets * duration * vault.oracleFee()) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        uint256 totalExpectedFees = expectedPerformanceFees + expectedManagementFees + expectedOracleFees;
+
+        // Ensure fees don't exceed excess return
+        if (totalExpectedFees > excessReturn) {
+            totalExpectedFees = excessReturn;
+            uint256 totalFeeBps = vault.performanceFee() + vault.managementFee() + vault.oracleFee();
+            expectedPerformanceFees = (expectedPerformanceFees * excessReturn) / totalFeeBps;
+            expectedManagementFees = (expectedManagementFees * excessReturn) / totalFeeBps;
+            expectedOracleFees = (expectedOracleFees * excessReturn) / totalFeeBps;
+        }
+
+        // Check fees event emission
+        vm.expectEmit(true, true, true, true);
+        emit AssessFees(users.alice, expectedManagementFees, expectedPerformanceFees - 1, expectedOracleFees);
+
+        // Redeem
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+
+        // Verify received amount is total minus fees
+        assertEq(receivedAssets, totalAssets - totalExpectedFees);
+
+        // Verify fees went to treasury
+        assertApproxEq(USDCE_BASE.balanceOf(vault.treasury()), totalExpectedFees, 1);
+    }
+
+    function test_MetaVault_exitFees_noExcessReturn() public {
+        // Initial deposit
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        // Simulate small profit that doesn't exceed hurdle
+        uint256 profit = 1 * _1_USDCE; // Very small profit
+        deal(USDCE_BASE, users.bob, profit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        // Calculate hurdle return
+        uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
+        uint256 totalAssets = depositAmount + profit;
+        uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        // Verify profit doesn't exceed hurdle
+        assertLe(profit, hurdleReturn);
+
+        // Redeem - should not charge performance fees
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+
+        // Should receive full amount since profit didn't exceed hurdle
+        assertEq(receivedAssets, totalAssets - 1);
+        assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
+    }
+
+    function test_MetaVault_exitFees_belowWatermark_noPerformanceFees() public {
+        // Initial deposit
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        // Simulate profit to set watermark
+        uint256 initialProfit = 100 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, initialProfit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), initialProfit);
+        vault.donate(initialProfit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        // Record watermark after initial profit
+        uint256 watermark = vault.sharePrice();
+
+        // Simulate loss and then small recovery
+        uint256 loss = 150 * _1_USDCE;
+        vm.startPrank(address(vault));
+        USDCE_BASE.safeTransfer(users.bob, loss);
+        MetaVaultWrapper(payable(address(vault))).setTotalIdle(uint128((1000 + 100 - 150) * _1_USDCE));
+        vm.stopPrank();
+
+        // Add some profit back, but still below watermark
+        uint256 recoveryProfit = 50 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, recoveryProfit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), recoveryProfit);
+        vault.donate(recoveryProfit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        // Verify we're below watermark
+        assertLt(vault.sharePrice(), watermark);
+
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        // Should not charge performance fees when below watermark
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+
+        // Should only charge management and oracle fees if applicable
+        uint256 totalAssets = depositAmount + initialProfit - loss + recoveryProfit;
+        assertEq(receivedAssets, totalAssets);
+        assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
+    }
+
+    function test_MetaVault_exitFees_feeExemption() public {
+        // Initial deposit
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        // Set fee exemptions for alice
+        vm.startPrank(users.bob);
+        uint256 performanceFeeExemption = 1000; // 10%
+        uint256 managementFeeExemption = 500; // 5%
+        uint256 oracleFeeExemption = 200; // 2%
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+        vault.setFeeExcemption(users.alice, managementFeeExemption, performanceFeeExemption, oracleFeeExemption);
+
+        vm.startPrank(users.bob);
+        // Simulate significant profit to exceed hurdle
+        uint256 profit = 2000 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, profit);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        // Calculate expected fees with exemptions
+        uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
+        uint256 totalAssets = depositAmount + profit;
+
+        // Calculate hurdle return
+        uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 excessReturn = profit - hurdleReturn;
 
         uint256 expectedPerformanceFees =
-            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
-        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
+            excessReturn * _sub0(vault.performanceFee(), performanceFeeExemption) / vault.MAX_BPS();
+        uint256 expectedManagementFees = (totalAssets * duration * _sub0(vault.managementFee(), managementFeeExemption))
+            / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 expectedOracleFees = (totalAssets * duration * _sub0(vault.oracleFee(), oracleFeeExemption))
+            / vault.SECS_PER_YEAR() / vault.MAX_BPS();
 
-        vault.setManagementFee(100);
+        uint256 totalExpectedFees = expectedPerformanceFees + expectedManagementFees + expectedOracleFees;
 
-        vm.expectEmit(true, true, true, true);
-        emit Report(optimismChainId, vaultAddress, 566_695_022);
-        vault.harvest(mockHarvest);
-        assertEq(vault.balanceOf(config.treasury), 83_387_889);
+        // Redeem and verify
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+        assertApproxEq(receivedAssets, 1000 * _1_USDCE + profit - totalExpectedFees, 2);
+        assertApproxEq(USDCE_BASE.balanceOf(vault.treasury()), totalExpectedFees, 2);
     }
 }
