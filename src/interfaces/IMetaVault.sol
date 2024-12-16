@@ -1,7 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
-import { IERC4626Oracle } from "./IERC4626Oracle.sol";
+import { ISharePriceOracle } from "./ISharePriceOracle.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -19,8 +19,7 @@ import {
     SingleXChainSingleVaultWithdraw,
     VaultConfig,
     VaultData,
-    VaultLib,
-    VaultReport
+    VaultLib
 } from "types/Lib.sol";
 
 interface IMetaVault {
@@ -92,14 +91,14 @@ interface IMetaVault {
         address vault,
         uint8 vaultDecimals,
         uint16 deductedFees,
-        IERC4626Oracle oracle
+        ISharePriceOracle oracle
     )
         external;
 
     function vaults(uint256)
         external
         view
-        returns (uint16, uint64, uint192, uint256, IERC4626Oracle, uint8, uint128, address);
+        returns (uint16, uint64, uint192, uint256, ISharePriceOracle, uint8, uint128, address);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
 

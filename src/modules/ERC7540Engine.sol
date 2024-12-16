@@ -25,8 +25,7 @@ import {
     SingleXChainSingleVaultStateReq,
     SingleXChainSingleVaultWithdraw,
     VaultData,
-    VaultLib,
-    VaultReport
+    VaultLib
 } from "types/Lib.sol";
 
 /// @title ERC7540Engine
@@ -88,71 +87,6 @@ contract ERC7540Engine is Base {
         );
         // Note: After processing, the redeemed assets are held by this contract
         // The user can later claim these assets using `redeem` or `withdraw`
-    }
-
-    /// @notice Processes a redemption request for a given controller
-    /// @dev This function allows anybody with the explicit permission of the "signer relayer" to process a redeem
-    /// request
-    /// @param params as `processRedeemRequest` params + signature
-    function processRedeemRequestWithSignature(ProcessRedeemRequestWithSignatureParams calldata params)
-        external
-        payable
-        nonReentrant
-    {
-        if (block.timestamp < params.deadline) revert SignatureExpired();
-
-        bytes32 hash;
-        {
-            hash = keccak256(
-                abi.encode(
-                    params.controller,
-                    keccak256(abi.encode(params.sXsV)),
-                    keccak256(abi.encode(params.sXmV)),
-                    keccak256(abi.encode(params.mXsV)),
-                    keccak256(abi.encode(params.mXmV)),
-                    ++_controllerNonces[params.controller],
-                    params.deadline
-                )
-            );
-        }
-        // Needs explicit approval from the relayer
-        _checkSignerIsRelayer(hash, params.v, params.r, params.s);
-
-        // Retrieve the pending redeem request for the specified controller
-        // This request may involve cross-chain withdrawals from various ERC4626 vaults
-
-        // Process the redemption request asynchronously
-        // Parameters:
-        // 1. pendingRedeemRequest(controller): Fetches the pending shares
-        // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
-        // 3. address(this): The vault itself as the receiver of the redeemed assets
-        // 4. true: Retain the assets, dont send them directly to the controller
-        _processRedeemRequest(
-            ProcessRedeemRequestConfig(
-                pendingRedeemRequest(params.controller),
-                params.controller,
-                params.controller,
-                params.sXsV,
-                params.sXmV,
-                params.mXsV,
-                params.mXmV
-            )
-        );
-        // Note: After processing, the redeemed assets are held by this contract
-        // The user can later claim these assets using `redeem` or `withdraw`
-    }
-
-    /// @notice Verifies that a signature is valid and was signed by the relayer
-    /// @param hash The hash of the data that was signed
-    /// @param v The v component of the signature
-    /// @param r The r component of the signature
-    /// @param s The s component of the signature
-    /// @dev Reverts if the signature is invalid
-    function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view {
-        bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
-        if (!isValid) {
-            revert InvalidSignature();
-        }
     }
 
     /// @notice Simulates a withdrawal route to help relayers determine how to fulfill redemption requests

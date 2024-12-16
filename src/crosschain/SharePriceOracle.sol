@@ -1,46 +1,44 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
-import { IERC4626Oracle } from "interfaces/Lib.sol";
-
+import { IERC4626, ISharePriceOracle, VaultReport } from "interfaces/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
-import { ERC4626 } from "solady/tokens/ERC4626.sol";
-import { VaultReport } from "types/Lib.sol";
 
-contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
-    event SharePriceUpdated(uint64 indexed srcChainId, address indexed vault, uint256 price, address reporter);
-    event LzEndpointUpdated(address oldEndpoint, address newEndpoint);
-    event RoleGranted(address account, uint256 role);
-    event RoleRevoked(address account, uint256 role);
-
-    error InvalidAdminAddress();
-    error ZeroAddress();
-    error InvalidRole();
-    error InvalidChainId(uint64 receivedChainId);
-    error InvalidReporter();
+contract SharePriceOracle is ISharePriceOracle, OwnableRoles {
     ////////////////////////////////////////////////////////////////
     ///                        CONSTANTS                           ///
     ////////////////////////////////////////////////////////////////
 
+    /// @notice Role identifier for admin capabilities
     uint256 public constant ADMIN_ROLE = _ROLE_0;
+
+    /// @notice Role identifier for LayerZero endpoint
     uint256 public constant ENDPOINT_ROLE = _ROLE_1;
 
     ////////////////////////////////////////////////////////////////
     ///                      STATE VARIABLES                       ///
     ////////////////////////////////////////////////////////////////
+    /// @notice Chain ID this oracle is deployed on
     uint64 public immutable override chainId;
+
+    /// @notice LayerZero endpoint address
     address private lzEndpoint;
 
+    /// @notice Mapping from price key to array of vault reports
+    /// @dev Key is keccak256(abi.encodePacked(srcChainId, vaultAddress))
     mapping(bytes32 => VaultReport[]) public sharePrices;
 
     ////////////////////////////////////////////////////////////////
     ///                       MODIFIERS                           ///
     ////////////////////////////////////////////////////////////////
+
+    /// @notice Restricts function access to the LayerZero endpoint
     modifier onlyEndpoint() {
         _checkRoles(ENDPOINT_ROLE);
         _;
     }
 
+    /// @notice Restricts function access to admin role
     modifier onlyAdmin() {
         _checkRoles(ADMIN_ROLE);
         _;
@@ -49,6 +47,11 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
     ////////////////////////////////////////////////////////////////
     ///                     CONSTRUCTOR                           ///
     ////////////////////////////////////////////////////////////////
+    /**
+     * @notice Initializes the oracle with chain ID and admin address
+     * @param _chainId The chain ID this oracle is deployed on
+     * @param _admin Address of the initial admin
+     */
     constructor(uint64 _chainId, address _admin) {
         if (_admin == address(0)) revert InvalidAdminAddress();
         chainId = _chainId;
@@ -59,6 +62,10 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
     ////////////////////////////////////////////////////////////////
     ///                    ADMIN FUNCTIONS                        ///
     ////////////////////////////////////////////////////////////////
+    /**
+     * @notice Sets the LayerZero endpoint address
+     * @param _endpoint New endpoint address
+     */
     function setLzEndpoint(address _endpoint) external onlyAdmin {
         if (_endpoint == address(0)) revert ZeroAddress();
         address oldEndpoint = lzEndpoint;
@@ -68,6 +75,11 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
         emit RoleGranted(_endpoint, ENDPOINT_ROLE);
     }
 
+    /**
+     * @notice Grants a role to an account
+     * @param account Address to grant the role to
+     * @param role Role identifier to grant
+     */
     function grantRole(address account, uint256 role) external onlyAdmin {
         if (account == address(0)) revert ZeroAddress();
         if (role == 0) revert InvalidRole();
@@ -76,7 +88,12 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
         emit RoleGranted(account, role);
     }
 
-    function revokeRole(address account, uint256 role) external onlyAdmin {
+    /**
+     * @notice Revokes a role from an account
+     * @param account Address to revoke the role from
+     * @param role Role identifier to revoke
+     */
+    function revokeRole(address account, uint256 role) external override onlyAdmin {
         if (account == address(0)) revert ZeroAddress();
         if (role == 0) revert InvalidRole();
 
@@ -84,9 +101,36 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
         emit RoleRevoked(account, role);
     }
 
+    /**
+     * @notice Removes old price reports for a given vault
+     * @param key The price key to clean up
+     * @param maxAge Maximum age of reports to keep (in seconds)
+     */
+    function cleanupOldReports(bytes32 key, uint256 maxAge) external override onlyAdmin {
+        VaultReport[] storage reports = sharePrices[key];
+        uint256 originalLength = reports.length;
+        uint256 i = 0;
+
+        while (i < reports.length) {
+            if (block.timestamp - reports[i].lastUpdate > maxAge) {
+                reports[i] = reports[reports.length - 1];
+                reports.pop();
+            } else {
+                i++;
+            }
+        }
+
+        emit HistoricalPriceCleaned(key, originalLength - reports.length);
+    }
+
     ////////////////////////////////////////////////////////////////
     ///                 EXTERNAL FUNCTIONS                       ///
     ////////////////////////////////////////////////////////////////
+    /**
+     * @notice Updates share prices from another chain
+     * @param _srcChainId Source chain ID
+     * @param reports Array of vault reports to update
+     */
     function updateSharePrices(uint64 _srcChainId, VaultReport[] calldata reports) external override onlyEndpoint {
         if (_srcChainId == chainId) revert InvalidChainId(_srcChainId);
 
@@ -99,12 +143,10 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
                 if (report.chainId != _srcChainId) {
                     revert InvalidChainId(report.chainId);
                 }
-                //if (report.reporter == address(0)) revert InvalidReporter();
-
                 key = getPriceKey(_srcChainId, report.vaultAddress);
                 sharePrices[key].push(report);
 
-                emit SharePriceUpdated(_srcChainId, report.vaultAddress, report.sharePrice, report.reporter);
+                emit SharePriceUpdated(_srcChainId, report.vaultAddress, report.sharePrice, report.rewardsDelegate);
             }
         }
     }
@@ -112,33 +154,59 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
     ////////////////////////////////////////////////////////////////
     ///                 EXTERNAL VIEW FUNCTIONS                   ///
     ////////////////////////////////////////////////////////////////
-    function getSharePrices(address[] memory vaultAddresses) public view override returns (VaultReport[] memory) {
-        VaultReport[] memory reports = new VaultReport[](vaultAddresses.length);
+    /**
+     * @notice Gets current share prices for multiple vaults
+     * @param vaultAddresses Array of vault addresses
+     * @param rewardsDelegate Address to delegate rewards to
+     * @return VaultReport[] Array of vault reports
+     */
+    function getSharePrices(
+        address[] calldata vaultAddresses,
+        address rewardsDelegate
+    )
+        external
+        view
+        override
+        returns (VaultReport[] memory)
+    {
+        uint256 len = vaultAddresses.length;
+        VaultReport[] memory reports = new VaultReport[](len);
+        uint64 timestamp = uint64(block.timestamp);
 
-        for (uint256 i = 0; i < vaultAddresses.length; i++) {
-            ERC4626 vault = ERC4626(vaultAddresses[i]);
-            reports[i] = VaultReport({
-                lastUpdate: uint64(block.timestamp),
-                chainId: chainId,
-                vaultAddress: vaultAddresses[i],
-                sharePrice: uint192(vault.convertToAssets(10 ** vault.decimals())),
-                reporter: msg.sender
-            });
+        unchecked {
+            for (uint256 i; i < len; ++i) {
+                address vaultAddress = vaultAddresses[i];
+                IERC4626 vault = IERC4626(vaultAddress);
+                uint256 decimals = vault.decimals();
+                uint256 sharePrice = vault.convertToAssets(10 ** decimals);
+
+                reports[i].lastUpdate = timestamp;
+                reports[i].chainId = chainId;
+                reports[i].vaultAddress = vaultAddress;
+                reports[i].sharePrice = sharePrice;
+                reports[i].rewardsDelegate = rewardsDelegate;
+            }
         }
-
         return reports;
     }
 
+    /**
+     * @notice Gets stored share prices for multiple vaults
+     * @param _srcChainId Source chain ID
+     * @param _vaultAddresses Array of vault addresses
+     * @return VaultReport[] Array of vault reports
+     */
     function getStoredSharePrices(
         uint64 _srcChainId,
         address[] calldata _vaultAddresses
     )
         external
         view
+        override
         returns (VaultReport[] memory)
     {
         uint256 len = _vaultAddresses.length;
-        VaultReport[] memory reports = new VaultReport[](len * 10); // Assuming a max of 10 reports per address
+        VaultReport[] memory reports = new VaultReport[](len * 10); // remove hardcoded
         uint256 reportIndex = 0;
 
         unchecked {
@@ -155,27 +223,52 @@ contract SharePriceOracle is IERC4626Oracle, OwnableRoles {
         return reports;
     }
 
+    /**
+     * @notice Gets latest share price for a specific vault
+     * @param _srcChainId Source chain ID
+     * @param _vaultAddress Vault address
+     * @return VaultReport The latest vault report
+     */
     function getLatestSharePrice(
         uint64 _srcChainId,
         address _vaultAddress
     )
         external
         view
+        override
         returns (VaultReport memory)
     {
         bytes32 key = getPriceKey(_srcChainId, _vaultAddress);
-        return sharePrices[key][sharePrices[key].length - 1];
+        VaultReport[] storage vaultReports = sharePrices[key];
+        return vaultReports[vaultReports.length - 1];
     }
 
-    function getPriceKey(uint64 _srcChainId, address _vault) public pure returns (bytes32) {
+    /**
+     * @notice Generates a unique key for a vault's price data
+     * @param _srcChainId Source chain ID
+     * @param _vault Vault address
+     * @return bytes32 The generated key
+     */
+    function getPriceKey(uint64 _srcChainId, address _vault) public pure override returns (bytes32) {
         return keccak256(abi.encodePacked(_srcChainId, _vault));
     }
 
-    function hasRole(address account, uint256 role) public view returns (bool) {
+    /**
+     * @notice Checks if an account has a specific role
+     * @param account Address to check
+     * @param role Role to check for
+     * @return bool True if account has the role
+     */
+    function hasRole(address account, uint256 role) public view override returns (bool) {
         return hasAnyRole(account, role);
     }
 
-    function getRoles(address account) external view returns (uint256) {
+    /**
+     * @notice Gets all roles assigned to an account
+     * @param account Address to check
+     * @return uint256 Bitmap of assigned roles
+     */
+    function getRoles(address account) external view override returns (uint256) {
         return rolesOf(account);
     }
 }

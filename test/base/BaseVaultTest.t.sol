@@ -4,8 +4,8 @@ import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { SuperformGateway } from "crosschain/Lib.sol";
 import {
     IBaseRouter,
-    IERC4626Oracle,
     IMetaVault,
+    ISharePriceOracle,
     ISuperPositions,
     ISuperformFactory,
     ISuperformGateway

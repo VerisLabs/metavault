@@ -39,7 +39,7 @@ import {
     SUPERFORM_SUPERPOSITIONS_BASE,
     USDCE_BASE
 } from "src/helpers/AddressBook.sol";
-import { IERC4626Oracle } from "src/interfaces/Lib.sol";
+import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
     LiqRequest,
     MultiXChainMultiVaultWithdraw,
@@ -72,7 +72,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         gateway = deployGatewayBase(address(vault), users.alice);
         vault.setGateway(address(gateway));
         vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
-        vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
+        //vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
         vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
         oracle = new MockERC4626Oracle();
@@ -157,7 +157,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -185,7 +185,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         vault.addVault({
             chainId: baseChainId,
@@ -193,7 +193,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(smUsdce),
             vaultDecimals: smUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -243,7 +243,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -290,7 +290,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -346,7 +346,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -386,7 +386,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -406,7 +406,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         uint256 investAmount = 600 * _1_USDCE;
@@ -523,6 +523,74 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(assets, 1000 * _1_USDCE);
     }
 
+    function test_revert_MetaVault_harvest_VaultNotListed() public {
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        skip(vault.SECS_PER_YEAR());
+        Harvest[] memory mockHarvest = new Harvest[](1);
+        mockHarvest[0].chainId = uint64(1);
+        mockHarvest[0].vaultAddress = makeAddr("random address");
+
+        vm.expectRevert(MetaVault.VaultNotListed.selector);
+        vault.harvest(mockHarvest);
+    }
+
+    function test_MetaVault_harvest() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 50,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        uint256 investAmount = 600 * _1_USDCE;
+
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        req.superformData.amount = investAmount;
+
+        uint256 newSharesPrice = 2 * _1_USDCE;
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+
+        vm.expectEmit(true, true, true, true);
+        emit Invest(investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+
+        _mintSuperpositions(address(gateway), superformId, shares);
+        vm.startPrank(users.alice);
+        Harvest[] memory mockHarvest = new Harvest[](1);
+        mockHarvest[0].chainId = optimismChainId;
+        mockHarvest[0].vaultAddress = vaultAddress;
+
+        skip(vault.SECS_PER_YEAR());
+        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
+
+        uint256 deductedFee = 50;
+
+        uint256 expectedPerformanceFees =
+            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
+        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
+
+        vm.expectEmit(true, true, true, true);
+        emit Report(optimismChainId, vaultAddress, 566_695_022);
+        vault.harvest(mockHarvest);
+        assertEq(vault.balanceOf(config.treasury), expectedMintedShares);
+        // assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
+    }
+
     function test_MetaVault_addVault() public {
         address newVault = address(0x123);
         uint256 newSuperformId = 999;
@@ -531,7 +599,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         oracle.setValues(newChainId, address(newVault), 1e6, block.timestamp, address(1));
         vm.expectEmit(true, true, true, true);
         emit AddVault(newChainId, newVault);
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, ISharePriceOracle(address(oracle)));
 
         assertTrue(vault.isVaultListed(newVault));
     }
@@ -543,7 +611,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint8 newDecimals = 18;
 
         vm.expectRevert();
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, ISharePriceOracle(address(oracle)));
     }
 
     function test_revert_MetaVault_addVault_alreadyListed() public {
@@ -555,7 +623,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: decimals,
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         vm.expectRevert(MetaVault.VaultAlreadyListed.selector);
         vault.addVault({
@@ -564,7 +632,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: decimals,
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
     }
 
@@ -644,7 +712,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
         // Deposit and invest
@@ -678,7 +746,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
         vault.addVault({
@@ -687,7 +755,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(smUsdce),
             vaultDecimals: smUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
         // Deposit and invest in both vaults
@@ -747,7 +815,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         // Deposit and invest cross-chain
@@ -793,6 +861,18 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         // Simulate profit by donating to vault
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
 
         vm.startPrank(users.bob);
         USDCE_BASE.safeApprove(address(vault), profit);

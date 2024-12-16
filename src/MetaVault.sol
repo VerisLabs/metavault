@@ -1,7 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
-import { IERC4626Oracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { Multicallable } from "solady/utils/Multicallable.sol";
@@ -793,7 +793,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         address vault,
         uint8 vaultDecimals,
         uint16 deductedFees,
-        IERC4626Oracle oracle
+        ISharePriceOracle oracle
     )
         external
         onlyRoles(ADMIN_ROLE)

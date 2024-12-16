@@ -22,8 +22,7 @@ import {
     SingleXChainSingleVaultStateReq,
     SingleXChainSingleVaultWithdraw,
     VaultData,
-    VaultLib,
-    VaultReport
+    VaultLib
 } from "types/Lib.sol";
 
 /// @title SuperformGateway
