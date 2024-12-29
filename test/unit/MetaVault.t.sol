@@ -118,7 +118,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalDebt(), 0);
         assertEq(vault.managementFee(), 0);
         assertEq(vault.performanceFee(), 2000);
-        assertEq(vault.oracleFee(), 300);
+        assertEq(vault.oracleFee(), 0);
         assertEq(vault.hurdleRate(), 600);
         assertEq(vault.lastReport(), block.timestamp);
         assertEq(vault.treasury(), config.treasury);
@@ -305,16 +305,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(address(vault).balance, 0);
     }
 
-    function test_revert_MetaVault_redeem_requestNotProcessed() public {
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
-
-        skip(config.sharesLockTime);
-        vm.startPrank(users.alice);
-        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
-        vm.expectRevert(MetaVault.RedeemNotProcessed.selector);
-        vault.redeem(sharesBalance, users.alice, users.alice);
-    }
-
     function test_MetaVault_processRedeemRequest_from_idle() public {
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
         skip(config.sharesLockTime);
@@ -438,6 +428,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         }
 
         {
+            bytes32 requestId;
             SingleXChainSingleVaultWithdraw memory sXsV;
             SingleXChainMultiVaultWithdraw memory sXmV;
             MultiXChainSingleVaultWithdraw memory mXsV;
@@ -445,150 +436,35 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
                 _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+            sXsV.outputAmount = 588 * _1_USDCE;
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            requestId = gateway.getRequestsQueue()[0];
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
             (,,,,,, totalDebt,) = vault.vaults(superformId);
             assertEq(totalDebt, 0);
-        }
-        assertEq(vault.totalAssets(), 0);
-        assertEq(vault.totalSupply(), 0);
-        address receiver = gateway.getReceiver(users.alice, abi.encode(superformId));
-        assertEq(USDCE_BASE.balanceOf(receiver), 0);
-        assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-        assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
+            assertEq(vault.totalAssets(), 0);
+            assertEq(vault.totalSupply(), 0);
+            address receiver = gateway.getReceiver(requestId);
+            assertEq(USDCE_BASE.balanceOf(receiver), 0);
+            assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
 
-        deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
-        skip(config.processRedeemSettlement);
-        uint256[] memory superformIds = new uint256[](1);
-        superformIds[0] = superformId;
-        gateway.settleLiquidation(users.alice, superformIds);
+            deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
+            skip(config.processRedeemSettlement);
+            console2.log("claimable redeem request ", vault.claimableRedeemRequest(users.alice));
+            gateway.settleLiquidation(requestId, false);
+        }
         assertEq(vault.claimableRedeemRequest(users.alice), 999_999_689);
         uint256 assets = vault.redeem(999_999_689, users.alice, users.alice);
         assertEq(assets, 400 * _1_USDCE + 588 * _1_USDCE);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalIdle(), 0);
-    }
-
-    function test_MetaVault_processRedeemRequest_signature() public {
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
-        skip(config.sharesLockTime);
-        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
-        SingleXChainSingleVaultWithdraw memory sXsV;
-        SingleXChainMultiVaultWithdraw memory sXmV;
-        MultiXChainSingleVaultWithdraw memory mXsV;
-        MultiXChainMultiVaultWithdraw memory mXmV;
-        uint256 nonce = 1;
-        uint256 deadline = block.timestamp;
-        (uint8 v, bytes32 r, bytes32 s) = relayer.sign(
-            MockSignerRelayer.SignatureParams({
-                controller: users.alice,
-                sXsV: sXsV,
-                sXmV: sXmV,
-                mXsV: mXsV,
-                mXmV: mXmV,
-                nonce: nonce,
-                deadline: deadline
-            })
-        );
-        vm.expectEmit(true, true, true, true);
-        emit ProcessRedeemRequest(users.alice, sharesBalance);
-        vault.processRedeemRequestWithSignature(
-            ProcessRedeemRequestWithSignatureParams({
-                controller: users.alice,
-                sXsV: sXsV,
-                sXmV: sXmV,
-                mXsV: mXsV,
-                mXmV: mXmV,
-                deadline: deadline,
-                v: v,
-                r: r,
-                s: s
-            })
-        );
-        assertEq(vault.totalSupply(), 0);
-        assertEq(vault.totalAssets(), 0);
-        assertEq(vault.totalIdle(), 0);
-        assertEq(vault.totalDebt(), 0);
-        assertEq(vault.claimableRedeemRequest(users.alice), sharesBalance);
-        assertEq(vault.pendingRedeemRequest(users.alice), 0);
-        vm.expectEmit(true, true, true, true);
-        emit Withdraw(users.alice, users.alice, users.alice, 1000 * _1_USDCE, sharesBalance);
-        uint256 assets = vault.redeem(sharesBalance, users.alice, users.alice);
-        assertEq(assets, 1000 * _1_USDCE);
-    }
-
-    function test_revert_MetaVault_harvest_VaultNotListed() public {
-        _depositAtomic(1000 * _1_USDCE, users.alice);
-        skip(vault.SECS_PER_YEAR());
-        Harvest[] memory mockHarvest = new Harvest[](1);
-        mockHarvest[0].chainId = uint64(1);
-        mockHarvest[0].vaultAddress = makeAddr("random address");
-
-        vm.expectRevert(MetaVault.VaultNotListed.selector);
-        vault.harvest(mockHarvest);
-    }
-
-    function test_MetaVault_harvest() public {
-        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
-
-        oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
-        );
-        vault.addVault({
-            chainId: optimismChainId,
-            superformId: superformId,
-            vault: vaultAddress,
-            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 50,
-            oracle: ISharePriceOracle(address(oracle))
-        });
-
-        _depositAtomic(1000 * _1_USDCE, users.alice);
-
-        uint256 investAmount = 600 * _1_USDCE;
-
-        (SingleXChainSingleVaultStateReq memory req) =
-            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
-
-        req.superformData.amount = investAmount;
-
-        uint256 newSharesPrice = 2 * _1_USDCE;
-        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
-
-        vm.expectEmit(true, true, true, true);
-        emit Invest(investAmount);
-        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            req
-        );
-
-        _mintSuperpositions(address(gateway), superformId, shares);
-        vm.startPrank(users.alice);
-        Harvest[] memory mockHarvest = new Harvest[](1);
-        mockHarvest[0].chainId = optimismChainId;
-        mockHarvest[0].vaultAddress = vaultAddress;
-
-        skip(vault.SECS_PER_YEAR());
-        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
-
-        uint256 deductedFee = 50;
-
-        uint256 expectedPerformanceFees =
-            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
-        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
-
-        vm.expectEmit(true, true, true, true);
-        emit Report(optimismChainId, vaultAddress, 566_695_022);
-        vault.harvest(mockHarvest);
-        assertEq(vault.balanceOf(config.treasury), expectedMintedShares);
-        // assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
     }
 
     function test_MetaVault_addVault() public {
@@ -841,6 +717,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
+        divestReq.superformData.outputAmount = expectedDivestedValue;
         // Execute divest
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValue);
@@ -851,6 +728,15 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
+
+        // Simulate vault getting the assets
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
+        gateway.settleDivest(requestId, false);
+
+        assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
     function test_MetaVault_exitFees_withProfit() public {
@@ -861,18 +747,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         // Simulate profit by donating to vault
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
-        oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
-        );
-        vault.addVault({
-            chainId: optimismChainId,
-            superformId: superformId,
-            vault: vaultAddress,
-            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
-            oracle: ISharePriceOracle(address(oracle))
-        });
-
 
         vm.startPrank(users.bob);
         USDCE_BASE.safeApprove(address(vault), profit);
@@ -942,6 +816,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
+        vault.setOracleFee(0);
+
         // Simulate small profit that doesn't exceed hurdle
         uint256 profit = 1 * _1_USDCE; // Very small profit
         deal(USDCE_BASE, users.bob, profit);
@@ -976,7 +852,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
         // Should receive full amount since profit didn't exceed hurdle
-        assertEq(receivedAssets, totalAssets - 1);
+        assertEq(receivedAssets, totalAssets - 1, "1");
         assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
     }
 

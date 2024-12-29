@@ -5,6 +5,8 @@ import { ERC20Receiver } from "./ERC20Receiver.sol";
 import { IBaseRouter, IMetaVault, ISuperPositions } from "interfaces/Lib.sol";
 
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+
+import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { Initializable } from "solady/utils/Initializable.sol";
 import { LibClone } from "solady/utils/LibClone.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -30,6 +32,7 @@ import {
 /// @notice Gateway contract that handles cross-chain communication between MetaVault and Superform protocol
 /// @dev Manages deposits and withdrawals across different chains through Superform's infrastructure
 contract SuperformGateway is Initializable, OwnableRoles {
+    using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using VaultLib for VaultData;
     using SafeTransferLib for address;
 
@@ -46,14 +49,22 @@ contract SuperformGateway is Initializable, OwnableRoles {
     /// @param requestedAssets Total amount of assets requested
     /// @param key Unique identifier for the liquidation assets receiver contract
     event LiquidateXChain(
-        address indexed controller, uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes key
+        address indexed controller, uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes32 key
     );
 
     /// @notice Emitted when a cross-chain divestment is initiated
     /// @param superformIds Array of Superform IDs being divested
     /// @param requestedAssets Total amount of assets requested
     /// @param key Unique identifier for the divest assets receiver contract
-    event DivestXChain(uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes key);
+    event DivestXChain(uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes32 key);
+
+    struct RequestData {
+        address controller;
+        uint256[] superformIds;
+        uint256[] requestedAssetsPerVault;
+        uint256 requestedAssets;
+        address receiverAddress;
+    }
 
     /// @notice Role identifier for admin privileges
     uint256 public constant ADMIN_ROLE = _ROLE_0;
@@ -70,15 +81,19 @@ contract SuperformGateway is Initializable, OwnableRoles {
     /// @notice asset of underying vault
     address public asset;
     /// @notice Receiver delegation for withdrawals
-    mapping(address => mapping(bytes => address)) public receivers;
-    /// @notice Assets requested in each liquidation
-    mapping(address => mapping(bytes => uint256)) public requestedAssets;
+    mapping(bytes32 => address) public receivers;
     /// @notice Cached value of total assets that are being bridged at the moment
     uint256 public totalpendingXChainInvests;
     /// @notice Cached value of total assets per id that are being bridged at the moment
     mapping(uint256 => uint256) public pendingXChainInvests;
     /// @notice Cached value of total assets that are being bridged at the moment
     uint256 public totalPendingXChainDivests;
+    /// @notice all requests going on
+    EnumerableSetLib.Bytes32Set private _requestsQueue;
+    /// @notice nonces of controllers to create unique requests
+    mapping(address => uint256) nonces;
+    /// @notice data related to its request id
+    mapping(bytes32 => RequestData) public requests;
     /// @notice Gap for upgradeability
     uint256[20] private __gap;
 
@@ -103,7 +118,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
         superformRouter = _superformRouter;
         superPositions = _superPositions;
         // Deploy and set the receiver implementation
-        receiverImplementation = address(new ERC20Receiver(asset));
+        receiverImplementation = address(new ERC20Receiver(asset, address(superPositions)));
         asset.safeApprove(address(superformRouter), type(uint256).max);
         superPositions.setApprovalForAll(address(superformRouter), true);
         _initializeOwner(_owner);
@@ -279,9 +294,13 @@ contract SuperformGateway is Initializable, OwnableRoles {
     {
         uint256 superformId = req.superformData.superformId;
 
-        bytes memory key = abi.encode(superformId);
+        bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformId));
 
-        address receiver = getReceiver(address(this), key);
+        _requestsQueue.add(key);
+
+        address receiver = getReceiver(key);
+
+        ERC20Receiver(receiver).setMinExpectedBalance(req.superformData.outputAmount);
 
         VaultData memory vaultObj = vault.getVault(superformId);
         if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
@@ -300,6 +319,11 @@ contract SuperformGateway is Initializable, OwnableRoles {
         uint256[] memory superformIds = new uint256[](1);
         superformIds[0] = superformId;
 
+        RequestData storage data = requests[key];
+        data.controller = address(vault);
+        data.superformIds = superformIds;
+        data.requestedAssets = sharesValue;
+
         emit DivestXChain(superformIds, sharesValue, key);
     }
 
@@ -314,6 +338,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
         refundGas
         returns (uint256 totalAmount)
     {
+        uint256 totalExpectedAmount;
         for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
             uint256 superformId = req.superformsData.superformIds[i];
 
@@ -323,12 +348,19 @@ contract SuperformGateway is Initializable, OwnableRoles {
 
             uint256 amount = vaultObj.convertToAssets(req.superformsData.amounts[i], true);
 
+            totalExpectedAmount += req.superformsData.outputAmounts[i];
             // Update the vault's internal accounting
             totalAmount += amount;
         }
 
-        bytes memory key = abi.encode(req.superformsData.superformIds);
-        address receiver = getReceiver(address(this), key);
+        bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, req.superformsData.superformIds));
+        _requestsQueue.add(key);
+        RequestData storage data = requests[key];
+        data.controller = address(vault);
+        data.superformIds = req.superformsData.superformIds;
+        data.requestedAssets = totalAmount;
+        address receiver = getReceiver(key);
+        ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
         req.superformsData.receiverAddress = receiver;
 
         superPositions.safeBatchTransferFrom(
@@ -351,10 +383,25 @@ contract SuperformGateway is Initializable, OwnableRoles {
         refundGas
         returns (uint256 totalAmount)
     {
+        uint256 totalExpectedAmount;
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
-            bytes memory key = abi.encode(superformId);
-            address receiver = getReceiver(address(this), key);
+
+            uint256[] memory superformIds = new uint256[](1);
+
+            superformIds[0] = superformId;
+
+            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformId));
+            RequestData storage data = requests[key];
+            data.controller = address(vault);
+            data.superformIds = superformIds;
+            data.requestedAssets = totalAmount;
+
+            _requestsQueue.add(key);
+
+            address receiver = getReceiver(key);
+
+            ERC20Receiver(receiver).setMinExpectedBalance(req.superformsData[i].outputAmount);
 
             req.superformsData[i].receiverAddress = receiver;
 
@@ -367,10 +414,6 @@ contract SuperformGateway is Initializable, OwnableRoles {
             totalAmount += amount;
 
             superPositions.safeTransferFrom(address(vault), address(this), superformId, amount, "");
-
-            uint256[] memory superformIds = new uint256[](1);
-
-            superformIds[0] = superformId;
 
             emit DivestXChain(superformIds, amount, key);
 
@@ -398,12 +441,14 @@ contract SuperformGateway is Initializable, OwnableRoles {
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
-            bytes memory key = abi.encode(superformIds);
-            address receiver = getReceiver(address(this), key);
+            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformIds));
+            _requestsQueue.add(key);
+            address receiver = getReceiver(key);
             req.superformsData[i].receiverAddress = receiver;
             superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
             uint256 totalChainAmount;
 
+            uint256 totalExpectedAmount;
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
 
@@ -412,10 +457,11 @@ contract SuperformGateway is Initializable, OwnableRoles {
                 if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
                 uint256 amount = vaultObj.convertToAssets(amounts[j], true);
-
+                totalExpectedAmount += req.superformsData[i].outputAmounts[j];
                 totalAmount += amount;
                 totalChainAmount += amount;
             }
+            ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
             emit DivestXChain(superformIds, totalChainAmount, key);
         }
         superformRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
@@ -441,9 +487,15 @@ contract SuperformGateway is Initializable, OwnableRoles {
         payable
         onlyVault
         refundGas
+        returns (bytes32[] memory requestIds)
     {
+        requestIds = new bytes32[](1);
         superPositions.safeTransferFrom(address(vault), address(this), superformId, amount, "");
-        bytes memory key = abi.encode(superformId);
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver]++, superformId));
+        _requestsQueue.add(key);
+        requestIds[0] = key;
+        address receiver = getReceiver(key);
+        ERC20Receiver(receiver).setMinExpectedBalance(config.outputAmount);
         SingleXChainSingleVaultStateReq memory params = SingleXChainSingleVaultStateReq({
             ambIds: config.ambIds,
             dstChainId: chainId,
@@ -456,16 +508,22 @@ contract SuperformGateway is Initializable, OwnableRoles {
                 permit2data: "",
                 hasDstSwap: config.hasDstSwap,
                 retain4626: false,
-                receiverAddress: getReceiver(receiver, key),
+                receiverAddress: receiver,
                 receiverAddressSP: address(0),
                 extraFormData: ""
             })
         });
         superformRouter.singleXChainSingleVaultWithdraw{ value: config.value }(params);
-        requestedAssets[receiver][key] += totalRequestedAssets;
         uint256[] memory superformIds = new uint256[](1);
         superformIds[0] = superformId;
+        RequestData storage data = requests[key];
+        data.requestedAssets = totalRequestedAssets;
+        data.controller = receiver;
+        data.superformIds = superformIds;
+        data.requestedAssetsPerVault.push(totalRequestedAssets);
+
         emit LiquidateXChain(receiver, superformIds, totalRequestedAssets, key);
+        return requestIds;
     }
 
     /// @dev Initiates withdrawals from multiple vaults on a single different chain
@@ -480,15 +538,26 @@ contract SuperformGateway is Initializable, OwnableRoles {
         uint256[] memory amounts,
         address receiver,
         SingleXChainMultiVaultWithdraw memory config,
-        uint256 totalRequestedAssets
+        uint256 totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
     )
         external
         payable
         onlyVault
         refundGas
+        returns (bytes32[] memory requestIds)
     {
+        requestIds = new bytes32[](1);
         uint256 len = superformIds.length;
-        bytes memory key = abi.encode(superformIds);
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver]++, superformIds));
+        address receiver = getReceiver(key);
+        requestIds[0] = key;
+        _requestsQueue.add(key);
+        uint256 totalMinExpectedBalance;
+        for (uint256 i = 0; i < config.outputAmounts.length; ++i) {
+            totalMinExpectedBalance += config.outputAmounts[i];
+        }
+        ERC20Receiver(receiver).setMinExpectedBalance(totalMinExpectedBalance);
         superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
         SingleXChainMultiVaultStateReq memory params = SingleXChainMultiVaultStateReq({
             ambIds: config.ambIds,
@@ -502,14 +571,20 @@ contract SuperformGateway is Initializable, OwnableRoles {
                 permit2data: "",
                 hasDstSwaps: config.hasDstSwaps,
                 retain4626s: _getEmptyBoolArray(len),
-                receiverAddress: getReceiver(receiver, key),
+                receiverAddress: receiver,
                 receiverAddressSP: address(0),
                 extraFormData: ""
             })
         });
         superformRouter.singleXChainMultiVaultWithdraw{ value: config.value }(params);
-        requestedAssets[receiver][key] += totalRequestedAssets;
+        RequestData storage data = requests[key];
+        data.requestedAssets = totalRequestedAssets;
+        data.controller = receiver;
+        data.superformIds = superformIds;
+        data.requestedAssetsPerVault = requestedAssetsPerVault;
+
         emit LiquidateXChain(receiver, superformIds, totalRequestedAssets, key);
+        return requestIds;
     }
 
     /// @dev Initiates withdrawals from a single vault on multiple different chains
@@ -526,14 +601,28 @@ contract SuperformGateway is Initializable, OwnableRoles {
         payable
         onlyVault
         refundGas
+        returns (bytes32[] memory requestIds)
     {
+        requestIds = new bytes32[](singleVaultDatas.length);
         for (uint256 i = 0; i < singleVaultDatas.length;) {
             uint256 superformId = singleVaultDatas[i].superformId;
             uint256[] memory superformIds = new uint256[](1);
             superformIds[0] = superformId;
-            bytes memory key = abi.encode(superformId);
-            singleVaultDatas[i].receiverAddress = getReceiver(singleVaultDatas[i].receiverAddress, key);
-            requestedAssets[singleVaultDatas[i].receiverAddress][key] = totalRequestedAssets[i];
+            bytes32 key = keccak256(
+                abi.encode(
+                    singleVaultDatas[i].receiverAddress, nonces[singleVaultDatas[i].receiverAddress]++, superformId
+                )
+            );
+            _requestsQueue.add(key);
+            requestIds[i] = key;
+            address receiver = getReceiver(key);
+            ERC20Receiver(receiver).setMinExpectedBalance(singleVaultDatas[i].outputAmount);
+            singleVaultDatas[i].receiverAddress = receiver;
+            RequestData storage data = requests[key];
+            data.requestedAssets = totalRequestedAssets[i];
+            data.controller = receiver;
+            data.superformIds = superformIds;
+            data.requestedAssetsPerVault.push(totalRequestedAssets[i]);
             superPositions.safeTransferFrom(address(vault), address(this), superformId, singleVaultDatas[i].amount, "");
             emit LiquidateXChain(singleVaultDatas[i].receiverAddress, superformIds, totalRequestedAssets[i], key);
             unchecked {
@@ -553,21 +642,40 @@ contract SuperformGateway is Initializable, OwnableRoles {
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         MultiVaultSFData[] memory multiVaultDatas,
-        uint256[] memory totalRequestedAssets
+        uint256[] memory totalRequestedAssets,
+        uint256[][] memory requestedAssetsPerVault
     )
         external
         payable
         onlyVault
         refundGas
+        returns (bytes32[] memory requestIds)
     {
+        requestIds = new bytes32[](multiVaultDatas.length);
         for (uint256 i = 0; i < multiVaultDatas.length;) {
             uint256[] memory superformIds = multiVaultDatas[i].superformIds;
-            bytes memory key = abi.encode(superformIds);
-            multiVaultDatas[i].receiverAddress = getReceiver(multiVaultDatas[i].receiverAddress, key);
-            requestedAssets[multiVaultDatas[i].receiverAddress][key] += totalRequestedAssets[i];
+            bytes32 key = keccak256(
+                abi.encode(
+                    multiVaultDatas[i].receiverAddress, nonces[multiVaultDatas[i].receiverAddress]++, superformIds
+                )
+            );
+            _requestsQueue.add(key);
+            requestIds[i] = key;
+            address receiver = getReceiver(key);
+            uint256 totalMinExpectedBalance;
+            for (uint256 j = 0; j < multiVaultDatas[i].outputAmounts.length; j++) {
+                totalMinExpectedBalance += multiVaultDatas[i].outputAmounts[j];
+            }
+            ERC20Receiver(receiver).setMinExpectedBalance(totalMinExpectedBalance);
+            multiVaultDatas[i].receiverAddress = receiver;
+            RequestData storage data = requests[key];
+            data.requestedAssets = totalRequestedAssets[i];
+            data.controller = receiver;
+            data.superformIds = superformIds;
             superPositions.safeBatchTransferFrom(
                 address(vault), address(this), superformIds, multiVaultDatas[i].amounts, ""
             );
+            data.requestedAssetsPerVault = requestedAssetsPerVault[i];
             emit LiquidateXChain(multiVaultDatas[i].receiverAddress, superformIds, totalRequestedAssets[i], key);
             unchecked {
                 ++i;
@@ -650,17 +758,22 @@ contract SuperformGateway is Initializable, OwnableRoles {
         return this.onERC1155BatchReceived.selector;
     }
 
+    function notifyRefund(uint256 superformId, uint256 value) external {
+        bytes32 key = ERC20Receiver(msg.sender).key();
+        if (requests[key].receiverAddress != msg.sender) revert();
+    }
+
     /// @dev Returns the delegatee of a owner to receive the assets
     /// @dev If it doesnt exist it deploys it at the moment
     /// @notice receiverAddress returns delegatee
-    function getReceiver(address controller, bytes memory key) public returns (address receiverAddress) {
-        address current = receivers[controller][key];
+    function getReceiver(bytes32 key) public returns (address receiverAddress) {
+        address current = receivers[key];
         if (current != address(0)) {
             return current;
         } else {
             receiverAddress =
-                LibClone.clone(receiverImplementation, abi.encodeWithSignature("initialize(address)", controller, key));
-            receivers[controller][key] = receiverAddress;
+                LibClone.clone(receiverImplementation, abi.encodeWithSignature("initialize(bytes32)", key));
+            receivers[key] = receiverAddress;
         }
     }
 
@@ -668,21 +781,19 @@ contract SuperformGateway is Initializable, OwnableRoles {
     /// @dev Pulls assets from the receiver contract and fulfills the settlement in the vault.
     /// Only callable by addresses with RELAYER_ROLE. The key for lookup is generated based on
     /// whether it's a single vault (superformId) or multiple vaults (array of superformIds).
-    /// @param controller The address that initiated the liquidation
-    /// @param superformIds Array of Superform IDs involved in the liquidation
-    function settleLiquidation(address controller, uint256[] calldata superformIds) external onlyRoles(RELAYER_ROLE) {
-        bytes memory key;
-        if (superformIds.length == 1) {
-            key = abi.encode(superformIds[0]);
-        } else {
-            key = abi.encode(superformIds);
-        }
-        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(controller, key));
+    /// @param key identifier of the receiver contract
+    function settleLiquidation(bytes32 key, bool force) external onlyRoles(RELAYER_ROLE) {
+        RequestData memory data = requests[key];
+        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(key));
         uint256 settledAssets = receiverContract.balance();
-        uint256 requestedAssets = requestedAssets[controller][key];
+        uint256 requestedAssets = requests[key].requestedAssets;
+        _requestsQueue.remove(key);
+        if (!force) {
+            if (receiverContract.balance() < receiverContract.minExpectedBalance()) revert();
+        }
         receiverContract.pull(settledAssets);
         asset.safeTransfer(address(vault), settledAssets);
-        vault.fulfillSettledRequest(controller, requestedAssets, settledAssets);
+        vault.fulfillSettledRequest(data.controller, data.requestedAssets, settledAssets);
     }
 
     /// @notice Settles a cross-chain divestment by processing received assets
@@ -690,26 +801,159 @@ contract SuperformGateway is Initializable, OwnableRoles {
     /// Only callable by addresses with RELAYER_ROLE. The key for lookup is generated based on
     /// whether it's a single vault (superformId) or multiple vaults (array of superformIds).
     /// For each Superform ID involved, notifies the vault of the settlement.
-    /// @param superformIds Array of Superform IDs involved in the divestment
-    function settleDivest(uint256[] calldata superformIds) external onlyRoles(RELAYER_ROLE) {
-        bytes memory key;
-        if (superformIds.length == 1) {
-            key = abi.encode(superformIds[0]);
-        } else {
-            key = abi.encode(superformIds);
+    /// @param key Identifier of the receiver contract
+    function settleDivest(bytes32 key, bool force) external onlyRoles(RELAYER_ROLE) {
+        RequestData memory data = requests[key];
+        _requestsQueue.remove(key);
+        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(key));
+        if (data.controller != address(vault)) revert();
+        if (!force) {
+            if (receiverContract.balance() < receiverContract.minExpectedBalance()) revert();
         }
-        ERC20Receiver receiverContract = ERC20Receiver(getReceiver(address(this), key));
         uint256 settledAssets = receiverContract.balance();
-
+        uint256 requestedAssets = data.requestedAssets;
         receiverContract.pull(settledAssets);
         totalPendingXChainDivests -= settledAssets;
         asset.safeTransfer(address(vault), settledAssets);
-        for (uint256 i = 0; i < superformIds.length;) {
-            vault.settleXChainDivest(superformIds[i], settledAssets);
+        vault.settleXChainDivest(requestedAssets);
+    }
+
+    function previewLiquidateSingleXChainSingleVault(
+        uint64 chainId,
+        uint256 superformId,
+        uint256 amount,
+        address receiver,
+        SingleXChainSingleVaultWithdraw memory config,
+        uint256 totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds)
+    {
+        requestIds = new bytes32[](1);
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver] + 1, superformId));
+        requestIds[0] = key;
+        return requestIds;
+    }
+
+    function previewLiquidateSingleXChainMultiVault(
+        uint64 chainId,
+        uint256[] memory superformIds,
+        uint256[] memory amounts,
+        address receiver,
+        SingleXChainMultiVaultWithdraw memory config,
+        uint256 totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds)
+    {
+        requestIds = new bytes32[](1);
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver] + 1, superformIds));
+        requestIds[0] = key;
+        return requestIds;
+    }
+
+    function previewLiquidateMultiDstSingleVault(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        SingleVaultSFData[] memory singleVaultDatas,
+        uint256[] memory totalRequestedAssets
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds)
+    {
+        requestIds = new bytes32[](singleVaultDatas.length);
+        for (uint256 i = 0; i < singleVaultDatas.length;) {
+            uint256 superformId = singleVaultDatas[i].superformId;
+            bytes32 key = keccak256(
+                abi.encode(
+                    singleVaultDatas[i].receiverAddress,
+                    nonces[singleVaultDatas[i].receiverAddress] + i + 1,
+                    superformId
+                )
+            );
+            requestIds[i] = key;
             unchecked {
                 ++i;
             }
         }
+        return requestIds;
+    }
+
+    function previewLiquidateMultiDstMultiVault(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        MultiVaultSFData[] memory multiVaultDatas,
+        uint256[] memory totalRequestedAssets,
+        uint256[][] memory totalRequestedAssetsPerVault
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds)
+    {
+        requestIds = new bytes32[](multiVaultDatas.length);
+        for (uint256 i = 0; i < multiVaultDatas.length;) {
+            uint256[] memory superformIds = multiVaultDatas[i].superformIds;
+            bytes32 key = keccak256(
+                abi.encode(
+                    multiVaultDatas[i].receiverAddress, nonces[multiVaultDatas[i].receiverAddress] + i + 1, superformIds
+                )
+            );
+            requestIds[i] = key;
+            unchecked {
+                ++i;
+            }
+        }
+        return requestIds;
+    }
+
+    function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
+        external
+        view
+        returns (bytes32 requestId)
+    {
+        uint256 superformId = req.superformData.superformId;
+        return keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, superformId));
+    }
+
+    function previewIdDivestMultiXChainSingleVault(SingleXChainMultiVaultStateReq memory req)
+        external
+        view
+        returns (bytes32 requestId)
+    {
+        return keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, req.superformsData.superformIds));
+    }
+
+    function previewIdDivestSingleXChainMultiVault(MultiDstSingleVaultStateReq memory req)
+        external
+        view
+        returns (bytes32[] memory requestIds)
+    {
+        requestIds = new bytes32[](req.superformsData.length);
+        for (uint256 i = 0; i < req.superformsData.length;) {
+            uint256 superformId = req.superformsData[i].superformId;
+            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i + 1, superformId));
+        }
+    }
+
+    function previewIdDivestMultiXChainMultiVault(MultiDstMultiVaultStateReq memory req)
+        external
+        view
+        returns (bytes32[] memory requestIds)
+    {
+        requestIds = new bytes32[](req.superformsData.length);
+        for (uint256 i = 0; i < req.superformsData.length; i++) {
+            uint256[] memory superformIds = req.superformsData[i].superformIds;
+            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i + 1, superformIds));
+        }
+    }
+
+    function getRequestsQueue() public view returns (bytes32[] memory requestIds) {
+        return _requestsQueue.values();
     }
 
     /// @dev Helper function to get a empty bools array

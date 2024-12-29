@@ -1,15 +1,17 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {SuperformGateway, SharePriceOracle, MaxLzEndpoint} from "crosschain/Lib.sol";
-import {VaultConfig} from "types/Lib.sol";
-import {MetaVault} from "src/MetaVault.sol";
-import {Script, console2} from "forge-std/Script.sol";
-import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
-import {USDCE_BASE, SUPERFORM_SUPERPOSITIONS_BASE, SUPERFORM_ROUTER_BASE} from "src/helpers/AddressBook.sol";
-import {ISuperPositions, ISuperformGateway} from "interfaces/Lib.sol";
-import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-import {ERC7540Engine} from "src/modules/Lib.sol";
+import { MaxLzEndpoint, SharePriceOracle, SuperformGateway } from "crosschain/Lib.sol";
+
+import { Script, console2 } from "forge-std/Script.sol";
+
+import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
+import { ProxyAdmin } from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
+import { TransparentUpgradeableProxy } from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import { MetaVault } from "src/MetaVault.sol";
+import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE } from "src/helpers/AddressBook.sol";
+import { ERC7540Engine } from "src/modules/Lib.sol";
+import { VaultConfig } from "types/Lib.sol";
 
 contract DeploymentScript is Script {
     VaultConfig public config;
@@ -60,28 +62,17 @@ contract DeploymentScript is Script {
         gateway = SuperformGateway(address(proxy));
         gateway.grantRoles(vaultAdmin, gateway.RELAYER_ROLE());
         vault.setGateway(ISuperformGateway(address(gateway)));
-        
-        engine = new ERC7540Engine();
-        vault.addFunction(
-            ERC7540Engine.processRedeemRequest.selector,
-            address(engine),
-            false
-        );
- //       vault.addFunction(
- //           ERC7540Engine.processRedeemRequestWithSignature.selector,
- //           address(engine),
- //           false
- //       );
-        vault.addFunction(
-            ERC7540Engine.previewWithdrawalRoute.selector,
-            address(engine),
-            false
-        );
 
-        oracle = new SharePriceOracle(
-            uint64(block.chainid),
-            address(0x429796dAc057E7C15724196367007F1e9Cff82F9)
-        );
+        engine = new ERC7540Engine();
+        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
+        //       vault.addFunction(
+        //           ERC7540Engine.processRedeemRequestWithSignature.selector,
+        //           address(engine),
+        //           false
+        //       );
+        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
+
+        oracle = new SharePriceOracle(uint64(block.chainid), address(0x429796dAc057E7C15724196367007F1e9Cff82F9));
 
         maxLzEndpoint = new MaxLzEndpoint(
             address(0x429796dAc057E7C15724196367007F1e9Cff82F9), //owner

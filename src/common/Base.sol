@@ -10,6 +10,10 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
+/// @title Base Contract for MetaVault Modules
+/// @author Unlockd
+/// @notice Base storage contract containing all shared state variables and helper functions for MetaVault modules
+/// @dev Implements role-based access control and core vault functionality
 contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     using VaultLib for VaultData;
 
@@ -70,11 +74,9 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Protocol fee
     uint16 public oracleFee;
     /// @notice Hurdle rate of underlying asset
-    uint16 public hurdleRate;
+    uint16 internal _baseHurdleRate;
     /// @notice Minimum time users must wait to redeem shares
     uint24 public sharesLockTime;
-    /// @notice Delay from processing a redeem till its claimed
-    uint24 public processRedeemSettlement;
     /// @notice Wether the vault is paused
     bool public emergencyShutdown;
     /// @notice Fee receiver
@@ -115,25 +117,36 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     ];
     /// @notice Timestamp of deposit lock
     mapping(address => uint256) internal _depositLockCheckPoint;
+
     /// @notice Storage of each vault related data
     mapping(uint256 => VaultData) public vaults;
-    /// @notice Timestamp of request redeem lock
-    mapping(address => uint256) internal _requestRedeemSettlementCheckpoint;
+
     /// @notice Inverse mapping vault => superformId
     mapping(address => uint256) _vaultToSuperformId;
-    /// @notice Redeem is locked when requesting and unlocked when processing
-    mapping(address => bool) redeemLocked;
+
     /// @notice Nonce of each controller
     mapping(address controller => uint256 nonce) internal _controllerNonces;
+
     /// @notice Mapping of chain IDs to their respective indexes
     mapping(uint64 => uint256) chainIndexes;
+
     /// @notice Mapping of chain method selectors to implementation contracts
     mapping(bytes4 => address) selectorToImplementation;
 
+    /// @notice Custom performance fee exemptions per controller
     mapping(address controller => uint256) public performanceFeeExempt;
+
+    /// @notice Custom management fee exemptions per controller
     mapping(address controller => uint256) public managementFeeExempt;
+
+    /// @notice Custom oracle fee exemptions per controller
     mapping(address controller => uint256) public oracleFeeExempt;
+
+    /// @notice Timestamp of last redemption per controller
     mapping(address controller => uint256) public lastRedeem;
+
+    /// @notice Timestamp when fees were last charged globally
+    uint256 public lastFeesCharged;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */

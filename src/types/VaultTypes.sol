@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { ISharePriceOracle, VaultReport } from "interfaces/ISharePriceOracle.sol";
 import { LiqRequest } from "./SuperformTypes.sol";
+import { ISharePriceOracle } from "interfaces/ISharePriceOracle.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { IBaseRouter } from "src/interfaces/IBaseRouter.sol";
+
+import { VaultReport } from "src/interfaces/ISharePriceOracle.sol";
 import { ISuperPositions } from "src/interfaces/ISuperPositions.sol";
 import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
 import { ISuperformGateway } from "src/interfaces/ISuperformGateway.sol";
@@ -80,8 +82,6 @@ library VaultLib {
             return ERC4626(self.vaultAddress).convertToAssets(shares);
         }
     }
-
-    
 
     /// @notice Simulates the ERC4626 {convertToAssets} function using cached share price
     /// @param self The vault data to operate on
@@ -159,14 +159,6 @@ library VaultLib {
     function _chainId() internal view returns (uint64 chainId) {
         return uint64(block.chainid);
     }
-}
-
-
-struct VaultReport {
-    uint192 sharePrice;
-    uint64 lastUpdate;
-    uint64 chainId;
-    address reporter;
 }
 
 struct SingleXChainSingleVaultWithdraw {
