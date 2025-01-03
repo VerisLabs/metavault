@@ -41,7 +41,6 @@ contract BaseVaultTest is BaseTest {
             oracleFee: 0,
             assetHurdleRate: 600,
             sharesLockTime: 30 days,
-            processRedeemSettlement: 1 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
             treasury: makeAddr("treasury"),
             recoveryAddress: makeAddr("recoveryAddress"),
@@ -59,7 +58,6 @@ contract BaseVaultTest is BaseTest {
             oracleFee: 0,
             assetHurdleRate: 600,
             sharesLockTime: 30 days,
-            processRedeemSettlement: 1 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),
             recoveryAddress: makeAddr("recoveryAddress"),
@@ -78,7 +76,8 @@ contract BaseVaultTest is BaseTest {
                 vault,
                 owner,
                 SUPERFORM_ROUTER_POLYGON,
-                SUPERFORM_SUPERPOSITIONS_POLYGON
+                SUPERFORM_SUPERPOSITIONS_POLYGON,
+                address(0)
             )
         );
         return SuperformGateway(address(proxy));
@@ -91,7 +90,12 @@ contract BaseVaultTest is BaseTest {
             address(implementation),
             owner,
             abi.encodeWithSelector(
-                SuperformGateway.initialize.selector, vault, owner, SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE
+                SuperformGateway.initialize.selector,
+                vault,
+                owner,
+                SUPERFORM_ROUTER_BASE,
+                SUPERFORM_SUPERPOSITIONS_BASE,
+                address(0)
             )
         );
         return SuperformGateway(address(proxy));

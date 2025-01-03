@@ -44,7 +44,6 @@ struct VaultConfig {
     uint16 oracleFee;
     uint16 assetHurdleRate;
     uint24 sharesLockTime;
-    uint24 processRedeemSettlement;
     ISuperPositions superPositions;
     address treasury;
     address recoveryAddress;

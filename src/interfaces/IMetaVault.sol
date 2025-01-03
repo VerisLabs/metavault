@@ -230,4 +230,8 @@ interface IMetaVault {
     function multicall(bytes[] calldata data) external returns (bytes[] memory);
 
     function addFunction(bytes4, address, bool) external;
+
+    function lastFeesCharged() external view returns (uint256);
+
+    function chargeGlobalFees() external returns (uint256);
 }

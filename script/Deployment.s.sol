@@ -36,7 +36,6 @@ contract DeploymentScript is Script {
             oracleFee: 300,
             assetHurdleRate: 400,
             sharesLockTime: 500,
-            processRedeemSettlement: 500,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: vaultAdmin,
             recoveryAddress: vaultAdmin,

@@ -2,40 +2,38 @@
 pragma solidity ^0.8.19;
 
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
+
+import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-contract ERC20Receiver {
+//// NOTE: This contract needs to be deployed with the exact same address in every chain so if the invest operation
+// fails
+/// the same contract in other chain will get the refunds
+contract SuperPositionsReceiver is OwnableRoles {
+    /// @notice Role identifier for admin privileges
+    uint256 public constant ADMIN_ROLE = _ROLE_0;
+
+    /// @notice Role identifier for recovery admin privileges
+    uint256 public constant RECOVERY_ROLE = _ROLE_1;
+
     using SafeTransferLib for address;
 
-    address immutable _deployer;
-    address immutable _asset;
-    address immutable _superPositions;
-    bytes32 public key;
-    uint256 public minExpectedBalance;
+    uint64 public destinationChain;
+    address public gateway;
+    address public superPositions;
 
-    constructor(address _asset_, address _superPositions_) {
-        _asset = _asset_;
-        _superPositions = _superPositions_;
-        _deployer = msg.sender;
+    constructor(uint64 _destinationChain, address _gateway, address _superPositions) {
+        destinationChain = _destinationChain;
+        gateway = _gateway;
+        superPositions = _superPositions;
+        // Initialize ownership and grant admin role
+        _initializeOwner(msg.sender);
+        _grantRoles(msg.sender, ADMIN_ROLE);
     }
 
-    function balance() external view returns (uint256) {
-        return _asset.balanceOf(address(this));
-    }
-
-    function pull(uint256 amount) external {
-        if (msg.sender != _deployer) revert();
-        _asset.safeTransfer(_deployer, amount);
-    }
-
-    function setMinExpectedBalance(uint256 amount) external {
-        if (msg.sender != _deployer) revert();
-        minExpectedBalance = amount;
-    }
-
-    function initialize(bytes32 _key) external {
-        key = _key;
-        ISuperPositions(_superPositions).setApprovalForAll(_deployer, true);
+    function recoverFunds(address token, uint256 amount) external onlyRoles(RECOVERY_ROLE) {
+        if (destinationChain == block.chainid) revert();
+        token.safeTransfer(msg.sender, amount);
     }
 
     /// @dev Supports ERC1155 interface detection
@@ -67,10 +65,12 @@ contract ERC20Receiver {
         operator;
         value;
         data;
-        if (msg.sender != address(_superPositions)) revert();
-        if (from != address(0)) revert();
-        ISuperformGateway(_deployer).notifyRefund(superformId, value);
-        return this.onERC1155Received.selector;
+        if (destinationChain == block.chainid) {
+            if (msg.sender != address(superPositions)) revert();
+            if (from != address(0)) revert();
+            ISuperPositions(superPositions).safeTransferFrom(address(this), address(gateway), superformId, value, "");
+            return this.onERC1155Received.selector;
+        }
     }
 
     /// @notice Handles the receipt of multiple ERC1155 token types
