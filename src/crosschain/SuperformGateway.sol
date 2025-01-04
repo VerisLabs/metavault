@@ -1056,6 +1056,12 @@ contract SuperformGateway is Initializable, OwnableRoles {
         vault.settleXChainDivest(requestedAssets);
     }
 
+    /// @notice Handles the cleanup and refund process for failed cross-chain investments
+    /// @dev This function is called after assets are recovered from the recovery contract on the destination chain
+    ///      It updates the pending investment tracking and processes any refunded assets
+    ///      The refunded assets are donated back to the vault to maintain share price accuracy
+    /// @param superformId The ID of the Superform position that failed to invest
+    /// @param refundedAssets The amount of assets that were recovered and refunded from the destination chain
     function notifyFailedInvest(uint256 superformId, uint256 refundedAssets) external onlyRoles(RELAYER_ROLE) {
         if (superformId == 0) revert InvalidSuperformId();
 
