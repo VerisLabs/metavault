@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/ERC7540Types.sol";
 
-import "forge-std/Test.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -392,12 +391,8 @@ abstract contract ERC7540 is ERC4626 {
         internal
         virtual
     {
-        console2.log("--------------fulfill request-----------------");
-        console2.log("pending shares  : ", _pendingRedeemRequest[controller].unwrap());
-        console2.log("shares fulfilled : ", sharesFulfilled);
         _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
         _claimableRedeemRequest[controller].assets += assetsWithdrawn;
         _claimableRedeemRequest[controller].shares += sharesFulfilled;
-        console2.log("pending after  : ", _pendingRedeemRequest[controller].unwrap());
     }
 }

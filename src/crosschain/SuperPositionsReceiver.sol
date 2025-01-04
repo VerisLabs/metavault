@@ -6,24 +6,43 @@ import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-//// NOTE: This contract needs to be deployed with the exact same address in every chain so if the invest operation
-// fails
-/// the same contract in other chain will get the refunds
+/// @title SuperPositionsReceiver
+/// @notice A cross-chain recovery contract for failed SuperPosition investments
+/// @dev This contract must be deployed with identical addresses across all chains to handle failed cross-chain
+/// operations.
+///      It serves as a safety mechanism in the Superform protocol to recover stuck assets from failed investments.
 contract SuperPositionsReceiver is OwnableRoles {
+    using SafeTransferLib for address;
+
+    error SourceChainRecoveryNotAllowed();
+
     /// @notice Role identifier for admin privileges
+    /// @dev Admins can manage contract configuration and roles
     uint256 public constant ADMIN_ROLE = _ROLE_0;
 
     /// @notice Role identifier for recovery admin privileges
+    /// @dev Recovery admins can execute fund recovery operations
     uint256 public constant RECOVERY_ROLE = _ROLE_1;
 
-    using SafeTransferLib for address;
+    /// @notice The chain ID of the source chain where the gateway is deployed
+    /// @dev Used to differentiate between source and destination chain behaviors
+    uint64 public sourceChain;
 
-    uint64 public destinationChain;
+    /// @notice The address of the SuperformGateway contract
+    /// @dev Gateway contract that handles cross-chain SuperPosition operations
     address public gateway;
+
+    /// @notice The address of the SuperPositions (ERC1155) contract
+    /// @dev Contract that manages the SuperPosition tokens
     address public superPositions;
 
-    constructor(uint64 _destinationChain, address _gateway, address _superPositions) {
-        destinationChain = _destinationChain;
+    /// @notice Initializes the receiver with source chain and contract addresses
+    /// @dev Sets up the contract with necessary addresses and grants initial admin roles
+    /// @param _sourceChain The chain ID where the original gateway is deployed
+    /// @param _gateway Address of the SuperformGateway contract
+    /// @param _superPositions Address of the SuperPositions contract
+    constructor(uint64 _sourceChain, address _gateway, address _superPositions) {
+        sourceChain = _sourceChain;
         gateway = _gateway;
         superPositions = _superPositions;
         // Initialize ownership and grant admin role
@@ -31,8 +50,12 @@ contract SuperPositionsReceiver is OwnableRoles {
         _grantRoles(msg.sender, ADMIN_ROLE);
     }
 
+    /// @notice Recovers stuck tokens from failed cross-chain operations
+    /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
+    /// @param token The address of the token to recover
+    /// @param amount The amount of tokens to recover
     function recoverFunds(address token, uint256 amount) external onlyRoles(RECOVERY_ROLE) {
-        if (destinationChain == block.chainid) revert();
+        if (sourceChain == block.chainid) revert SourceChainRecoveryNotAllowed();
         token.safeTransfer(msg.sender, amount);
     }
 
@@ -65,7 +88,7 @@ contract SuperPositionsReceiver is OwnableRoles {
         operator;
         value;
         data;
-        if (destinationChain == block.chainid) {
+        if (sourceChain == block.chainid) {
             if (msg.sender != address(superPositions)) revert();
             if (from != address(0)) revert();
             ISuperPositions(superPositions).safeTransferFrom(address(this), address(gateway), superformId, value, "");

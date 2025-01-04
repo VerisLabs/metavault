@@ -12,7 +12,6 @@ import { MockERC4626Oracle } from "../helpers/mock/MockERC4626Oracle.sol";
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
-import { SuperformGateway } from "crosschain/Lib.sol";
 import { IMetaVault, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 
@@ -24,6 +23,7 @@ import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
 import { ERC7540Engine } from "modules/Lib.sol";
 import { ERC4626, MetaVault } from "src/MetaVault.sol";
 
+import { ERC20Receiver, SuperformGateway } from "crosschain/Lib.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
@@ -267,7 +267,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalXChainAssets(), 0);
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
         assertEq(vault.totalAssets(), 999_999_482);
         assertEq(vault.totalWithdrawableAssets(), 999_999_482);
         assertEq(vault.totalXChainAssets(), 599_999_482);
@@ -411,7 +411,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             req
         );
 
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
 
         vm.startPrank(users.alice);
 
@@ -463,6 +463,107 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalIdle(), 0);
+    }
+
+    function test_MetaVault_processRedeemRequest_from_local_and_xchain_queue_failed() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(0))
+        });
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        uint256 investAmount = 600 * _1_USDCE;
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+
+        req.superformData.amount = investAmount;
+
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
+
+        vm.startPrank(users.alice);
+
+        vault.setSharesLockTime(0);
+
+        uint256 aliceBalance = vault.balanceOf(users.alice);
+
+        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
+
+        {
+            oracle.setValues(
+                optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            );
+        }
+
+        {
+            bytes32 requestId;
+            SingleXChainSingleVaultWithdraw memory sXsV;
+            SingleXChainMultiVaultWithdraw memory sXmV;
+            MultiXChainSingleVaultWithdraw memory mXsV;
+            MultiXChainMultiVaultWithdraw memory mXmV;
+
+            (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
+                _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+            sXsV.outputAmount = 588 * _1_USDCE;
+            uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
+            sXsV.value = value;
+
+            vm.expectEmit(true, true, true, true);
+            emit ProcessRedeemRequest(users.alice, aliceBalance);
+            vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            requestId = gateway.getRequestsQueue()[0];
+
+            (,,,,,, uint128 totalDebt,) = vault.vaults(1);
+            assertEq(totalDebt, 0);
+            (,,,,,, totalDebt,) = vault.vaults(superformId);
+            assertEq(totalDebt, 0);
+            assertEq(vault.totalAssets(), 0);
+            assertEq(vault.totalSupply(), 0);
+
+            address receiver = gateway.getReceiver(requestId);
+            assertEq(USDCE_BASE.balanceOf(receiver), 0);
+            assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
+
+            // Instead of settling, simulate failure by minting superpositions back
+            _mintSuperpositions(receiver, superformId, shares);
+
+            // Verify state after failed redeem
+            assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
+            (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
+            assertApproxEq(vaultDebt, 600 * _1_USDCE, _1_USDCE);
+            assertEq(vault.totalDebt(), vaultDebt);
+            assertApproxEq(vault.totalXChainAssets(), 600 * _1_USDCE, _1_USDCE);
+        }
     }
 
     function test_MetaVault_addVault() public {
@@ -575,6 +676,55 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_revert_MetaVault_setOperator_invalidOperator() public {
         vm.expectRevert(ERC7540.InvalidOperator.selector);
         vault.setOperator(users.alice, true);
+    }
+
+    function test_notifyFailedInvest() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Setup cross-chain vault
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Deposit and invest cross-chain
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory investReq =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        investReq.superformData.amount = investAmount;
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            investReq
+        );
+
+        // Verify initial state
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalIdle(), 400 * _1_USDCE);
+        assertEq(gateway.totalpendingXChainInvests(), 600 * _1_USDCE);
+
+        deal(USDCE_BASE, users.alice, investAmount);
+        // Simulate failed investment
+        vm.startPrank(users.alice);
+        USDCE_BASE.safeApprove(address(gateway), type(uint256).max);
+        gateway.notifyFailedInvest(superformId, investAmount);
+        vm.stopPrank();
+
+        // Verify state after failed invest
+        assertEq(gateway.totalpendingXChainInvests(), 0);
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalIdle(), 1000 * _1_USDCE);
     }
 
     function test_divestSingleDirectSingleVault() public {
@@ -704,7 +854,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             investReq
         );
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
 
         uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
 
@@ -734,6 +884,75 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
+    }
+
+    function test_divestSingleXChainSingleVault_failed() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Setup cross-chain vault
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Deposit and invest cross-chain
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory investReq =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        investReq.superformData.amount = investAmount;
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            investReq
+        );
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
+
+        uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
+
+        // Prepare divest request
+        SingleXChainSingleVaultStateReq memory divestReq =
+            _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
+        uint256 lastSharePrice = report.sharePrice;
+        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
+        divestReq.superformData.outputAmount = expectedDivestedValue;
+
+        // Execute divest
+        vm.expectEmit(true, true, true, true);
+        emit Divest(expectedDivestedValue);
+
+        vm.startPrank(users.alice);
+        vault.divestSingleXChainSingleVault{ value: value }(divestReq);
+
+        assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
+        assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
+
+        // Instead of settling, simulate failure by minting superpositions back
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        address receiver = gateway.getReceiver(requestId);
+        bytes32 key = ERC20Receiver(receiver).key();
+        _mintSuperpositions(receiver, superformId, shares);
+
+        // Verify state after failed divest
+        assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
+        (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
+        assertEq(vaultDebt, expectedDivestedValue);
+        assertEq(vault.totalDebt(), vaultDebt);
+        assertApproxEq(vault.totalXChainAssets(), 600 * _1_USDCE, 1 * _1_USDCE);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
@@ -889,7 +1108,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setOracleFee(50);
         // Initial deposit
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice); 
+        _depositAtomic(depositAmount, users.alice);
 
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);

@@ -46,7 +46,6 @@ struct VaultConfig {
     uint24 sharesLockTime;
     ISuperPositions superPositions;
     address treasury;
-    address recoveryAddress;
     address signerRelayer;
 }
 

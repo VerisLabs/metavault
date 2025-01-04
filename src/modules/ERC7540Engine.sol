@@ -8,7 +8,6 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-import "forge-std/Test.sol";
 import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 import {
     LiqRequest,
@@ -578,7 +577,6 @@ contract ERC7540Engine is Base {
         _totalDebt = cache.totalDebt.toUint128();
 
         emit ProcessRedeemRequest(config.controller, config.shares);
-        console2.log("shares instantly fulfileld : ", cache.sharesFulfilled);
         // Burn all shares from this contract(they already have been transferred)
         _burn(address(this), config.shares);
         // Fulfill request with instant withdrawals only

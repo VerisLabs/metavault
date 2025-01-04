@@ -30,7 +30,6 @@ import {
 } from "types/Lib.sol";
 
 import { MultiFacetProxy } from "common/Lib.sol";
-import "forge-std/console2.sol";
 
 /// @title MetaVault
 /// @author Unlockd
@@ -1083,8 +1082,14 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         // Silence compiler warnings
         operator;
         value;
-        data;
         if (from != address(gateway)) revert Unauthorized();
+        if (data.length > 0) {
+            uint256 refundedAssets = abi.decode(data, (uint256));
+            if (refundedAssets != 0) {
+                _totalDebt += refundedAssets.toUint128();
+                vaults[superformId].totalDebt += refundedAssets.toUint128();
+            }
+        }
         return this.onERC1155Received.selector;
     }
 
