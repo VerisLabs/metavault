@@ -45,7 +45,7 @@ graph TD
     subgraph Cross-Chain Infrastructure
         Gateway --> |Recovery|SPR[SuperPositionsReceiver]
         Gateway --> |Request Handling|ERC20R[ERC20Receiver Factory]
-        Gateway --> |Bridging|Bridges[Bridge Adapters]
+        Gateway --> |Bridging|Bridges[Superform]
     end
     
     subgraph Yield Sources
