@@ -313,7 +313,7 @@ contract SuperformGateway is Initializable, OwnableRoles {
 
         asset.safeTransferFrom(address(vault), address(this), amount);
 
-        req.superformData.receiverAddressSP = address(this);
+        req.superformData.receiverAddressSP = recoveryAddress;
         // Initiate the cross-chain deposit via the vault router
         superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
 

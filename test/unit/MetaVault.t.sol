@@ -100,7 +100,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function setUp() public override {
-        super._setUp("BASE", 22_567_511);
+        super._setUp("BASE", 24_643_414);
         super.setUp();
 
         _setUpTestEnvironment();
