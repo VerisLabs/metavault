@@ -181,6 +181,9 @@ contract MetaVault is MultiFacetProxy, Multicallable {
 
         // Initialize signer relayer
         signerRelayer = config.signerRelayer;
+
+        // Set initial watermark
+        sharePriceWaterMark = 10 ** decimals();
     }
 
     /// @notice Sets the gateway contract for cross-chain communication
@@ -396,8 +399,9 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         // Calculate time-based fees (management & oracle)
         // These are charged on total assets, prorated for the time period
         temp.managementFees =
-            assets * temp.duration * _sub0(managementFee, temp.managementFeeExempt) / SECS_PER_YEAR / MAX_BPS;
-        temp.oracleFees = assets * temp.duration * _sub0(oracleFee, temp.oracleFeeExempt) / SECS_PER_YEAR / MAX_BPS;
+            (assets * temp.duration).fullMulDiv(_sub0(managementFee, temp.managementFeeExempt), SECS_PER_YEAR) / MAX_BPS;
+        temp.oracleFees =
+            (assets * temp.duration).fullMulDiv(_sub0(oracleFee, temp.oracleFeeExempt), SECS_PER_YEAR) / MAX_BPS;
         assets -= temp.managementFees + temp.oracleFees;
         temp.totalFees += temp.managementFees + temp.oracleFees;
 
@@ -409,7 +413,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         if (temp.assetsDelta > 0) {
             uint256 totalReturn = uint256(temp.assetsDelta);
             // Calculate returns relative to hurdle rate
-            uint256 hurdleReturn = (assets * hurdleRate() * temp.duration) / SECS_PER_YEAR / MAX_BPS;
+            uint256 hurdleReturn = (assets * hurdleRate()).fullMulDiv(temp.duration, SECS_PER_YEAR) / MAX_BPS;
             uint256 excessReturn;
 
             // Only charge performance fees if:
@@ -506,21 +510,18 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         uint256 lastSharePrice = sharePriceWaterMark;
         uint256 duration = block.timestamp - lastFeesCharged;
         uint256 currentTotalAssets = totalAssets();
-        uint256 lastTotalAssets = totalSupply() * lastSharePrice;
+        uint256 lastTotalAssets = totalSupply().fullMulDiv(lastSharePrice, 10 ** decimals());
 
         // Calculate time-based fees (management & oracle)
         // These are charged on total assets, prorated for the time period
-        uint256 managementFees = currentTotalAssets * duration * managementFee / SECS_PER_YEAR / MAX_BPS;
-        uint256 oracleFees = currentTotalAssets * duration * oracleFee / SECS_PER_YEAR / MAX_BPS;
+        uint256 managementFees = (currentTotalAssets * duration).fullMulDiv(managementFee, SECS_PER_YEAR) / MAX_BPS;
+        uint256 oracleFees = (currentTotalAssets * duration).fullMulDiv(oracleFee, SECS_PER_YEAR) / MAX_BPS;
         uint256 totalFees = managementFees + oracleFees;
         uint256 performanceFees;
 
         currentTotalAssets += managementFees + oracleFees;
 
         lastFeesCharged = block.timestamp;
-
-        // Calculate returns relative to hurdle rate
-        uint256 hurdleReturn = (lastTotalAssets * hurdleRate() * duration) / SECS_PER_YEAR / MAX_BPS;
 
         // Calculate the asset's value change since entry
         // This gives us the raw profit/loss in asset terms
@@ -530,6 +531,8 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         if (assetsDelta > 0) {
             uint256 excessReturn;
 
+            // Calculate returns relative to hurdle rate
+            uint256 hurdleReturn = (lastTotalAssets * hurdleRate()).fullMulDiv(duration, SECS_PER_YEAR) / MAX_BPS;
             uint256 totalReturn = uint256(assetsDelta);
 
             // Only charge performance fees if:

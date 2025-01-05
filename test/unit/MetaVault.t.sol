@@ -68,11 +68,10 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         config.signerRelayer = relayer.signerAddress();
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
-        engine = new ERC7540Engine();
         gateway = deployGatewayBase(address(vault), users.alice);
         vault.setGateway(address(gateway));
+        engine = new ERC7540Engine();
         vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
-        //vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
         vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
         oracle = new MockERC4626Oracle();
@@ -83,6 +82,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         USDCE_BASE.safeApprove(address(vault), type(uint256).max);
 
         console2.log("vault address : %s", address(vault));
+        console2.log("recovery address : %s", gateway.recoveryAddress());
     }
 
     function _setupContractLabels() private {
@@ -90,11 +90,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vm.label(SUPERFORM_SUPERPOSITIONS_BASE, "SuperPositions");
         vm.label(SUPERFORM_PAYMENT_HELPER_BASE, "PaymentHelper");
         vm.label(SUPERFORM_PAYMASTER_BASE, "PayMaster");
-        //      vm.label(SUPERFORM_LAYERZERO_V2_IMPLEMENTATION_BASE, "LayerZeroV2Implementation");
-        //       vm.label(SUPERFORM_LAYERZERO_IMPLEMENTATION_BASE, "LayerZeroImplementation");
         vm.label(SUPERFORM_LAYERZERO_ENDPOINT_BASE, "LayerZeroEndpoint");
         vm.label(SUPERFORM_CORE_STATE_REGISTRY_BASE, "CoreStateRegistry");
-        //      vm.label(LAYERZERO_ULTRALIGHT_NODE_BASE, "UltraLightNode");
         vm.label(SUPERFORM_ROUTER_BASE, "SuperRouter");
         vm.label(address(vault), "MetaVault");
         vm.label(USDCE_BASE, "USDC");
@@ -554,10 +551,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
             assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
 
-            // Instead of settling, simulate failure by minting superpositions back
             _mintSuperpositions(receiver, superformId, shares);
 
-            // Verify state after failed redeem
             assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
             (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
             assertApproxEq(vaultDebt, 600 * _1_USDCE, _1_USDCE);
@@ -668,7 +663,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         assertTrue(vault.isOperator(users.alice, users.bob));
 
-        // Now bob should be able to deposit on behalf of alice
         vm.startPrank(users.bob);
         vault.deposit(amount, users.alice, users.alice);
     }
@@ -683,7 +677,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        // Setup cross-chain vault
         oracle.setValues(
             optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
         );
@@ -696,7 +689,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        // Deposit and invest cross-chain
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
@@ -709,19 +701,16 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             investReq
         );
 
-        // Verify initial state
         assertEq(vault.totalAssets(), 1000 * _1_USDCE);
         assertEq(vault.totalIdle(), 400 * _1_USDCE);
         assertEq(gateway.totalpendingXChainInvests(), 600 * _1_USDCE);
 
         deal(USDCE_BASE, users.alice, investAmount);
-        // Simulate failed investment
         vm.startPrank(users.alice);
         USDCE_BASE.safeApprove(address(gateway), type(uint256).max);
         gateway.notifyFailedInvest(superformId, investAmount);
         vm.stopPrank();
 
-        // Verify state after failed invest
         assertEq(gateway.totalpendingXChainInvests(), 0);
         assertEq(vault.totalAssets(), 1000 * _1_USDCE);
         assertEq(vault.totalIdle(), 1000 * _1_USDCE);
@@ -729,7 +718,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
     function test_divestSingleDirectSingleVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
-        // Setup local vault
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
@@ -739,12 +727,10 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(0))
         });
 
-        // Deposit and invest
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
-        // Divest
         uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
         uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1; // Allow 1 wei slippage
 
@@ -763,7 +749,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         MockERC4626 smUsdce = new MockERC4626(USDCE_BASE, "Sommelier USDCE", "smUSDCe", true, 0);
 
-        // Setup two local vaults
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
@@ -782,7 +767,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(0))
         });
 
-        // Deposit and invest in both vaults
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 amountPerVault = 400 * _1_USDCE;
 
@@ -800,7 +784,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
 
-        // Prepare divest parameters
         address[] memory divestVaults = new address[](2);
         divestVaults[0] = address(yUsdce);
         divestVaults[1] = address(smUsdce);
@@ -813,10 +796,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         minDivestAmounts[0] = yUsdce.convertToAssets(divestShares[0]);
         minDivestAmounts[1] = smUsdce.convertToAssets(divestShares[1]);
 
-        // Divest from both vaults
         uint256[] memory divestAssets = vault.divestSingleDirectMultiVault(divestVaults, divestShares, minDivestAmounts);
 
-        // Validate divest
         assertEq(divestAssets.length, 2);
         assertGt(divestAssets[0], 0);
         assertGt(divestAssets[1], 0);
@@ -829,7 +810,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        // Setup cross-chain vault
         oracle.setValues(
             optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
         );
@@ -842,7 +822,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        // Deposit and invest cross-chain
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
@@ -858,7 +837,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
 
-        // Prepare divest request
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
@@ -866,7 +844,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         divestReq.superformData.outputAmount = expectedDivestedValue;
-        // Execute divest
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValue);
 
@@ -877,7 +854,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
 
-        // Simulate vault getting the assets
         bytes32 requestId = gateway.getRequestsQueue()[0];
         deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
         gateway.settleDivest(requestId, false);
@@ -892,7 +868,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        // Setup cross-chain vault
         oracle.setValues(
             optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
         );
@@ -905,7 +880,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        // Deposit and invest cross-chain
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
@@ -921,7 +895,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
 
-        // Prepare divest request
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
@@ -930,7 +903,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         divestReq.superformData.outputAmount = expectedDivestedValue;
 
-        // Execute divest
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValue);
 
@@ -941,13 +913,11 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
 
-        // Instead of settling, simulate failure by minting superpositions back
         bytes32 requestId = gateway.getRequestsQueue()[0];
         address receiver = gateway.getReceiver(requestId);
         bytes32 key = ERC20Receiver(receiver).key();
         _mintSuperpositions(receiver, superformId, shares);
 
-        // Verify state after failed divest
         assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
         (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
         assertEq(vaultDebt, expectedDivestedValue);
@@ -957,11 +927,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_exitFees_withProfit() public {
-        // Initial deposit
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
-        // Simulate profit by donating to vault
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
 
@@ -972,16 +940,13 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.startPrank(users.alice);
 
-        // Current share price should be higher than initial
         assertGt(vault.sharePrice(), 1e6);
 
         skip(config.sharesLockTime);
 
-        // Request redeem
         uint256 sharesBalance = vault.balanceOf(users.alice);
         vault.requestRedeem(sharesBalance, users.alice, users.alice);
 
-        // Process redeem request
         SingleXChainSingleVaultWithdraw memory sXsV;
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
@@ -989,11 +954,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
 
-        // Calculate expected fees
         uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
         uint256 totalAssets = depositAmount + profit;
 
-        // Calculate hurdle return
         uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 excessReturn = profit > hurdleReturn ? profit - hurdleReturn : 0;
 
@@ -1006,7 +969,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalExpectedFees = expectedPerformanceFees + expectedManagementFees + expectedOracleFees;
         uint256 totalExpectedFeesShares = vault.convertToShares(totalExpectedFees);
 
-        // Ensure fees don't exceed excess return
         if (totalExpectedFees > excessReturn) {
             totalExpectedFees = excessReturn;
             uint256 totalFeeBps = vault.performanceFee() + vault.managementFee() + vault.oracleFee();
@@ -1015,29 +977,24 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             expectedOracleFees = (expectedOracleFees * excessReturn) / totalFeeBps;
         }
 
-        // Check fees event emission
         vm.expectEmit(true, true, true, true);
         emit AssessFees(users.alice, expectedManagementFees, expectedPerformanceFees - 1, expectedOracleFees);
 
-        // Redeem
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
-        // Verify received amount is total minus fees
         assertEq(receivedAssets, totalAssets - totalExpectedFees);
 
-        // Verify fees went to treasury
         assertApproxEq(vault.balanceOf(vault.treasury()), totalExpectedFeesShares, 1);
     }
 
-    function test_MetaVault_chargeGlobalFees() public {
-        // Initial deposit
+    function test_MetaVault_chargeGlobalFees_positives() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
-        // Skip some time to accrue fees
         skip(180 days);
 
-        // Simulate profit by donating to vault
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
         vm.startPrank(users.bob);
@@ -1045,30 +1002,28 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.donate(profit);
         vm.stopPrank();
 
-        // Record initial state
         uint256 totalAssets = vault.totalAssets();
         uint256 lastSharePrice = vault.sharePriceWaterMark();
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
 
-        // Calculate expected fees
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 totalFees = managementFees + oracleFees;
 
-        // Add management fees back to assets for performance fee calculation
         totalAssets += managementFees + oracleFees;
 
-        // Calculate profit after time-based fees
         int256 assetsDelta = int256(totalAssets) - int256(depositAmount);
+        console2.log("[test] assets delta : ", assetsDelta);
 
         uint256 performanceFees;
         if (assetsDelta > 0) {
             uint256 hurdleReturn =
                 (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
             uint256 totalReturn = uint256(assetsDelta);
-
+            console2.log("[test] current share price : ", vault.sharePrice());
+            console2.log("[test] watermark share price : ", lastSharePrice);
             if (vault.sharePrice() > lastSharePrice && totalReturn > hurdleReturn) {
                 uint256 excessReturn = totalReturn - hurdleReturn;
                 performanceFees = excessReturn * vault.performanceFee() / vault.MAX_BPS();
@@ -1076,14 +1031,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             }
         }
 
-        // Charge fees
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
         emit AssessFees(address(vault), managementFees, performanceFees, oracleFees);
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        // Verify results
         assertEq(actualFees, totalFees, "Total fees charged incorrect");
         assertEq(
             vault.balanceOf(vault.treasury()) - treasurySharesBefore,
@@ -1094,6 +1047,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_chargeGlobalFees_BelowWatermark() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         vault.addVault({
             chainId: baseChainId,
@@ -1106,14 +1061,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.setManagementFee(100);
         vault.setOracleFee(50);
-        // Initial deposit
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
-        // Create large profit to set high watermark
         uint256 initialProfit = 200 * _1_USDCE;
         deal(USDCE_BASE, users.bob, initialProfit);
         vm.startPrank(users.bob);
@@ -1121,13 +1074,11 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.donate(initialProfit);
         vm.stopPrank();
 
-        // Charge fees to set watermark
         vm.prank(users.alice);
         vault.chargeGlobalFees();
         uint256 highWatermark = vault.sharePriceWaterMark();
         vm.stopPrank();
 
-        // Simulate loss and small recovery
         uint256 loss = 250 * _1_USDCE;
         uint256 lostShares = yUsdce.convertToShares(loss);
         vm.startPrank(address(vault));
@@ -1143,27 +1094,23 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         skip(180 days);
 
-        // Verify we're below watermark
         assertLt(vault.sharePrice(), highWatermark);
 
         uint256 totalAssets = vault.totalAssets();
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
 
-        // Calculate expected fees (only management and oracle, no performance)
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 totalFees = managementFees + oracleFees;
 
-        // Charge fees
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
         emit AssessFees(address(vault), managementFees, 0, oracleFees); // No performance fees
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        // Verify results
         assertEq(actualFees, totalFees, "Total fees charged incorrect");
         assertEq(
             vault.balanceOf(vault.treasury()) - treasurySharesBefore,
@@ -1173,13 +1120,13 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_chargeGlobalFees_BelowHurdleRate() public {
-        // Initial deposit
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
         skip(180 days);
 
-        // Simulate small profit below hurdle rate
         uint256 smallProfit = 10 * _1_USDCE; // Very small profit
         deal(USDCE_BASE, users.bob, smallProfit);
         vm.startPrank(users.bob);
@@ -1191,26 +1138,21 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
 
-        // Calculate expected fees
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         totalAssets -= managementFees + oracleFees;
 
-        // Calculate hurdle return
         uint256 hurdleReturn = (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
 
-        // Verify profit doesn't exceed hurdle
         assertLe(smallProfit, hurdleReturn, "Profit should be below hurdle rate");
 
-        // Charge fees
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
         emit AssessFees(address(vault), managementFees, 0, oracleFees); // No performance fees
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        // Verify results
         assertEq(actualFees, managementFees + oracleFees, "Total fees charged incorrect");
         assertEq(
             vault.balanceOf(vault.treasury()) - treasurySharesBefore,
@@ -1220,7 +1162,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_chargeGlobalFees_NoProfit() public {
-        // Initial deposit
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
@@ -1230,19 +1173,16 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
 
-        // Calculate time-based fees
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
 
-        // Charge fees
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
         emit AssessFees(address(vault), managementFees, 0, oracleFees);
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        // Verify results
         assertEq(actualFees, managementFees + oracleFees, "Total fees charged incorrect");
         assertEq(
             vault.balanceOf(vault.treasury()) - treasurySharesBefore,
@@ -1252,13 +1192,11 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_exitFees_noExcessReturn() public {
-        // Initial deposit
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
         vault.setOracleFee(0);
 
-        // Simulate small profit that doesn't exceed hurdle
         uint256 profit = 1 * _1_USDCE; // Very small profit
         deal(USDCE_BASE, users.bob, profit);
 
@@ -1280,28 +1218,22 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
 
-        // Calculate hurdle return
         uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
         uint256 totalAssets = depositAmount + profit;
         uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
 
-        // Verify profit doesn't exceed hurdle
         assertLe(profit, hurdleReturn);
 
-        // Redeem - should not charge performance fees
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
-        // Should receive full amount since profit didn't exceed hurdle
         assertEq(receivedAssets, totalAssets - 1, "1");
         assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
     }
 
     function test_MetaVault_exitFees_belowWatermark_noPerformanceFees() public {
-        // Initial deposit
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
-        // Simulate profit to set watermark
         uint256 initialProfit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, initialProfit);
 
@@ -1312,17 +1244,14 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.startPrank(users.alice);
 
-        // Record watermark after initial profit
         uint256 watermark = vault.sharePrice();
 
-        // Simulate loss and then small recovery
         uint256 loss = 150 * _1_USDCE;
         vm.startPrank(address(vault));
         USDCE_BASE.safeTransfer(users.bob, loss);
         MetaVaultWrapper(payable(address(vault))).setTotalIdle(uint128((1000 + 100 - 150) * _1_USDCE));
         vm.stopPrank();
 
-        // Add some profit back, but still below watermark
         uint256 recoveryProfit = 50 * _1_USDCE;
         deal(USDCE_BASE, users.bob, recoveryProfit);
 
@@ -1333,7 +1262,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.startPrank(users.alice);
 
-        // Verify we're below watermark
         assertLt(vault.sharePrice(), watermark);
 
         skip(config.sharesLockTime);
@@ -1347,23 +1275,20 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
 
-        // Should not charge performance fees when below watermark
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
-        // Should only charge management and oracle fees if applicable
         uint256 totalAssets = depositAmount + initialProfit - loss + recoveryProfit;
         assertEq(receivedAssets, totalAssets);
         assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
     }
 
     function test_MetaVault_exitFees_feeExemption() public {
-        vault.setPerformanceFee(2000);
         vault.setManagementFee(100);
-        // Initial deposit
+        vault.setOracleFee(50);
+        vault.setManagementFee(100);
         uint256 depositAmount = 1000 * _1_USDCE;
         _depositAtomic(depositAmount, users.alice);
 
-        // Set fee exemptions for alice
         vm.startPrank(users.bob);
         uint256 performanceFeeExemption = 1000; // 10%
         uint256 managementFeeExemption = 500; // 5%
@@ -1374,7 +1299,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setFeeExcemption(users.alice, managementFeeExemption, performanceFeeExemption, oracleFeeExemption);
 
         vm.startPrank(users.bob);
-        // Simulate significant profit to exceed hurdle
         uint256 profit = 2000 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
         USDCE_BASE.safeApprove(address(vault), profit);
@@ -1393,11 +1317,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
 
-        // Calculate expected fees with exemptions
         uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
         uint256 totalAssets = depositAmount + profit;
 
-        // Calculate hurdle return
         uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 excessReturn = profit - hurdleReturn;
 
@@ -1411,7 +1333,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalExpectedFees = expectedPerformanceFees + expectedManagementFees + expectedOracleFees;
         uint256 totalExpectedFeesShares = vault.convertToShares(totalExpectedFees);
 
-        // Redeem and verify
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
         assertApproxEq(receivedAssets, 1000 * _1_USDCE + profit - totalExpectedFees, 2);
         assertApproxEq(address(vault).balanceOf(vault.treasury()), totalExpectedFeesShares, 2);
