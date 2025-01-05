@@ -10,8 +10,10 @@ import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
 import { ERC7540 } from "lib/Lib.sol";
+
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { ERC4626, MetaVault } from "src/MetaVault.sol";
+import { MetaVault } from "src/MetaVault.sol";
 
 import { SuperformGateway } from "crosschain/SuperformGateway.sol";
 import "src/helpers/AddressBook.sol";

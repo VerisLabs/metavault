@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { ISuperformGateway, IHurdleRateOracle } from "interfaces/Lib.sol";
+import { IHurdleRateOracle, ISuperformGateway } from "interfaces/Lib.sol";
 
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
@@ -142,7 +142,6 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
 
     /// @notice Timestamp of last redemption per controller
     mapping(address controller => uint256) public lastRedeem;
-
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */

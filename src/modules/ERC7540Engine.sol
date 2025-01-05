@@ -46,6 +46,9 @@ contract ERC7540Engine is Base {
     /// @dev Emitted when a redeem request is processed
     event ProcessRedeemRequest(address indexed controller, uint256 shares);
 
+    /// @dev Emitted when a redeem request is fulfilled after being processed
+    event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
+
     /// @dev Safe casting operations for uint
     using SafeCastLib for uint256;
 
@@ -139,6 +142,20 @@ contract ERC7540Engine is Base {
             _prepareWithdrawalRoute(cachedRoute);
         }
         return cachedRoute;
+    }
+
+    /// @notice Fulfills a settled cross-chain redemption request
+    /// @dev Called by the gateway contract when cross-chain assets have been received.
+    /// Converts the requested assets to shares and fulfills the redemption request.
+    /// Only callable by the gateway contract.
+    /// @param controller The address that initiated the redemption request
+    /// @param requestedAssets The original amount of assets requested
+    /// @param fulfilledAssets The actual amount of assets received after bridging
+    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 fulfilledAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        uint256 shares = convertToShares(requestedAssets);
+        _fulfillRedeemRequest(shares, fulfilledAssets, controller);
+        emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
