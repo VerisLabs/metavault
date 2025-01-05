@@ -187,7 +187,7 @@ cargo install soldeer
 ### Clone the repo
 
 ```sh
-git clone https://github.com/UnlockdFinance/maxapy.git
+git clone https://github.com/UnlockdFinance/metavault.git
 ```
 
 ### Install the dependencies
