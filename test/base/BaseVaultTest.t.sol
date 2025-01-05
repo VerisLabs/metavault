@@ -74,9 +74,7 @@ contract BaseVaultTest is BaseTest {
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
         SuperformGateway gateway = new SuperformGateway(
-            IMetaVault(vault),
-            IBaseRouter(SUPERFORM_ROUTER_POLYGON),
-            ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON)
+            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_POLYGON), ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON)
         );
         bytes4[] memory investSelectors = invest.selectors();
         gateway.addFunctions(investSelectors, address(invest), false);
