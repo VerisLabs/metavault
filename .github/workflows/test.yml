@@ -47,5 +47,6 @@ jobs:
 
       - name: Run Forge tests
         run: |
+          export FOUNDRY_PROFILE=fork
           forge test -vvv
         id: test
