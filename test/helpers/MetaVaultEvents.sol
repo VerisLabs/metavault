@@ -7,6 +7,9 @@ contract MetaVaultEvents {
     /// @dev Emitted when a redeem request is fulfilled after being processed
     event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
 
+    /// @dev Emitted when fees are applied to a user
+    event AssessFees(address indexed controller, uint256 managementFees, uint256 performanceFees, uint256 oracleFees);
+
     /// @dev Emitted when investing vault idle assets
     event Invest(uint256 amount);
 

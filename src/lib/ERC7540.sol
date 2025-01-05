@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/ERC7540Types.sol";
+
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -30,14 +31,6 @@ abstract contract ERC7540 is ERC4626 {
     /// @dev Emitted when `controller` gives allowance to `operator`
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
 
-    /// @dev `keccak256(bytes("DepositRequest(address,address,uint256,address,uint256)"))`.
-    uint256 private constant _DEPOSIT_REQUEST_EVENT_SIGNATURE =
-        0xbb58420bb8ce44e11b84e214cc0de10ce5e7c24d0355b2815c3d758b514cae72;
-
-    /// @dev `keccak256(bytes("RedeemRequest(address,address,uint256,address,uint256)"))`.
-    uint256 private constant _REDEEM_REQUEST_EVENT_SIGNATURE =
-        0x1fdc681a13d8c5da54e301c7ce6542dcde4581e4725043fdab2db12ddc574506;
-
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -59,16 +52,16 @@ abstract contract ERC7540 is ERC4626 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @notice Saves the ERC7540 deposit requests when calling `requestDeposit`
-    mapping(address => ERC7540_Request) private _pendingDepositRequest;
+    mapping(address => ERC7540_Request) internal _pendingDepositRequest;
 
     /// @notice Saves the ERC7540 redeem requests when calling `requestRedeem`
-    mapping(address => ERC7540_Request) private _pendingRedeemRequest;
+    mapping(address => ERC7540_Request) internal _pendingRedeemRequest;
 
     /// @notice Saves the result of the deposit after the request has been processed
-    mapping(address => ERC7540_FilledRequest) private _claimableDepositRequest;
+    mapping(address => ERC7540_FilledRequest) internal _claimableDepositRequest;
 
     /// @notice Saves the result of the redeem after the request has been processed
-    mapping(address => ERC7540_FilledRequest) private _claimableRedeemRequest;
+    mapping(address => ERC7540_FilledRequest) internal _claimableRedeemRequest;
 
     /// @notice ERC7540 operator approvals
     mapping(address controller => mapping(address operator => bool)) public isOperator;
@@ -190,7 +183,7 @@ abstract contract ERC7540 is ERC4626 {
         if (assets > maxDeposit(controller)) revert DepositMoreThanMax();
         ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
         shares = claimable.convertToSharesUp(assets);
-        _deposit(assets, shares, receiver, controller);
+        (shares,) = _deposit(assets, shares, receiver, controller);
     }
 
     /// @dev Mints exactly shares Vault shares to receiver by claiming the Request of the controller.
@@ -210,17 +203,29 @@ abstract contract ERC7540 is ERC4626 {
         if (shares > maxMint(controller)) revert MintMoreThanMax();
         ERC7540_FilledRequest memory claimable = _claimableDepositRequest[controller];
         assets = claimable.convertToAssetsUp(shares);
-        _deposit(assets, shares, receiver, controller);
+        (, assets) = _deposit(assets, shares, receiver, controller);
     }
 
+    /// @notice Claims processed redemption request
+    /// @dev Can only be called by controller or approved operator
+    /// @param shares Amount of shares to redeem
+    /// @param to Address to receive the assets
+    /// @param controller Controller of the redemption request
+    /// @return assets Amount of assets returned
     function redeem(uint256 shares, address to, address controller) public virtual override returns (uint256 assets) {
         if (shares > maxRedeem(controller)) revert RedeemMoreThanMax();
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
         assets = claimable.convertToAssets(shares);
-        _withdraw(assets, shares, to, controller);
+        (assets,) = _withdraw(assets, shares, to, controller);
     }
 
+    /// @notice Claims processed redemption request for exact assets
+    /// @dev Can only be called by controller or approved operator
+    /// @param assets Exact amount of assets to withdraw
+    /// @param to Address to receive the assets
+    /// @param controller Controller of the redemption request
+    /// @return shares Amount of shares burned
     function withdraw(
         uint256 assets,
         address to,
@@ -235,26 +240,47 @@ abstract contract ERC7540 is ERC4626 {
         _validateController(controller);
         ERC7540_FilledRequest memory claimable = _claimableRedeemRequest[controller];
         shares = claimable.convertToSharesUp(assets);
-        _withdraw(assets, shares, to, controller);
+        (, shares) = _withdraw(assets, shares, to, controller);
     }
 
-    function pendingRedeemRequest(address controller) public view returns (uint256) {
+    /// @notice Returns the pending redemption request amount for a controller
+    /// @param controller Address to check pending redemption for
+    /// @return Amount of shares pending redemption
+    function pendingRedeemRequest(address controller) public view virtual returns (uint256) {
         return _pendingRedeemRequest[controller].unwrap();
     }
 
-    function pendingDepositRequest(address controller) public view returns (uint256) {
+    /// @notice Returns the pending deposit request amount for a controller
+    /// @param controller Address to check pending deposit for
+    /// @return Amount of assets pending deposit
+    function pendingDepositRequest(address controller) public view virtual returns (uint256) {
         return _pendingDepositRequest[controller].unwrap();
     }
 
-    function claimableDepositRequest(address controller) public view returns (uint256) {
+    /// @notice Returns the claimable deposit amount for a controller
+    /// @param controller Address to check claimable deposit for
+    /// @return Amount of assets available to claim
+    function claimableDepositRequest(address controller) public view virtual returns (uint256) {
         return maxDeposit(controller);
     }
 
-    function claimableRedeemRequest(address controller) public virtual returns (uint256) {
+    /// @notice Returns the claimable redemption amount for a controller
+    /// @param controller Address to check claimable redemption for
+    /// @return Amount of shares available to claim
+    function claimableRedeemRequest(address controller) public view virtual returns (uint256) {
         return maxRedeem(controller);
     }
 
-    function _deposit(uint256 assets, uint256 shares, address receiver, address controller) internal virtual {
+    function _deposit(
+        uint256 assets,
+        uint256 shares,
+        address receiver,
+        address controller
+    )
+        internal
+        virtual
+        returns (uint256 sharesReturn, uint256 assetsReturn)
+    {
         unchecked {
             _claimableDepositRequest[controller].assets -= assets;
             _claimableDepositRequest[controller].shares -= shares;
@@ -274,9 +300,19 @@ abstract contract ERC7540 is ERC4626 {
                 and(m, receiver)
             )
         }
+        return (shares, assets);
     }
 
-    function _withdraw(uint256 assets, uint256 shares, address receiver, address controller) internal virtual {
+    function _withdraw(
+        uint256 assets,
+        uint256 shares,
+        address receiver,
+        address controller
+    )
+        internal
+        virtual
+        returns (uint256 assetsReturn, uint256 sharesReturn)
+    {
         unchecked {
             _claimableRedeemRequest[controller].assets -= assets;
             _claimableRedeemRequest[controller].shares -= shares;
@@ -297,6 +333,7 @@ abstract contract ERC7540 is ERC4626 {
                 and(m, controller)
             )
         }
+        return (assets, shares);
     }
 
     function _requestDeposit(
@@ -310,7 +347,7 @@ abstract contract ERC7540 is ERC4626 {
         returns (uint256 requestId)
     {
         source;
-        asset().safeTransferFrom(owner, address(this), assets);
+        asset().safeTransferFrom(source, address(this), assets);
         _pendingDepositRequest[controller] = _pendingDepositRequest[controller].add(assets);
         emit DepositRequest(controller, owner, requestId, source, assets);
         return 0;

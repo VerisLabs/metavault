@@ -15,6 +15,8 @@ import { SingleXChainMultiVaultWithdraw, SingleXChainSingleVaultWithdraw } from 
 interface ISuperformGateway {
     function superPositions() external view returns (ISuperPositions);
 
+    function notifyRefund(uint256 superformId, uint256 amount) external;
+
     function totalpendingXChainInvests() external view returns (uint256);
 
     function totalPendingXChainWithdraws() external view returns (uint256);
@@ -77,7 +79,8 @@ interface ISuperformGateway {
         uint256[] memory amounts,
         address receiver,
         SingleXChainMultiVaultWithdraw memory config,
-        uint256 totalRequestedAssets
+        uint256 totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
     )
         external
         payable;
@@ -86,7 +89,8 @@ interface ISuperformGateway {
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         SingleVaultSFData[] memory singleVaultDatas,
-        uint256[] memory totalRequestedAssets
+        uint256[] memory totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
     )
         external
         payable;
@@ -95,7 +99,8 @@ interface ISuperformGateway {
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         MultiVaultSFData[] memory multiVaultDatas,
-        uint256[] memory totalRequestedAssets
+        uint256[] memory totalRequestedAssets,
+        uint256[][] memory requestedAssetsPerVault
     )
         external
         payable;

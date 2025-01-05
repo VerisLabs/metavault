@@ -12,14 +12,18 @@ import { MockERC4626Oracle } from "../helpers/mock/MockERC4626Oracle.sol";
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
-import { SuperformGateway } from "crosschain/Lib.sol";
 import { IMetaVault, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 
+import { ERC7540 } from "lib/Lib.sol";
 import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { ERC4626, ERC7540, MetaVault } from "src/MetaVault.sol";
 
+import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
+import { ERC7540Engine } from "modules/Lib.sol";
+import { ERC4626, MetaVault } from "src/MetaVault.sol";
+
+import { ERC20Receiver, SuperformGateway } from "crosschain/Lib.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
@@ -35,9 +39,8 @@ import {
     SUPERFORM_SUPERPOSITIONS_BASE,
     USDCE_BASE
 } from "src/helpers/AddressBook.sol";
-import { IERC4626Oracle } from "src/interfaces/Lib.sol";
+import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
-    Harvest,
     LiqRequest,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
@@ -54,6 +57,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using LibString for bytes;
 
     MockERC4626Oracle public oracle;
+    ERC7540Engine engine;
     MockSignerRelayer public relayer;
     SuperformGateway public gateway;
     uint64 baseChainId = 8453;
@@ -63,10 +67,13 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         relayer = MockSignerRelayer(address(config.signerRelayer));
         config.signerRelayer = relayer.signerAddress();
 
-        vault = new MetaVault(config);
+        vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+        vault.setGateway(address(gateway));
+        engine = new ERC7540Engine();
+        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
+        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
-        vault.setGateway(ISuperformGateway(address(gateway)));
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
         vault.grantRoles(users.alice, vault.ORACLE_ROLE());
@@ -75,6 +82,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         USDCE_BASE.safeApprove(address(vault), type(uint256).max);
 
         console2.log("vault address : %s", address(vault));
+        console2.log("recovery address : %s", gateway.recoveryAddress());
     }
 
     function _setupContractLabels() private {
@@ -82,11 +90,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vm.label(SUPERFORM_SUPERPOSITIONS_BASE, "SuperPositions");
         vm.label(SUPERFORM_PAYMENT_HELPER_BASE, "PaymentHelper");
         vm.label(SUPERFORM_PAYMASTER_BASE, "PayMaster");
-        //      vm.label(SUPERFORM_LAYERZERO_V2_IMPLEMENTATION_BASE, "LayerZeroV2Implementation");
-        //       vm.label(SUPERFORM_LAYERZERO_IMPLEMENTATION_BASE, "LayerZeroImplementation");
         vm.label(SUPERFORM_LAYERZERO_ENDPOINT_BASE, "LayerZeroEndpoint");
         vm.label(SUPERFORM_CORE_STATE_REGISTRY_BASE, "CoreStateRegistry");
-        //      vm.label(LAYERZERO_ULTRALIGHT_NODE_BASE, "UltraLightNode");
         vm.label(SUPERFORM_ROUTER_BASE, "SuperRouter");
         vm.label(address(vault), "MetaVault");
         vm.label(USDCE_BASE, "USDC");
@@ -95,7 +100,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function setUp() public override {
-        super._setUp("BASE", 22_567_511);
+        super._setUp("BASE", 24_643_414);
         super.setUp();
 
         _setUpTestEnvironment();
@@ -110,7 +115,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalDebt(), 0);
         assertEq(vault.managementFee(), 0);
         assertEq(vault.performanceFee(), 2000);
-        assertEq(vault.oracleFee(), 300);
+        assertEq(vault.oracleFee(), 0);
         assertEq(vault.hurdleRate(), 600);
         assertEq(vault.lastReport(), block.timestamp);
         assertEq(vault.treasury(), config.treasury);
@@ -149,7 +154,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -177,7 +182,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         vault.addVault({
             chainId: baseChainId,
@@ -185,7 +190,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(smUsdce),
             vaultDecimals: smUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -235,7 +240,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -259,7 +264,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalXChainAssets(), 0);
         assertEq(vault.totalLocalAssets(), 400 * _1_USDCE);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
         assertEq(vault.totalAssets(), 999_999_482);
         assertEq(vault.totalWithdrawableAssets(), 999_999_482);
         assertEq(vault.totalXChainAssets(), 599_999_482);
@@ -282,7 +287,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -295,16 +300,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.investSingleXChainSingleVault{ value: 100 ether }(req);
         assertEq(address(vault).balance, 0);
-    }
-
-    function test_revert_MetaVault_redeem_requestNotProcessed() public {
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
-
-        skip(config.sharesLockTime);
-        vm.startPrank(users.alice);
-        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
-        vm.expectRevert(MetaVault.RedeemNotProcessed.selector);
-        vault.redeem(sharesBalance, users.alice, users.alice);
     }
 
     function test_MetaVault_processRedeemRequest_from_idle() public {
@@ -338,7 +333,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -378,7 +373,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -398,7 +393,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         uint256 investAmount = 600 * _1_USDCE;
@@ -413,7 +408,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             req
         );
 
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
 
         vm.startPrank(users.alice);
 
@@ -430,6 +425,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         }
 
         {
+            bytes32 requestId;
             SingleXChainSingleVaultWithdraw memory sXsV;
             SingleXChainMultiVaultWithdraw memory sXmV;
             MultiXChainSingleVaultWithdraw memory mXsV;
@@ -437,28 +433,27 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
             (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
                 _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+            sXsV.outputAmount = 588 * _1_USDCE;
             uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
             sXsV.value = value;
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
             vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            requestId = gateway.getRequestsQueue()[0];
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
             (,,,,,, totalDebt,) = vault.vaults(superformId);
             assertEq(totalDebt, 0);
-        }
-        assertEq(vault.totalAssets(), 0);
-        assertEq(vault.totalSupply(), 0);
-        address receiver = gateway.getReceiver(users.alice, abi.encode(superformId));
-        assertEq(USDCE_BASE.balanceOf(receiver), 0);
-        assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-        assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
+            assertEq(vault.totalAssets(), 0);
+            assertEq(vault.totalSupply(), 0);
+            address receiver = gateway.getReceiver(requestId);
+            assertEq(USDCE_BASE.balanceOf(receiver), 0);
+            assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
 
-        deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
-        skip(config.processRedeemSettlement);
-        uint256[] memory superformIds = new uint256[](1);
-        superformIds[0] = superformId;
-        gateway.settleLiquidation(users.alice, superformIds);
+            deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
+            gateway.settleLiquidation(requestId, false);
+        }
         assertEq(vault.claimableRedeemRequest(users.alice), 999_999_689);
         uint256 assets = vault.redeem(999_999_689, users.alice, users.alice);
         assertEq(assets, 400 * _1_USDCE + 588 * _1_USDCE);
@@ -467,66 +462,21 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalIdle(), 0);
     }
 
-    function test_MetaVault_processRedeemRequest_signature() public {
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
-        skip(config.sharesLockTime);
-        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
-        SingleXChainSingleVaultWithdraw memory sXsV;
-        SingleXChainMultiVaultWithdraw memory sXmV;
-        MultiXChainSingleVaultWithdraw memory mXsV;
-        MultiXChainMultiVaultWithdraw memory mXmV;
-        uint256 nonce = 1;
-        uint256 deadline = block.timestamp;
-        (uint8 v, bytes32 r, bytes32 s) = relayer.sign(
-            MockSignerRelayer.SignatureParams({
-                controller: users.alice,
-                sXsV: sXsV,
-                sXmV: sXmV,
-                mXsV: mXsV,
-                mXmV: mXmV,
-                nonce: nonce,
-                deadline: deadline
-            })
-        );
-        vm.expectEmit(true, true, true, true);
-        emit ProcessRedeemRequest(users.alice, sharesBalance);
-        vault.processRedeemRequestWithSignature(
-            ProcessRedeemRequestWithSignatureParams({
-                controller: users.alice,
-                sXsV: sXsV,
-                sXmV: sXmV,
-                mXsV: mXsV,
-                mXmV: mXmV,
-                deadline: deadline,
-                v: v,
-                r: r,
-                s: s
-            })
-        );
-        assertEq(vault.totalSupply(), 0);
-        assertEq(vault.totalAssets(), 0);
-        assertEq(vault.totalIdle(), 0);
-        assertEq(vault.totalDebt(), 0);
-        assertEq(vault.claimableRedeemRequest(users.alice), sharesBalance);
-        assertEq(vault.pendingRedeemRequest(users.alice), 0);
-        vm.expectEmit(true, true, true, true);
-        emit Withdraw(users.alice, users.alice, users.alice, 1000 * _1_USDCE, sharesBalance);
-        uint256 assets = vault.redeem(sharesBalance, users.alice, users.alice);
-        assertEq(assets, 1000 * _1_USDCE);
-    }
-
-    function test_revert_MetaVault_harvest_VaultNotListed() public {
+    function test_MetaVault_processRedeemRequest_from_local_and_xchain_queue_failed() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(0))
+        });
         _depositAtomic(1000 * _1_USDCE, users.alice);
-        skip(vault.SECS_PER_YEAR());
-        Harvest[] memory mockHarvest = new Harvest[](1);
-        mockHarvest[0].chainId = uint64(1);
-        mockHarvest[0].vaultAddress = makeAddr("random address");
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
-        vm.expectRevert(MetaVault.VaultNotListed.selector);
-        vault.harvest(mockHarvest);
-    }
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
-    function test_MetaVault_harvest() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
@@ -539,48 +489,76 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 50,
-            oracle: IERC4626Oracle(address(oracle))
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
-
         uint256 investAmount = 600 * _1_USDCE;
-
         (SingleXChainSingleVaultStateReq memory req) =
             _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
-        req.superformData.amount = investAmount;
-
-        uint256 newSharesPrice = 2 * _1_USDCE;
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
 
-        vm.expectEmit(true, true, true, true);
-        emit Invest(investAmount);
+        req.superformData.amount = investAmount;
+
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             req
         );
 
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
+
         vm.startPrank(users.alice);
-        Harvest[] memory mockHarvest = new Harvest[](1);
-        mockHarvest[0].chainId = optimismChainId;
-        mockHarvest[0].vaultAddress = vaultAddress;
 
-        skip(vault.SECS_PER_YEAR());
-        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
+        vault.setSharesLockTime(0);
 
-        uint256 deductedFee = 50;
+        uint256 aliceBalance = vault.balanceOf(users.alice);
 
-        uint256 expectedPerformanceFees =
-            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
-        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
+        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
 
-        vm.expectEmit(true, true, true, true);
-        emit Report(optimismChainId, vaultAddress, 566_695_022);
-        vault.harvest(mockHarvest);
-        assertEq(vault.balanceOf(config.treasury), expectedMintedShares);
-        // assertApproxEq(vault.balanceOf(users.bob), 200 * _1_USDCE, 2);
+        {
+            oracle.setValues(
+                optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            );
+        }
+
+        {
+            bytes32 requestId;
+            SingleXChainSingleVaultWithdraw memory sXsV;
+            SingleXChainMultiVaultWithdraw memory sXmV;
+            MultiXChainSingleVaultWithdraw memory mXsV;
+            MultiXChainMultiVaultWithdraw memory mXmV;
+
+            (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
+                _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+            sXsV.outputAmount = 588 * _1_USDCE;
+            uint256 value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
+            sXsV.value = value;
+
+            vm.expectEmit(true, true, true, true);
+            emit ProcessRedeemRequest(users.alice, aliceBalance);
+            vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            requestId = gateway.getRequestsQueue()[0];
+
+            (,,,,,, uint128 totalDebt,) = vault.vaults(1);
+            assertEq(totalDebt, 0);
+            (,,,,,, totalDebt,) = vault.vaults(superformId);
+            assertEq(totalDebt, 0);
+            assertEq(vault.totalAssets(), 0);
+            assertEq(vault.totalSupply(), 0);
+
+            address receiver = gateway.getReceiver(requestId);
+            assertEq(USDCE_BASE.balanceOf(receiver), 0);
+            assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
+
+            _mintSuperpositions(receiver, superformId, shares);
+
+            assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
+            (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
+            assertApproxEq(vaultDebt, 600 * _1_USDCE, _1_USDCE);
+            assertEq(vault.totalDebt(), vaultDebt);
+            assertApproxEq(vault.totalXChainAssets(), 600 * _1_USDCE, _1_USDCE);
+        }
     }
 
     function test_MetaVault_addVault() public {
@@ -591,7 +569,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         oracle.setValues(newChainId, address(newVault), 1e6, block.timestamp, address(1));
         vm.expectEmit(true, true, true, true);
         emit AddVault(newChainId, newVault);
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, ISharePriceOracle(address(oracle)));
 
         assertTrue(vault.isVaultListed(newVault));
     }
@@ -603,7 +581,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint8 newDecimals = 18;
 
         vm.expectRevert();
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, IERC4626Oracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, ISharePriceOracle(address(oracle)));
     }
 
     function test_revert_MetaVault_addVault_alreadyListed() public {
@@ -615,7 +593,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: decimals,
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
         vm.expectRevert(MetaVault.VaultAlreadyListed.selector);
         vault.addVault({
@@ -624,17 +602,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(yUsdce),
             vaultDecimals: decimals,
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
-    }
-
-    function test_MetaVault_setOracle() public {
-        address newOracle = address(0x789);
-        uint64 chainId = 42;
-
-        vm.expectEmit(true, true, true, true);
-        emit SetOracle(chainId, newOracle);
-        vault.setOracle(chainId, newOracle);
     }
 
     function test_MetaVault_setSharesLockTime() public {
@@ -694,7 +663,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         assertTrue(vault.isOperator(users.alice, users.bob));
 
-        // Now bob should be able to deposit on behalf of alice
         vm.startPrank(users.bob);
         vault.deposit(amount, users.alice, users.alice);
     }
@@ -704,24 +672,65 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setOperator(users.alice, true);
     }
 
+    function test_notifyFailedInvest() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory investReq =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        investReq.superformData.amount = investAmount;
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            investReq
+        );
+
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalIdle(), 400 * _1_USDCE);
+        assertEq(gateway.totalpendingXChainInvests(), 600 * _1_USDCE);
+
+        deal(USDCE_BASE, users.alice, investAmount);
+        vm.startPrank(users.alice);
+        USDCE_BASE.safeApprove(address(gateway), type(uint256).max);
+        gateway.notifyFailedInvest(superformId, investAmount);
+        vm.stopPrank();
+
+        assertEq(gateway.totalpendingXChainInvests(), 0);
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalIdle(), 1000 * _1_USDCE);
+    }
+
     function test_divestSingleDirectSingleVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
-        // Setup local vault
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
-        // Deposit and invest
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
-        // Divest
         uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
         uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1; // Allow 1 wei slippage
 
@@ -740,14 +749,13 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         MockERC4626 smUsdce = new MockERC4626(USDCE_BASE, "Sommelier USDCE", "smUSDCe", true, 0);
 
-        // Setup two local vaults
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
         vault.addVault({
@@ -756,10 +764,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: address(smUsdce),
             vaultDecimals: smUsdce.decimals(),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(0))
+            oracle: ISharePriceOracle(address(0))
         });
 
-        // Deposit and invest in both vaults
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 amountPerVault = 400 * _1_USDCE;
 
@@ -777,7 +784,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
 
-        // Prepare divest parameters
         address[] memory divestVaults = new address[](2);
         divestVaults[0] = address(yUsdce);
         divestVaults[1] = address(smUsdce);
@@ -790,10 +796,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         minDivestAmounts[0] = yUsdce.convertToAssets(divestShares[0]);
         minDivestAmounts[1] = smUsdce.convertToAssets(divestShares[1]);
 
-        // Divest from both vaults
         uint256[] memory divestAssets = vault.divestSingleDirectMultiVault(divestVaults, divestShares, minDivestAmounts);
 
-        // Validate divest
         assertEq(divestAssets.length, 2);
         assertGt(divestAssets[0], 0);
         assertGt(divestAssets[1], 0);
@@ -806,7 +810,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
 
-        // Setup cross-chain vault
         oracle.setValues(
             optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
         );
@@ -816,10 +819,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
-        // Deposit and invest cross-chain
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
@@ -831,18 +833,17 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             investReq
         );
-        _mintSuperpositions(address(gateway), superformId, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
 
         uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
 
-        // Prepare divest request
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
         VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
-        // Execute divest
+        divestReq.superformData.outputAmount = expectedDivestedValue;
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValue);
 
@@ -852,9 +853,17 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
+
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
+        gateway.settleDivest(requestId, false);
+
+        assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
-    function test_MetaVault_management_fees() public {
+    function test_divestSingleXChainSingleVault_failed() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
@@ -868,47 +877,464 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
             deductedFees: 0,
-            oracle: IERC4626Oracle(address(oracle))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
-
         uint256 investAmount = 600 * _1_USDCE;
-
-        (SingleXChainSingleVaultStateReq memory req) =
+        SingleXChainSingleVaultStateReq memory investReq =
             _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
-        req.superformData.amount = investAmount;
+        investReq.superformData.amount = investAmount;
 
-        uint256 newSharesPrice = 2 * _1_USDCE;
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            investReq
+        );
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
+
+        uint256 value = _getDivestSingleXChainSingleVaultValue(superformId, investAmount);
+
+        SingleXChainSingleVaultStateReq memory divestReq =
+            _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
+        uint256 lastSharePrice = report.sharePrice;
+        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
+        divestReq.superformData.outputAmount = expectedDivestedValue;
 
         vm.expectEmit(true, true, true, true);
-        emit Invest(investAmount);
-        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
-            req
-        );
+        emit Divest(expectedDivestedValue);
 
-        _mintSuperpositions(address(gateway), superformId, shares);
         vm.startPrank(users.alice);
-        Harvest[] memory mockHarvest = new Harvest[](1);
-        mockHarvest[0].chainId = optimismChainId;
-        mockHarvest[0].vaultAddress = vaultAddress;
+        vault.divestSingleXChainSingleVault{ value: value }(divestReq);
 
-        skip(vault.SECS_PER_YEAR());
-        oracle.setValues(optimismChainId, vaultAddress, newSharesPrice, block.timestamp, users.bob);
+        assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE);
+        assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
 
-        uint256 deductedFee = 50;
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        address receiver = gateway.getReceiver(requestId);
+        bytes32 key = ERC20Receiver(receiver).key();
+        _mintSuperpositions(receiver, superformId, shares);
 
-        uint256 expectedPerformanceFees =
-            FixedPointMathLib.mulDiv(566_695_022, (vault.performanceFee() - deductedFee), MAX_BPS);
-        uint256 expectedMintedShares = vault.convertToShares(expectedPerformanceFees);
+        assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
+        (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
+        assertEq(vaultDebt, expectedDivestedValue);
+        assertEq(vault.totalDebt(), vaultDebt);
+        assertApproxEq(vault.totalXChainAssets(), 600 * _1_USDCE, 1 * _1_USDCE);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
+    }
+
+    function test_MetaVault_exitFees_withProfit() public {
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        uint256 profit = 100 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, profit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        assertGt(vault.sharePrice(), 1e6);
+
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
+        uint256 totalAssets = depositAmount + profit;
+
+        uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 excessReturn = profit > hurdleReturn ? profit - hurdleReturn : 0;
+
+        uint256 expectedPerformanceFees = excessReturn * vault.performanceFee() / vault.MAX_BPS();
+        uint256 expectedManagementFees =
+            (totalAssets * duration * vault.managementFee()) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 expectedOracleFees =
+            (totalAssets * duration * vault.oracleFee()) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        uint256 totalExpectedFees = expectedPerformanceFees + expectedManagementFees + expectedOracleFees;
+        uint256 totalExpectedFeesShares = vault.convertToShares(totalExpectedFees);
+
+        if (totalExpectedFees > excessReturn) {
+            totalExpectedFees = excessReturn;
+            uint256 totalFeeBps = vault.performanceFee() + vault.managementFee() + vault.oracleFee();
+            expectedPerformanceFees = (expectedPerformanceFees * excessReturn) / totalFeeBps;
+            expectedManagementFees = (expectedManagementFees * excessReturn) / totalFeeBps;
+            expectedOracleFees = (expectedOracleFees * excessReturn) / totalFeeBps;
+        }
+
+        vm.expectEmit(true, true, true, true);
+        emit AssessFees(users.alice, expectedManagementFees, expectedPerformanceFees - 1, expectedOracleFees);
+
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+
+        assertEq(receivedAssets, totalAssets - totalExpectedFees);
+
+        assertApproxEq(vault.balanceOf(vault.treasury()), totalExpectedFeesShares, 1);
+    }
+
+    function test_MetaVault_chargeGlobalFees_positives() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        skip(180 days);
+
+        uint256 profit = 100 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, profit);
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
+
+        uint256 totalAssets = vault.totalAssets();
+        uint256 lastSharePrice = vault.sharePriceWaterMark();
+        uint256 duration = block.timestamp - vault.lastFeesCharged();
+        uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+
+        uint256 managementFees =
+            totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 totalFees = managementFees + oracleFees;
+
+        totalAssets += managementFees + oracleFees;
+
+        int256 assetsDelta = int256(totalAssets) - int256(depositAmount);
+        console2.log("[test] assets delta : ", assetsDelta);
+
+        uint256 performanceFees;
+        if (assetsDelta > 0) {
+            uint256 hurdleReturn =
+                (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+            uint256 totalReturn = uint256(assetsDelta);
+            console2.log("[test] current share price : ", vault.sharePrice());
+            console2.log("[test] watermark share price : ", lastSharePrice);
+            if (vault.sharePrice() > lastSharePrice && totalReturn > hurdleReturn) {
+                uint256 excessReturn = totalReturn - hurdleReturn;
+                performanceFees = excessReturn * vault.performanceFee() / vault.MAX_BPS();
+                totalFees += performanceFees;
+            }
+        }
+
+        vm.startPrank(users.alice);
+        vm.expectEmit(true, true, true, true);
+        emit AssessFees(address(vault), managementFees, performanceFees, oracleFees);
+        uint256 actualFees = vault.chargeGlobalFees();
+        vm.stopPrank();
+
+        assertEq(actualFees, totalFees, "Total fees charged incorrect");
+        assertEq(
+            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
+            vault.convertToShares(totalFees),
+            "Treasury shares increase incorrect"
+        );
+        assertEq(vault.lastFeesCharged(), block.timestamp, "Last fees charged timestamp not updated");
+    }
+
+    function test_MetaVault_chargeGlobalFees_BelowWatermark() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(0))
+        });
 
         vault.setManagementFee(100);
+        vault.setOracleFee(50);
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
 
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        uint256 initialProfit = 200 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, initialProfit);
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), initialProfit);
+        vault.donate(initialProfit);
+        vm.stopPrank();
+
+        vm.prank(users.alice);
+        vault.chargeGlobalFees();
+        uint256 highWatermark = vault.sharePriceWaterMark();
+        vm.stopPrank();
+
+        uint256 loss = 250 * _1_USDCE;
+        uint256 lostShares = yUsdce.convertToShares(loss);
+        vm.startPrank(address(vault));
+        address(yUsdce).safeTransfer(users.bob, lostShares);
+        vm.stopPrank();
+
+        uint256 recovery = 50 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, recovery);
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), recovery);
+        vault.donate(recovery);
+        vm.stopPrank();
+
+        skip(180 days);
+
+        assertLt(vault.sharePrice(), highWatermark);
+
+        uint256 totalAssets = vault.totalAssets();
+        uint256 duration = block.timestamp - vault.lastFeesCharged();
+        uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+
+        uint256 managementFees =
+            totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 totalFees = managementFees + oracleFees;
+
+        vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
-        emit Report(optimismChainId, vaultAddress, 566_695_022);
-        vault.harvest(mockHarvest);
-        assertEq(vault.balanceOf(config.treasury), 83_387_889);
+        emit AssessFees(address(vault), managementFees, 0, oracleFees); // No performance fees
+        uint256 actualFees = vault.chargeGlobalFees();
+        vm.stopPrank();
+
+        assertEq(actualFees, totalFees, "Total fees charged incorrect");
+        assertEq(
+            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
+            vault.convertToShares(totalFees),
+            "Treasury shares increase incorrect"
+        );
+    }
+
+    function test_MetaVault_chargeGlobalFees_BelowHurdleRate() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        skip(180 days);
+
+        uint256 smallProfit = 10 * _1_USDCE; // Very small profit
+        deal(USDCE_BASE, users.bob, smallProfit);
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), smallProfit);
+        vault.donate(smallProfit);
+        vm.stopPrank();
+
+        uint256 totalAssets = vault.totalAssets();
+        uint256 duration = block.timestamp - vault.lastFeesCharged();
+        uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+
+        uint256 managementFees =
+            totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        totalAssets -= managementFees + oracleFees;
+
+        uint256 hurdleReturn = (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        assertLe(smallProfit, hurdleReturn, "Profit should be below hurdle rate");
+
+        vm.startPrank(users.alice);
+        vm.expectEmit(true, true, true, true);
+        emit AssessFees(address(vault), managementFees, 0, oracleFees); // No performance fees
+        uint256 actualFees = vault.chargeGlobalFees();
+        vm.stopPrank();
+
+        assertEq(actualFees, managementFees + oracleFees, "Total fees charged incorrect");
+        assertEq(
+            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
+            vault.convertToShares(managementFees + oracleFees),
+            "Treasury shares increase incorrect"
+        );
+    }
+
+    function test_MetaVault_chargeGlobalFees_NoProfit() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        skip(180 days);
+
+        uint256 totalAssets = vault.totalAssets();
+        uint256 duration = block.timestamp - vault.lastFeesCharged();
+        uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+
+        uint256 managementFees =
+            totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        vm.startPrank(users.alice);
+        vm.expectEmit(true, true, true, true);
+        emit AssessFees(address(vault), managementFees, 0, oracleFees);
+        uint256 actualFees = vault.chargeGlobalFees();
+        vm.stopPrank();
+
+        assertEq(actualFees, managementFees + oracleFees, "Total fees charged incorrect");
+        assertEq(
+            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
+            vault.convertToShares(managementFees + oracleFees),
+            "Treasury shares increase incorrect"
+        );
+    }
+
+    function test_MetaVault_exitFees_noExcessReturn() public {
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        vault.setOracleFee(0);
+
+        uint256 profit = 1 * _1_USDCE; // Very small profit
+        deal(USDCE_BASE, users.bob, profit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
+        uint256 totalAssets = depositAmount + profit;
+        uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        assertLe(profit, hurdleReturn);
+
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+
+        assertEq(receivedAssets, totalAssets - 1, "1");
+        assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
+    }
+
+    function test_MetaVault_exitFees_belowWatermark_noPerformanceFees() public {
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        uint256 initialProfit = 100 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, initialProfit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), initialProfit);
+        vault.donate(initialProfit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        uint256 watermark = vault.sharePrice();
+
+        uint256 loss = 150 * _1_USDCE;
+        vm.startPrank(address(vault));
+        USDCE_BASE.safeTransfer(users.bob, loss);
+        MetaVaultWrapper(payable(address(vault))).setTotalIdle(uint128((1000 + 100 - 150) * _1_USDCE));
+        vm.stopPrank();
+
+        uint256 recoveryProfit = 50 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, recoveryProfit);
+
+        vm.startPrank(users.bob);
+        USDCE_BASE.safeApprove(address(vault), recoveryProfit);
+        vault.donate(recoveryProfit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+
+        assertLt(vault.sharePrice(), watermark);
+
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+
+        uint256 totalAssets = depositAmount + initialProfit - loss + recoveryProfit;
+        assertEq(receivedAssets, totalAssets);
+        assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
+    }
+
+    function test_MetaVault_exitFees_feeExemption() public {
+        vault.setManagementFee(100);
+        vault.setOracleFee(50);
+        vault.setManagementFee(100);
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        vm.startPrank(users.bob);
+        uint256 performanceFeeExemption = 1000; // 10%
+        uint256 managementFeeExemption = 500; // 5%
+        uint256 oracleFeeExemption = 200; // 2%
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+        vault.setFeeExcemption(users.alice, managementFeeExemption, performanceFeeExemption, oracleFeeExemption);
+
+        vm.startPrank(users.bob);
+        uint256 profit = 2000 * _1_USDCE;
+        deal(USDCE_BASE, users.bob, profit);
+        USDCE_BASE.safeApprove(address(vault), profit);
+        vault.donate(profit);
+        vm.stopPrank();
+
+        vm.startPrank(users.alice);
+        skip(config.sharesLockTime);
+
+        uint256 sharesBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(sharesBalance, users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+
+        uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
+        uint256 totalAssets = depositAmount + profit;
+
+        uint256 hurdleReturn = (totalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 excessReturn = profit - hurdleReturn;
+
+        uint256 expectedPerformanceFees =
+            excessReturn * _sub0(vault.performanceFee(), performanceFeeExemption) / vault.MAX_BPS();
+        uint256 expectedManagementFees = (totalAssets * duration * _sub0(vault.managementFee(), managementFeeExemption))
+            / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 expectedOracleFees = (totalAssets * duration * _sub0(vault.oracleFee(), oracleFeeExemption))
+            / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+
+        uint256 totalExpectedFees = expectedPerformanceFees + expectedManagementFees + expectedOracleFees;
+        uint256 totalExpectedFeesShares = vault.convertToShares(totalExpectedFees);
+
+        uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
+        assertApproxEq(receivedAssets, 1000 * _1_USDCE + profit - totalExpectedFees, 2);
+        assertApproxEq(address(vault).balanceOf(vault.treasury()), totalExpectedFeesShares, 2);
     }
 }
