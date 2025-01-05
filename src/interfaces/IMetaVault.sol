@@ -144,10 +144,6 @@ interface IMetaVault {
         external
         payable;
 
-    function processRedeemRequestWithSignature(ProcessRedeemRequestWithSignatureParams calldata params)
-        external
-        payable;
-
     function investSingleDirectSingleVault(
         address vaultAddress,
         uint256 assets,
@@ -229,9 +225,13 @@ interface IMetaVault {
 
     function settleXChainInvest(uint256 superformId, uint256 bridgedAssets) external;
 
-    function settleXChainDivest(uint256 superformId, uint256 withdrawn) external;
+    function settleXChainDivest(uint256 withdrawn) external;
 
     function multicall(bytes[] calldata data) external returns (bytes[] memory);
 
     function addFunction(bytes4, address, bool) external;
+
+    function lastFeesCharged() external view returns (uint256);
+
+    function chargeGlobalFees() external returns (uint256);
 }

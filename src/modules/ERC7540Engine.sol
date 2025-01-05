@@ -16,7 +16,6 @@ import {
     MultiVaultSFData,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestWithSignatureParams,
     SingleDirectMultiVaultStateReq,
     SingleDirectSingleVaultStateReq,
     SingleVaultSFData,
@@ -325,7 +324,6 @@ contract ERC7540Engine is Base {
         cache.totalDebt = _totalDebt;
         cache.assets = convertToAssets(config.shares);
         cache.totalAssets = totalAssets();
-        bool settle;
 
         // Cannot process more assets than the
         if (cache.assets > cache.totalAssets - gateway.totalpendingXChainInvests()) {
@@ -429,7 +427,6 @@ contract ERC7540Engine is Base {
                             // reduce vault debt
                             vaults[superformId].totalDebt =
                                 _sub0(vaults[superformId].totalDebt, cache.assetsPerVault[chainIndex][0]).toUint128();
-                            settle = true;
                             break;
                         }
                     }
@@ -437,7 +434,7 @@ contract ERC7540Engine is Base {
                     uint256[] memory superformIds;
                     uint256[] memory amounts;
                     uint64 chainId;
-                    for (uint256 i = 0; i < cache.dstVaults.length; ++i) {
+                    for (uint256 i = 0; i < N_CHAINS; ++i) {
                         if (DST_CHAINS[i] == THIS_CHAIN_ID) continue;
                         if (cache.lens[i] > 0) {
                             chainId = DST_CHAINS[i];
@@ -455,9 +452,14 @@ contract ERC7540Engine is Base {
                             }
                             // Withdraw from multiple vaults asynchronously(crosschain)
                             _liquidateSingleXChainMultiVault(
-                                chainId, superformIds, amounts, config.controller, config.sXmV, totalDebtReduction
+                                chainId,
+                                superformIds,
+                                amounts,
+                                config.controller,
+                                config.sXmV,
+                                totalDebtReduction,
+                                _toDynamicUint256Array(cache.assetsPerVault[i], cache.lens[i])
                             );
-                            settle = true;
                             break;
                         }
                     }
@@ -483,9 +485,9 @@ contract ERC7540Engine is Base {
                             ++lastChainsIndex;
                         }
                     }
-                    uint256[] memory totalDebtReduction = new uint256[](chainsLen);
-                    for (uint256 i = 0; i < chainsLen; i++) {
-                        totalDebtReduction[i] = cache.assetsPerVault[i][0];
+                    uint256[] memory totalDebtReductions = new uint256[](chainsLen);
+                    for (uint256 i = 0; i < N_CHAINS; i++) {
+                        totalDebtReductions[i] = cache.assetsPerVault[i][0];
                         singleVaultDatas[i] = SingleVaultSFData({
                             superformId: cache.dstVaults[i][0],
                             amount: cache.sharesPerVault[i][0],
@@ -504,9 +506,8 @@ contract ERC7540Engine is Base {
                             _sub0(vaults[cache.dstVaults[i][0]].totalDebt, cache.assetsPerVault[i][0]).toUint128();
                     }
                     _liquidateMultiDstSingleVault(
-                        ambIds, dstChainIds, singleVaultDatas, config.mXsV.value, totalDebtReduction
+                        ambIds, dstChainIds, singleVaultDatas, config.mXsV.value, totalDebtReductions
                     );
-                    settle = true;
                 }
                 // If its multi-vault
                 else {
@@ -528,8 +529,9 @@ contract ERC7540Engine is Base {
                             ++lastChainsIndex;
                         }
                     }
-                    uint256[] memory totalDebtReduction = new uint256[](chainsLen);
-                    for (uint256 i = 0; i < chainsLen; i++) {
+                    uint256[] memory totalDebtReductions = new uint256[](chainsLen);
+                    uint256[][] memory debtReductionsPerVault = new uint256[][](chainsLen);
+                    for (uint256 i = 0; i < N_CHAINS; i++) {
                         bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
                         uint256[] memory superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
                         multiVaultDatas[i] = MultiVaultSFData({
@@ -546,11 +548,11 @@ contract ERC7540Engine is Base {
                             extraFormData: ""
                         });
                         ambIds[i] = config.mXmV.ambIds[i];
-
+                        debtReductionsPerVault[i] = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
                         for (uint256 j = 0; j < superformIds.length;) {
                             vaults[superformIds[j]].totalDebt =
                                 _sub0(vaults[superformIds[j]].totalDebt, cache.assetsPerVault[i][j]).toUint128();
-                            totalDebtReduction[i] += cache.assetsPerVault[i][j];
+                            totalDebtReductions[i] += cache.assetsPerVault[i][j];
                             unchecked {
                                 ++j;
                             }
@@ -558,23 +560,16 @@ contract ERC7540Engine is Base {
                     }
                     // Withdraw from multiple vaults and chains asynchronously
                     _liquidateMultiDstMultiVault(
-                        ambIds, dstChainIds, multiVaultDatas, config.mXmV.value, totalDebtReduction
+                        ambIds,
+                        dstChainIds,
+                        multiVaultDatas,
+                        config.mXmV.value,
+                        totalDebtReductions,
+                        debtReductionsPerVault
                     );
-                    settle = true;
                 }
             }
         }
-
-        // If there's any crosschain redeem going on start settlement
-        if (settle) {
-            _requestRedeemSettlementCheckpoint[config.controller] = block.timestamp;
-        } else {
-            // Adjust so no dust is left
-            cache.sharesFulfilled = config.shares;
-        }
-
-        // Unlock redeem
-        redeemLocked[config.controller] = false;
 
         // Optimistically deduct all assets to withdraw from the total
         _totalIdle = cache.totalIdle.toUint128();
@@ -582,7 +577,6 @@ contract ERC7540Engine is Base {
         _totalDebt = cache.totalDebt.toUint128();
 
         emit ProcessRedeemRequest(config.controller, config.shares);
-
         // Burn all shares from this contract(they already have been transferred)
         _burn(address(this), config.shares);
         // Fulfill request with instant withdrawals only
@@ -665,12 +659,13 @@ contract ERC7540Engine is Base {
         uint256[] memory amounts,
         address receiver,
         SingleXChainMultiVaultWithdraw memory config,
-        uint256 totalDebtReduction
+        uint256 totalDebtReduction,
+        uint256[] memory debtReductionPerVault
     )
         private
     {
         gateway.liquidateSingleXChainMultiVault{ value: config.value }(
-            chainId, superformIds, amounts, receiver, config, totalDebtReduction
+            chainId, superformIds, amounts, receiver, config, totalDebtReduction, debtReductionPerVault
         );
     }
 
@@ -684,11 +679,13 @@ contract ERC7540Engine is Base {
         uint64[] memory dstChainIds,
         SingleVaultSFData[] memory singleVaultDatas,
         uint256 value,
-        uint256[] memory totalDebtReduction
+        uint256[] memory totalDebtReductions
     )
         private
     {
-        gateway.liquidateMultiDstSingleVault{ value: value }(ambIds, dstChainIds, singleVaultDatas, totalDebtReduction);
+        gateway.liquidateMultiDstSingleVault{ value: value }(
+            ambIds, dstChainIds, singleVaultDatas, totalDebtReductions, totalDebtReductions
+        );
     }
 
     /// @dev Initiates withdrawals from multiple vaults on multiple different chains
@@ -701,10 +698,13 @@ contract ERC7540Engine is Base {
         uint64[] memory dstChainIds,
         MultiVaultSFData[] memory multiVaultDatas,
         uint256 value,
-        uint256[] memory totalDebtReduction
+        uint256[] memory totalDebtReduction,
+        uint256[][] memory debtReductionsPerVault
     )
         private
     {
-        gateway.liquidateMultiDstMultiVault{ value: value }(ambIds, dstChainIds, multiVaultDatas, totalDebtReduction);
+        gateway.liquidateMultiDstMultiVault{ value: value }(
+            ambIds, dstChainIds, multiVaultDatas, totalDebtReduction, debtReductionsPerVault
+        );
     }
 }

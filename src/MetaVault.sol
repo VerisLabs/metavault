@@ -72,7 +72,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     event SettleXChainInvest(uint256 indexed superformId, uint256 assets);
 
     /// @dev Emitted when cross-chain investment is settled
-    event SettleXChainDivest(uint256 indexed superformId, uint256 assets);
+    event SettleXChainDivest(uint256 assets);
 
     /// @dev Emitted when investing vault idle assets
     event Report(uint64 indexed chainId, address indexed vault, int256 amount);
@@ -91,9 +91,6 @@ contract MetaVault is MultiFacetProxy, Multicallable {
 
     /// @dev Emitted when updating the oracle fee
     event SetOracleFee(uint16 fee);
-
-    // @dev Emitted when updating the recovery address
-    event SetRecoveryAddress(address recoveryAddress);
 
     /// @dev Emitted when the emergency shutdown state is changed
     event EmergencyShutdown(bool enabled);
@@ -143,7 +140,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     }
 
     /// @notice Modifier to update the share price water-mark before running a function
-    modifier updateWatermark() {
+    modifier updateGlobalWatermark() {
         _;
         uint256 sp = sharePrice();
         assembly {
@@ -157,14 +154,14 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         _name = config.name;
         _symbol = config.symbol;
         treasury = config.treasury;
+        isOperator[treasury][address(this)] = true;
+        emit OperatorSet(treasury, address(this), true);
         managementFee = config.managementFee;
         performanceFee = config.performanceFee;
         oracleFee = config.oracleFee;
-        recoveryAddress = config.recoveryAddress;
         sharesLockTime = config.sharesLockTime;
-        processRedeemSettlement = config.processRedeemSettlement;
         lastReport = block.timestamp;
-        hurdleRate = config.assetHurdleRate;
+        _hurdleRateOracle = config.hurdleRateOracle;
 
         // Try to get asset decimals, fallback to default if unsuccessful
         (bool success, uint8 result) = _tryGetAssetDecimals(config.asset);
@@ -176,12 +173,17 @@ contract MetaVault is MultiFacetProxy, Multicallable {
             chainIndexes[DST_CHAINS[i]] = i;
         }
 
+        lastFeesCharged = block.timestamp;
+
         // Initialize ownership and grant admin role
         _initializeOwner(msg.sender);
         _grantRoles(msg.sender, ADMIN_ROLE);
 
         // Initialize signer relayer
         signerRelayer = config.signerRelayer;
+
+        // Set initial watermark
+        sharePriceWaterMark = 10 ** decimals();
     }
 
     /// @notice Sets the gateway contract for cross-chain communication
@@ -209,7 +211,6 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     )
         public
         override
-        updateWatermark
         noEmergencyShutdown
         returns (uint256 requestId)
     {
@@ -239,12 +240,11 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     )
         public
         override
-        updateWatermark
         noEmergencyShutdown
         returns (uint256 shares)
     {
-        shares = super.deposit(assets, to, controller);
         uint256 sharesBalance = balanceOf(to);
+        shares = super.deposit(assets, to, controller);
         // Start shares lock time
         _lockShares(to, sharesBalance, shares);
         _afterDeposit(assets, shares);
@@ -272,7 +272,6 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     )
         public
         override
-        updateWatermark
         noEmergencyShutdown
         returns (uint256 assets)
     {
@@ -310,14 +309,11 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     )
         public
         override
-        updateWatermark
         returns (uint256 requestId)
     {
         // Require deposited shares arent locked
         _checkSharesLocked(controller);
         requestId = super.requestRedeem(shares, controller, owner);
-        // Lock redeem till the request is processed
-        redeemLocked[controller] = true;
     }
 
     /// @dev Redeems shares for assets, ensuring all settled requests are fulfilled
@@ -333,12 +329,8 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         public
         override
         nonReentrant
-        updateWatermark
         returns (uint256 assets)
     {
-        _checkRedeemProcessed(controller);
-        uint256 entrySharePrice = positions[controller];
-        uint256 currentSharePrice = sharePrice();
         assets = super.redeem(shares, receiver, controller);
     }
 
@@ -354,14 +346,13 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     )
         public
         override
-        updateWatermark
         nonReentrant
         returns (uint256 shares)
     {
         return super.withdraw(assets, receiver, controller);
     }
 
-    struct TempData {
+    struct TempWithdrawData {
         uint256 entrySharePrice;
         uint256 currentSharePrice;
         int256 assetsDelta;
@@ -386,7 +377,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         override
         returns (uint256 assetsReturn, uint256 sharesReturn)
     {
-        TempData memory temp;
+        TempWithdrawData memory temp;
         // Get the price metrics needed for calculations
         temp.entrySharePrice = positions[controller];
         temp.currentSharePrice = sharePrice();
@@ -397,11 +388,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
             _claimableRedeemRequest[controller].shares -= shares;
         }
 
-        // Calculate the asset's value change since entry
-        // This gives us the raw profit/loss in asset terms
-        temp.assetsDelta = int256(assets) - (int256(shares) * int256(temp.entrySharePrice) / int256(10 ** decimals()));
-
-        temp.duration = block.timestamp - lastRedeem[controller];
+        temp.duration = block.timestamp - Math.max(lastRedeem[controller], lastFeesCharged);
         lastRedeem[controller] = block.timestamp;
 
         // Get fee exemptions for this controller
@@ -409,46 +396,44 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         temp.managementFeeExempt = managementFeeExempt[controller];
         temp.oracleFeeExempt = oracleFeeExempt[controller];
 
+        // Calculate time-based fees (management & oracle)
+        // These are charged on total assets, prorated for the time period
+        temp.managementFees =
+            (assets * temp.duration).fullMulDiv(_sub0(managementFee, temp.managementFeeExempt), SECS_PER_YEAR) / MAX_BPS;
+        temp.oracleFees =
+            (assets * temp.duration).fullMulDiv(_sub0(oracleFee, temp.oracleFeeExempt), SECS_PER_YEAR) / MAX_BPS;
+        assets -= temp.managementFees + temp.oracleFees;
+        temp.totalFees += temp.managementFees + temp.oracleFees;
+
+        // Calculate the asset's value change since entry
+        // This gives us the raw profit/loss in asset terms
+        temp.assetsDelta = int256(assets) - (int256(shares) * int256(temp.entrySharePrice) / int256(10 ** decimals()));
+
         // Only calculate fees if there's a profit
         if (temp.assetsDelta > 0) {
-            // Calculate returns relative to hurdle rate
-            uint256 hurdleReturn = (assets * hurdleRate * temp.duration) / SECS_PER_YEAR / MAX_BPS;
             uint256 totalReturn = uint256(temp.assetsDelta);
+            // Calculate returns relative to hurdle rate
+            uint256 hurdleReturn = (assets * hurdleRate()).fullMulDiv(temp.duration, SECS_PER_YEAR) / MAX_BPS;
             uint256 excessReturn;
 
             // Only charge performance fees if:
             // 1. Current share price is not below
             // 2. Returns exceed hurdle rate
-            if (temp.currentSharePrice >= sharePriceWaterMark && totalReturn > hurdleReturn) {
+            if (temp.currentSharePrice > sharePriceWaterMark && totalReturn > hurdleReturn) {
                 // Only charge performance fees on returns above hurdle rate
                 excessReturn = totalReturn - hurdleReturn;
 
                 temp.performanceFees = excessReturn * _sub0(performanceFee, temp.performanceFeeExempt) / MAX_BPS;
             }
-
-            // Calculate time-based fees (management & oracle)
-            // These are charged on total assets, prorated for the time period
-            temp.managementFees =
-                assets * temp.duration * _sub0(managementFee, temp.managementFeeExempt) / SECS_PER_YEAR / MAX_BPS;
-            temp.oracleFees = assets * temp.duration * _sub0(oracleFee, temp.oracleFeeExempt) / SECS_PER_YEAR / MAX_BPS;
-
             // Calculate total fees
-            temp.totalFees = temp.performanceFees + temp.managementFees + temp.oracleFees;
-
-            // Ensure fees don't bring return below hurdle rate
-            if (temp.totalFees > excessReturn) {
-                temp.totalFees = excessReturn;
-                // Proportionally reduce each fee to maintain ratios
-                uint256 totalFeeBps = performanceFee + managementFee + oracleFee;
-                temp.performanceFees = (temp.performanceFees * excessReturn) / totalFeeBps;
-                temp.managementFees = (temp.managementFees * excessReturn) / totalFeeBps;
-                temp.oracleFees = (temp.oracleFees * excessReturn) / totalFeeBps;
-            }
+            temp.totalFees += temp.performanceFees;
         }
 
         // Transfer fees to treasury if any were charged
         if (temp.totalFees > 0) {
-            asset().safeTransfer(treasury, temp.totalFees);
+            // mint shares for treasury
+            _mint(treasury, convertToShares(temp.totalFees));
+            _afterDeposit(temp.totalFees, 0);
         }
 
         // Transfer remaining assets to receiver
@@ -485,9 +470,100 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         return (totalAssetsAfterFee, shares);
     }
 
+    /// @notice Returns the base hurdle rate for performance fee calculations
+    /// @dev The hurdle rate differs by asset:
+    /// - For stablecoins (USDC): Typically set to T-Bills yield (e.g., 5.5% APY)
+    /// - For ETH: Typically set to base staking return like Lido (e.g., 3.5% APY)
+    /// @return uint256 The current base hurdle rate in basis points
+    function hurdleRate() public view returns (uint256) {
+        return _hurdleRateOracle.getAssetRate(asset());
+    }
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       VAULT MANAGEMENT                     */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+    /// @notice Charges global management, performance, and oracle fees on the vault's total assets
+    /// @dev Fee charging mechanism works as follows:
+    /// 1. Time-based fees (management & oracle) are charged on total assets, prorated for the time period
+    /// 2. Performance fees are only charged if two conditions are met:
+    ///    a) Current share price is above the watermark (high water mark)
+    ///    b) Returns exceed the hurdle rate
+    /// 3. The hurdle rate is asset-specific:
+    ///    - For stablecoins (e.g., USDC): typically tied to T-Bill yields
+    ///    - For ETH: typically tied to base staking returns (e.g., Lido APY)
+    /// 4. Performance fees are only charged on excess returns above both:
+    ///    - The watermark (preventing double-charging on same gains)
+    ///    - The hurdle rate (ensuring fees only on excess performance)
+    /// Example calculation:
+    /// - If initial assets = $1M, current assets = $1.08M
+    /// - Duration = 180 days, Management = 2%, Oracle = 0.5%, Performance = 20%
+    /// - Hurdle = 5% APY
+    /// Then:
+    /// 1. Management Fee = $1.08M * 2% * (180/365) = $10,628
+    /// 2. Oracle Fee = $1.08M * 0.5% * (180/365) = $2,657
+    /// 3. Hurdle Return = $1M * 5% * (180/365) = $24,657
+    /// 4. Excess Return = ($80,000 - $13,285 - $24,657) = $42,058
+    /// 5. Performance Fee = $42,058 * 20% = $8,412
+    /// @return uint256 Total fees charged
+    function chargeGlobalFees() external updateGlobalWatermark onlyRoles(MANAGER_ROLE) returns (uint256) {
+        uint256 currentSharePrice = sharePrice();
+        uint256 lastSharePrice = sharePriceWaterMark;
+        uint256 duration = block.timestamp - lastFeesCharged;
+        uint256 currentTotalAssets = totalAssets();
+        uint256 lastTotalAssets = totalSupply().fullMulDiv(lastSharePrice, 10 ** decimals());
+
+        // Calculate time-based fees (management & oracle)
+        // These are charged on total assets, prorated for the time period
+        uint256 managementFees = (currentTotalAssets * duration).fullMulDiv(managementFee, SECS_PER_YEAR) / MAX_BPS;
+        uint256 oracleFees = (currentTotalAssets * duration).fullMulDiv(oracleFee, SECS_PER_YEAR) / MAX_BPS;
+        uint256 totalFees = managementFees + oracleFees;
+        uint256 performanceFees;
+
+        currentTotalAssets += managementFees + oracleFees;
+
+        lastFeesCharged = block.timestamp;
+
+        // Calculate the asset's value change since entry
+        // This gives us the raw profit/loss in asset terms
+        int256 assetsDelta = int256(currentTotalAssets) - int256(lastTotalAssets);
+
+        // Only calculate fees if there's a profit
+        if (assetsDelta > 0) {
+            uint256 excessReturn;
+
+            // Calculate returns relative to hurdle rate
+            uint256 hurdleReturn = (lastTotalAssets * hurdleRate()).fullMulDiv(duration, SECS_PER_YEAR) / MAX_BPS;
+            uint256 totalReturn = uint256(assetsDelta);
+
+            // Only charge performance fees if:
+            // 1. Current share price is not below
+            // 2. Returns exceed hurdle rate
+            if (currentSharePrice > sharePriceWaterMark && totalReturn > hurdleReturn) {
+                // Only charge performance fees on returns above hurdle rate
+                excessReturn = totalReturn - hurdleReturn;
+
+                performanceFees = excessReturn * performanceFee / MAX_BPS;
+            }
+
+            // Calculate total fees
+            totalFees += performanceFees;
+        }
+        // Transfer fees to treasury if any were charged
+        if (totalFees > 0) {
+            _mint(treasury, convertToShares(totalFees));
+            _afterDeposit(totalFees, 0);
+        }
+        assembly {
+            let m := shr(96, not(0))
+
+            // Emit the {AssessFees} event
+            mstore(0x00, managementFees)
+            mstore(0x20, performanceFees)
+            mstore(0x40, oracleFees)
+            log2(0x00, 0x60, 0xa443e1db11cb46c65620e8e21d4830a6b9b444fa4c350f0dd0024b8a5a6b6ef5, and(m, address()))
+        }
+        return totalFees;
+    }
 
     /// @notice Invests assets from this vault into a single target vault within the same chain
     /// @dev Only callable by addresses with the MANAGER_ROLE
@@ -888,15 +964,6 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         emit SetOracleFee(_oracleFee);
     }
 
-    /// @notice Sets the recovery address for the vault
-    /// @dev The recovery address is used as a safety mechanism for recovering assets in emergency situations.
-    /// Only callable by addresses with ADMIN_ROLE.
-    /// @param _recoveryAddress The new address to be set as the recovery address
-    function setRecoveryAddress(address _recoveryAddress) external onlyRoles(ADMIN_ROLE) {
-        recoveryAddress = _recoveryAddress;
-        emit SetRecoveryAddress(_recoveryAddress);
-    }
-
     /// @notice Fulfills a settled cross-chain redemption request
     /// @dev Called by the gateway contract when cross-chain assets have been received.
     /// Converts the requested assets to shares and fulfills the redemption request.
@@ -911,9 +978,9 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
     }
 
-    /// @notice Accepts a donation of assets to the vault
+    /// @notice Allows direct donation of assets to the vault
+    /// @dev Transfers assets from sender to vault and updates idle balance
     /// @param assets The amount of assets to donate
-    /// @dev Increases the total idle assets of the vault
     function donate(uint256 assets) external {
         asset().safeTransferFrom(msg.sender, address(this), assets);
         _afterDeposit(assets, 0);
@@ -931,13 +998,12 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     }
 
     /// @notice Settles a cross-chain divestment by updating vault accounting
-    /// @param superformId The ID of the superform being settled
     /// @param withdrawnAssets The amount of assets that were withdrawn
     /// @dev Only callable by the gateway contract
-    function settleXChainDivest(uint256 superformId, uint256 withdrawnAssets) public {
+    function settleXChainDivest(uint256 withdrawnAssets) public {
         if (msg.sender != address(gateway)) revert Unauthorized();
         _totalIdle += withdrawnAssets.toUint128();
-        emit SettleXChainDivest(superformId, withdrawnAssets);
+        emit SettleXChainDivest(withdrawnAssets);
     }
 
     /// @notice the number of decimals of the underlying token
@@ -964,12 +1030,6 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     function _afterDeposit(uint256 assets, uint256 /*uint shares*/ ) internal override {
         uint128 assetsUint128 = assets.toUint128();
         _totalIdle += assetsUint128;
-    }
-
-    function _checkRedeemProcessed(address controller) private view {
-        if (redeemLocked[controller]) {
-            revert RedeemNotProcessed();
-        }
     }
 
     /// @dev Reverts if deposited shares are locked
@@ -999,6 +1059,11 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         if (interfaceId == 0x4e2312e0) return true;
     }
 
+    /// @dev
+    function convertToSuperPositions(uint256 superformId, uint256 assets) external view returns (uint256) {
+        return vaults[superformId].convertToShares(assets, false);
+    }
+
     /// @notice Handles the receipt of a single ERC1155 token type
     /// @dev This function is called at the end of a `safeTransferFrom` after the balance has been updated
     /// @param operator The address which initiated the transfer (i.e. msg.sender)
@@ -1020,8 +1085,14 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         // Silence compiler warnings
         operator;
         value;
-        data;
         if (from != address(gateway)) revert Unauthorized();
+        if (data.length > 0) {
+            uint256 refundedAssets = abi.decode(data, (uint256));
+            if (refundedAssets != 0) {
+                _totalDebt += refundedAssets.toUint128();
+                vaults[superformId].totalDebt += refundedAssets.toUint128();
+            }
+        }
         return this.onERC1155Received.selector;
     }
 

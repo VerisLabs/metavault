@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { ISuperformGateway } from "interfaces/Lib.sol";
+import { ISuperformGateway, IHurdleRateOracle } from "interfaces/Lib.sol";
 
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
@@ -10,6 +10,10 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
+/// @title Base Contract for MetaVault Modules
+/// @author Unlockd
+/// @notice Base storage contract containing all shared state variables and helper functions for MetaVault modules
+/// @dev Implements role-based access control and core vault functionality
 contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     using VaultLib for VaultData;
 
@@ -69,18 +73,16 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     uint16 public performanceFee;
     /// @notice Protocol fee
     uint16 public oracleFee;
-    /// @notice Hurdle rate of underlying asset
-    uint16 public hurdleRate;
     /// @notice Minimum time users must wait to redeem shares
     uint24 public sharesLockTime;
-    /// @notice Delay from processing a redeem till its claimed
-    uint24 public processRedeemSettlement;
     /// @notice Wether the vault is paused
     bool public emergencyShutdown;
     /// @notice Fee receiver
     address public treasury;
     /// @notice Underlying asset
     address internal _asset;
+    /// @notice Signer address to process redeem requests
+    address public signerRelayer;
     /// @notice Gateway contract to interact with superform
     ISuperformGateway public gateway;
     /// @notice ERC20 name
@@ -92,16 +94,14 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     uint256[WITHDRAWAL_QUEUE_SIZE] public localWithdrawalQueue;
     /// @notice Vaults portfolio in external chains
     uint256[WITHDRAWAL_QUEUE_SIZE] public xChainWithdrawalQueue;
-    /// @notice Implementation contract of the receiver contract
-    address public receiverImplementation;
-    /// @notice Superform recovery address
-    address public recoveryAddress;
+    /// @notice Hurdle rate of underlying asset
+    IHurdleRateOracle internal _hurdleRateOracle;
     /// @notice Timestamp of last report
     uint256 public lastReport;
+    /// @notice Timestamp when fees were last charged globally
+    uint256 public lastFeesCharged;
     /// @notice The ATH share price
     uint256 public sharePriceWaterMark;
-    /// @notice Signer address to process redeem requests
-    address public signerRelayer;
     /// @notice Array of destination chain IDs
     /// @dev Includes Ethereum Mainnet, Polygon, BNB Chain, Optimism, Base, Arbitrum One, and Avalanche
     uint64[N_CHAINS] public DST_CHAINS = [
@@ -115,25 +115,34 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
     ];
     /// @notice Timestamp of deposit lock
     mapping(address => uint256) internal _depositLockCheckPoint;
+
     /// @notice Storage of each vault related data
     mapping(uint256 => VaultData) public vaults;
-    /// @notice Timestamp of request redeem lock
-    mapping(address => uint256) internal _requestRedeemSettlementCheckpoint;
+
     /// @notice Inverse mapping vault => superformId
     mapping(address => uint256) _vaultToSuperformId;
-    /// @notice Redeem is locked when requesting and unlocked when processing
-    mapping(address => bool) redeemLocked;
+
     /// @notice Nonce of each controller
     mapping(address controller => uint256 nonce) internal _controllerNonces;
+
     /// @notice Mapping of chain IDs to their respective indexes
     mapping(uint64 => uint256) chainIndexes;
+
     /// @notice Mapping of chain method selectors to implementation contracts
     mapping(bytes4 => address) selectorToImplementation;
 
+    /// @notice Custom performance fee exemptions per controller
     mapping(address controller => uint256) public performanceFeeExempt;
+
+    /// @notice Custom management fee exemptions per controller
     mapping(address controller => uint256) public managementFeeExempt;
+
+    /// @notice Custom oracle fee exemptions per controller
     mapping(address controller => uint256) public oracleFeeExempt;
+
+    /// @notice Timestamp of last redemption per controller
     mapping(address controller => uint256) public lastRedeem;
+
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */

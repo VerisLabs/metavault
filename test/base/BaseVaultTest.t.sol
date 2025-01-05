@@ -1,6 +1,7 @@
 import { BaseTest } from "./BaseTest.t.sol";
 
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
+import { MockHurdleRateOracle } from "../helpers/mock/MockHurdleRateOracle.sol";
 import { SuperformGateway } from "crosschain/Lib.sol";
 import {
     IBaseRouter,
@@ -8,9 +9,11 @@ import {
     ISharePriceOracle,
     ISuperPositions,
     ISuperformFactory,
-    ISuperformGateway
+    ISuperformGateway,
+    IHurdleRateOracle
 } from "interfaces/Lib.sol";
 
+import { SuperPositionsReceiver } from "crosschain/Lib.sol";
 import { ProxyAdmin } from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { MetaVault } from "src/MetaVault.sol";
@@ -36,15 +39,13 @@ contract BaseVaultTest is BaseTest {
             asset: USDCE_POLYGON,
             name: "MaxApyCrossUSDCeVault",
             symbol: "maxcUSDCE",
-            managementFee: 100,
-            performanceFee: 2000,
-            oracleFee: 300,
-            assetHurdleRate: 600,
+            managementFee: 0,
+            performanceFee: 0,
+            oracleFee: 0,
+            hurdleRateOracle: IHurdleRateOracle(address(new MockHurdleRateOracle())),
             sharesLockTime: 30 days,
-            processRedeemSettlement: 1 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
             treasury: makeAddr("treasury"),
-            recoveryAddress: makeAddr("recoveryAddress"),
             signerRelayer: address(new MockSignerRelayer(0xA111ce))
         });
     }
@@ -56,13 +57,11 @@ contract BaseVaultTest is BaseTest {
             symbol: "maxcUSDCE",
             managementFee: 0,
             performanceFee: 2000,
-            oracleFee: 300,
-            assetHurdleRate: 600,
+            oracleFee: 0,
+            hurdleRateOracle: IHurdleRateOracle(address(new MockHurdleRateOracle())),
             sharesLockTime: 30 days,
-            processRedeemSettlement: 1 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),
-            recoveryAddress: makeAddr("recoveryAddress"),
             signerRelayer: address(new MockSignerRelayer(0xA111ce))
         });
     }
@@ -78,9 +77,11 @@ contract BaseVaultTest is BaseTest {
                 vault,
                 owner,
                 SUPERFORM_ROUTER_POLYGON,
-                SUPERFORM_SUPERPOSITIONS_POLYGON
+                SUPERFORM_SUPERPOSITIONS_POLYGON,
+                address(0)
             )
         );
+
         return SuperformGateway(address(proxy));
     }
 
@@ -91,10 +92,20 @@ contract BaseVaultTest is BaseTest {
             address(implementation),
             owner,
             abi.encodeWithSelector(
-                SuperformGateway.initialize.selector, vault, owner, SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE
+                SuperformGateway.initialize.selector,
+                vault,
+                owner,
+                SUPERFORM_ROUTER_BASE,
+                SUPERFORM_SUPERPOSITIONS_BASE,
+                address(0)
             )
         );
-        return SuperformGateway(address(proxy));
+
+        SuperformGateway gateway = SuperformGateway(address(proxy));
+        gateway.setRecoveryAddress(
+            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
+        );
+        return gateway;
     }
 
     function _depositAtomic(uint256 assets, address receiver) internal returns (uint256 _shares) {

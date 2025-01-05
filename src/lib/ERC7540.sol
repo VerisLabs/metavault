@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/ERC7540Types.sol";
+
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -205,6 +206,12 @@ abstract contract ERC7540 is ERC4626 {
         (, assets) = _deposit(assets, shares, receiver, controller);
     }
 
+    /// @notice Claims processed redemption request
+    /// @dev Can only be called by controller or approved operator
+    /// @param shares Amount of shares to redeem
+    /// @param to Address to receive the assets
+    /// @param controller Controller of the redemption request
+    /// @return assets Amount of assets returned
     function redeem(uint256 shares, address to, address controller) public virtual override returns (uint256 assets) {
         if (shares > maxRedeem(controller)) revert RedeemMoreThanMax();
         _validateController(controller);
@@ -213,6 +220,12 @@ abstract contract ERC7540 is ERC4626 {
         (assets,) = _withdraw(assets, shares, to, controller);
     }
 
+    /// @notice Claims processed redemption request for exact assets
+    /// @dev Can only be called by controller or approved operator
+    /// @param assets Exact amount of assets to withdraw
+    /// @param to Address to receive the assets
+    /// @param controller Controller of the redemption request
+    /// @return shares Amount of shares burned
     function withdraw(
         uint256 assets,
         address to,
@@ -230,18 +243,30 @@ abstract contract ERC7540 is ERC4626 {
         (, shares) = _withdraw(assets, shares, to, controller);
     }
 
+    /// @notice Returns the pending redemption request amount for a controller
+    /// @param controller Address to check pending redemption for
+    /// @return Amount of shares pending redemption
     function pendingRedeemRequest(address controller) public view virtual returns (uint256) {
         return _pendingRedeemRequest[controller].unwrap();
     }
 
+    /// @notice Returns the pending deposit request amount for a controller
+    /// @param controller Address to check pending deposit for
+    /// @return Amount of assets pending deposit
     function pendingDepositRequest(address controller) public view virtual returns (uint256) {
         return _pendingDepositRequest[controller].unwrap();
     }
 
+    /// @notice Returns the claimable deposit amount for a controller
+    /// @param controller Address to check claimable deposit for
+    /// @return Amount of assets available to claim
     function claimableDepositRequest(address controller) public view virtual returns (uint256) {
         return maxDeposit(controller);
     }
 
+    /// @notice Returns the claimable redemption amount for a controller
+    /// @param controller Address to check claimable redemption for
+    /// @return Amount of shares available to claim
     function claimableRedeemRequest(address controller) public view virtual returns (uint256) {
         return maxRedeem(controller);
     }
@@ -322,7 +347,7 @@ abstract contract ERC7540 is ERC4626 {
         returns (uint256 requestId)
     {
         source;
-        asset().safeTransferFrom(owner, address(this), assets);
+        asset().safeTransferFrom(source, address(this), assets);
         _pendingDepositRequest[controller] = _pendingDepositRequest[controller].add(assets);
         emit DepositRequest(controller, owner, requestId, source, assets);
         return 0;
