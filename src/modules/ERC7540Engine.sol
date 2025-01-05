@@ -724,4 +724,12 @@ contract ERC7540Engine is ModuleBase {
             ambIds, dstChainIds, multiVaultDatas, totalDebtReduction, debtReductionsPerVault
         );
     }
+
+    function selectors() public pure returns (bytes4[] memory) {
+        bytes4[] memory s = new bytes4[](3);
+        s[0] = this.processRedeemRequest.selector;
+        s[1] = this.previewWithdrawalRoute.selector;
+        s[2] = this.fulfillSettledRequest.selector;
+        return s;
+    }
 }

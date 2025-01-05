@@ -9,7 +9,7 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 
-import { MetaVaultBase ,MultiFacetProxy} from "common/Lib.sol";
+import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
 
 /// @title MetaVault
 /// @author Unlockd
@@ -105,7 +105,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
         }
     }
 
-    constructor(VaultConfig memory config) MultiFacetProxy(ADMIN_ROLE){
+    constructor(VaultConfig memory config) MultiFacetProxy(ADMIN_ROLE) {
         _asset = config.asset;
         _name = config.name;
         _symbol = config.symbol;
@@ -751,6 +751,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
         operator;
         values;
         data;
+        superformIds;
         if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155BatchReceived.selector;
     }

@@ -25,7 +25,7 @@ import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
-import { ERC20Receiver, SuperformGateway } from "crosschain/Lib.sol";
+import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
@@ -62,7 +62,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     ERC7540Engine engine;
     AssetsManager manager;
     MockSignerRelayer public relayer;
-    SuperformGateway public gateway;
+    ISuperformGateway public gateway;
     uint64 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
@@ -76,28 +76,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
         engine = new ERC7540Engine();
-        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
-        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
-        vault.addFunction(ERC7540Engine.fulfillSettledRequest.selector, address(engine), false);
+        bytes4[] memory engineSelectors = engine.selectors();
+        vault.addFunctions(engineSelectors, address(engine), false);
 
         manager = new AssetsManager();
-
-        vault.addFunction(AssetsManager.investSingleDirectSingleVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.investSingleDirectMultiVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.investSingleXChainSingleVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.investSingleXChainMultiVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.investMultiXChainSingleVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.investMultiXChainMultiVault.selector, address(manager), false);
-
-        vault.addFunction(AssetsManager.divestSingleDirectSingleVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.divestSingleDirectMultiVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.divestSingleXChainSingleVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.divestSingleXChainMultiVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.divestMultiXChainSingleVault.selector, address(manager), false);
-        vault.addFunction(AssetsManager.divestMultiXChainMultiVault.selector, address(manager), false);
-
-        vault.addFunction(AssetsManager.settleXChainInvest.selector, address(manager), false);
-        vault.addFunction(AssetsManager.settleXChainDivest.selector, address(manager), false);
+        bytes4[] memory managerSelectors = manager.selectors();
+        vault.addFunctions(managerSelectors, address(manager), false);
 
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());

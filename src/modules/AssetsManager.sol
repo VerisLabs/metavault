@@ -393,4 +393,25 @@ contract AssetsManager is ModuleBase {
         _totalIdle += withdrawnAssets.toUint128();
         emit SettleXChainDivest(withdrawnAssets);
     }
+
+    function selectors() public pure returns (bytes4[] memory) {
+        bytes4[] memory s = new bytes4[](14);
+        s[0] = this.investSingleDirectSingleVault.selector;
+        s[1] = this.investSingleDirectMultiVault.selector;
+        s[2] = this.investSingleXChainSingleVault.selector;
+        s[3] = this.investSingleXChainMultiVault.selector;
+        s[4] = this.investMultiXChainSingleVault.selector;
+        s[5] = this.investMultiXChainMultiVault.selector;
+
+        s[6] = this.divestSingleDirectSingleVault.selector;
+        s[7] = this.divestSingleDirectMultiVault.selector;
+        s[8] = this.divestSingleXChainSingleVault.selector;
+        s[9] = this.divestSingleXChainMultiVault.selector;
+        s[10] = this.divestMultiXChainSingleVault.selector;
+        s[11] = this.divestMultiXChainMultiVault.selector;
+
+        s[12] = this.settleXChainInvest.selector;
+        s[13] = this.settleXChainDivest.selector;
+        return s;
+    }
 }

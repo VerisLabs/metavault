@@ -14,13 +14,13 @@ contract MultiFacetProxy is Proxy, OwnableRoles {
     // 0x4fa563f6ad0f2ba943d6492a5a9c8ec6e039cc68444fb93b0b51ea1d78a61ef8 = keccak256("MultiFacetProxy")
     constructor(uint256 _proxyAdminRole) {
         assembly {
-            sstore(0x4fa563f6ad0f2ba943d6492a5a9c8ec6e039cc68444fb93b0b51ea1d78a61ef8, _proxyAdminRole) 
+            sstore(0x4fa563f6ad0f2ba943d6492a5a9c8ec6e039cc68444fb93b0b51ea1d78a61ef8, _proxyAdminRole)
         }
     }
 
-    function _proxyAdminRole() internal view returns(uint256 role){
+    function _proxyAdminRole() internal view returns (uint256 role) {
         assembly {
-            role:=sload(0x4fa563f6ad0f2ba943d6492a5a9c8ec6e039cc68444fb93b0b51ea1d78a61ef8)
+            role := sload(0x4fa563f6ad0f2ba943d6492a5a9c8ec6e039cc68444fb93b0b51ea1d78a61ef8)
         }
     }
 
@@ -29,7 +29,14 @@ contract MultiFacetProxy is Proxy, OwnableRoles {
     /// @param implementation The implementation contract address
     /// @param forceOverride If true, allows overwriting existing mappings
     /// @dev Only callable by admin role
-    function addFunction(bytes4 selector, address implementation, bool forceOverride) public onlyRoles(_proxyAdminRole()) {
+    function addFunction(
+        bytes4 selector,
+        address implementation,
+        bool forceOverride
+    )
+        public
+        onlyRoles(_proxyAdminRole())
+    {
         if (!forceOverride) {
             if (selectorToImplementation[selector] != address(0)) revert();
         }
