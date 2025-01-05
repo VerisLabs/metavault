@@ -1,6 +1,7 @@
 import { BaseTest } from "./BaseTest.t.sol";
 
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
+import { MockHurdleRateOracle } from "../helpers/mock/MockHurdleRateOracle.sol";
 import { SuperformGateway } from "crosschain/Lib.sol";
 import {
     IBaseRouter,
@@ -8,7 +9,8 @@ import {
     ISharePriceOracle,
     ISuperPositions,
     ISuperformFactory,
-    ISuperformGateway
+    ISuperformGateway,
+    IHurdleRateOracle
 } from "interfaces/Lib.sol";
 
 import { SuperPositionsReceiver } from "crosschain/Lib.sol";
@@ -40,7 +42,7 @@ contract BaseVaultTest is BaseTest {
             managementFee: 0,
             performanceFee: 0,
             oracleFee: 0,
-            assetHurdleRate: 600,
+            hurdleRateOracle: IHurdleRateOracle(address(new MockHurdleRateOracle())),
             sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
             treasury: makeAddr("treasury"),
@@ -56,7 +58,7 @@ contract BaseVaultTest is BaseTest {
             managementFee: 0,
             performanceFee: 2000,
             oracleFee: 0,
-            assetHurdleRate: 600,
+            hurdleRateOracle: IHurdleRateOracle(address(new MockHurdleRateOracle())),
             sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),

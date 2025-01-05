@@ -11,6 +11,7 @@ import {
 import { ILayerZeroReceiver } from "./ILayerZeroReceiver.sol";
 import { ISharePriceOracle, VaultReport } from "./ISharePriceOracle.sol";
 
+import { IHurdleRateOracle } from "./IHurdleRateOracle.sol";
 import { IMetaVault } from "./IMetaVault.sol";
 import { ISuperPositions } from "./ISuperPositions.sol";
 import { ISuperformFactory } from "./ISuperformFactory.sol";

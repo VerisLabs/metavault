@@ -6,6 +6,7 @@ import { ISharePriceOracle } from "interfaces/ISharePriceOracle.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { IBaseRouter } from "src/interfaces/IBaseRouter.sol";
 
+import { IHurdleRateOracle } from "src/interfaces/IHurdleRateOracle.sol";
 import { VaultReport } from "src/interfaces/ISharePriceOracle.sol";
 import { ISuperPositions } from "src/interfaces/ISuperPositions.sol";
 import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
@@ -42,8 +43,8 @@ struct VaultConfig {
     uint16 managementFee;
     uint16 performanceFee;
     uint16 oracleFee;
-    uint16 assetHurdleRate;
     uint24 sharesLockTime;
+    IHurdleRateOracle hurdleRateOracle;
     ISuperPositions superPositions;
     address treasury;
     address signerRelayer;

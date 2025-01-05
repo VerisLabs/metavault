@@ -161,7 +161,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         oracleFee = config.oracleFee;
         sharesLockTime = config.sharesLockTime;
         lastReport = block.timestamp;
-        _baseHurdleRate = config.assetHurdleRate;
+        _hurdleRateOracle = config.hurdleRateOracle;
 
         // Try to get asset decimals, fallback to default if unsuccessful
         (bool success, uint8 result) = _tryGetAssetDecimals(config.asset);
@@ -476,7 +476,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     /// - For ETH: Typically set to base staking return like Lido (e.g., 3.5% APY)
     /// @return uint256 The current base hurdle rate in basis points
     function hurdleRate() public view returns (uint256) {
-        return _baseHurdleRate;
+        return _hurdleRateOracle.getAssetRate(asset());
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
