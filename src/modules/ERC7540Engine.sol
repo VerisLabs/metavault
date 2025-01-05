@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { Base } from "common/Lib.sol";
+import { ModuleBase } from "common/Lib.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
@@ -29,8 +29,8 @@ import {
 
 /// @title ERC7540Engine
 /// @notice Implementation of a ERC4626 multi-vault deposit liquidity engine with cross-chain functionalities
-/// @dev Extends Base contract and implements advanced redeem request processing
-contract ERC7540Engine is Base {
+/// @dev Extends ModuleBase contract and implements advanced redeem request processing
+contract ERC7540Engine is ModuleBase {
     /// @notice Thrown when attempting to withdraw more assets than are currently available
     error InsufficientAvailableAssets();
 
@@ -45,6 +45,9 @@ contract ERC7540Engine is Base {
 
     /// @dev Emitted when a redeem request is processed
     event ProcessRedeemRequest(address indexed controller, uint256 shares);
+
+    /// @dev Emitted when a redeem request is fulfilled after being processed
+    event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
 
     /// @dev Safe casting operations for uint
     using SafeCastLib for uint256;
@@ -139,6 +142,20 @@ contract ERC7540Engine is Base {
             _prepareWithdrawalRoute(cachedRoute);
         }
         return cachedRoute;
+    }
+
+    /// @notice Fulfills a settled cross-chain redemption request
+    /// @dev Called by the gateway contract when cross-chain assets have been received.
+    /// Converts the requested assets to shares and fulfills the redemption request.
+    /// Only callable by the gateway contract.
+    /// @param controller The address that initiated the redemption request
+    /// @param requestedAssets The original amount of assets requested
+    /// @param fulfilledAssets The actual amount of assets received after bridging
+    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 fulfilledAssets) public {
+        if (msg.sender != address(gateway)) revert Unauthorized();
+        uint256 shares = convertToShares(requestedAssets);
+        _fulfillRedeemRequest(shares, fulfilledAssets, controller);
+        emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -706,5 +723,13 @@ contract ERC7540Engine is Base {
         gateway.liquidateMultiDstMultiVault{ value: value }(
             ambIds, dstChainIds, multiVaultDatas, totalDebtReduction, debtReductionsPerVault
         );
+    }
+
+    function selectors() public pure returns (bytes4[] memory) {
+        bytes4[] memory s = new bytes4[](3);
+        s[0] = this.processRedeemRequest.selector;
+        s[1] = this.previewWithdrawalRoute.selector;
+        s[2] = this.fulfillSettledRequest.selector;
+        return s;
     }
 }

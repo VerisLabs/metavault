@@ -20,10 +20,12 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { ERC7540Engine } from "modules/Lib.sol";
-import { ERC4626, MetaVault } from "src/MetaVault.sol";
+import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
 
-import { ERC20Receiver, SuperformGateway } from "crosschain/Lib.sol";
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { MetaVault } from "src/MetaVault.sol";
+
+import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
@@ -58,8 +60,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
+    AssetsManager manager;
     MockSignerRelayer public relayer;
-    SuperformGateway public gateway;
+    ISuperformGateway public gateway;
     uint64 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
@@ -70,10 +73,16 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
         vault.setGateway(address(gateway));
-        engine = new ERC7540Engine();
-        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
-        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
+
+        engine = new ERC7540Engine();
+        bytes4[] memory engineSelectors = engine.selectors();
+        vault.addFunctions(engineSelectors, address(engine), false);
+
+        manager = new AssetsManager();
+        bytes4[] memory managerSelectors = manager.selectors();
+        vault.addFunctions(managerSelectors, address(manager), false);
+
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
         vault.grantRoles(users.alice, vault.ORACLE_ROLE());
@@ -159,7 +168,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
-        vm.expectRevert(MetaVault.InsufficientAssets.selector);
+        vm.expectRevert(AssetsManager.InsufficientAssets.selector);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview + 1);
 
         vm.expectEmit(true, true, true, true);
@@ -211,7 +220,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         minAmountsOut[1] += 1;
 
-        vm.expectRevert(MetaVault.InsufficientAssets.selector);
+        vm.expectRevert(AssetsManager.InsufficientAssets.selector);
         vault.investSingleDirectMultiVault(vaultAddresses, amounts, minAmountsOut);
 
         minAmountsOut[1] -= 1;
@@ -1015,15 +1024,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         totalAssets += managementFees + oracleFees;
 
         int256 assetsDelta = int256(totalAssets) - int256(depositAmount);
-        console2.log("[test] assets delta : ", assetsDelta);
 
         uint256 performanceFees;
         if (assetsDelta > 0) {
             uint256 hurdleReturn =
                 (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
             uint256 totalReturn = uint256(assetsDelta);
-            console2.log("[test] current share price : ", vault.sharePrice());
-            console2.log("[test] watermark share price : ", lastSharePrice);
             if (vault.sharePrice() > lastSharePrice && totalReturn > hurdleReturn) {
                 uint256 excessReturn = totalReturn - hurdleReturn;
                 performanceFees = excessReturn * vault.performanceFee() / vault.MAX_BPS();
@@ -1037,13 +1043,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        assertEq(actualFees, totalFees, "Total fees charged incorrect");
-        assertEq(
-            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
-            vault.convertToShares(totalFees),
-            "Treasury shares increase incorrect"
-        );
-        assertEq(vault.lastFeesCharged(), block.timestamp, "Last fees charged timestamp not updated");
+        assertEq(actualFees, totalFees);
+        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(totalFees));
+        assertEq(vault.lastFeesCharged(), block.timestamp);
     }
 
     function test_MetaVault_chargeGlobalFees_BelowWatermark() public {
@@ -1111,12 +1113,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        assertEq(actualFees, totalFees, "Total fees charged incorrect");
-        assertEq(
-            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
-            vault.convertToShares(totalFees),
-            "Treasury shares increase incorrect"
-        );
+        assertEq(actualFees, totalFees);
+        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(totalFees));
     }
 
     function test_MetaVault_chargeGlobalFees_BelowHurdleRate() public {
@@ -1145,7 +1143,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 hurdleReturn = (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
 
-        assertLe(smallProfit, hurdleReturn, "Profit should be below hurdle rate");
+        assertLe(smallProfit, hurdleReturn);
 
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
@@ -1153,11 +1151,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        assertEq(actualFees, managementFees + oracleFees, "Total fees charged incorrect");
+        assertEq(actualFees, managementFees + oracleFees);
         assertEq(
-            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
-            vault.convertToShares(managementFees + oracleFees),
-            "Treasury shares increase incorrect"
+            vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(managementFees + oracleFees)
         );
     }
 
@@ -1183,11 +1179,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        assertEq(actualFees, managementFees + oracleFees, "Total fees charged incorrect");
+        assertEq(actualFees, managementFees + oracleFees);
         assertEq(
-            vault.balanceOf(vault.treasury()) - treasurySharesBefore,
-            vault.convertToShares(managementFees + oracleFees),
-            "Treasury shares increase incorrect"
+            vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(managementFees + oracleFees)
         );
     }
 
@@ -1226,7 +1220,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
-        assertEq(receivedAssets, totalAssets - 1, "1");
+        assertEq(receivedAssets, totalAssets - 1);
         assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
     }
 

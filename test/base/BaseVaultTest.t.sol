@@ -1,16 +1,18 @@
 import { BaseTest } from "./BaseTest.t.sol";
 
-import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
 import { MockHurdleRateOracle } from "../helpers/mock/MockHurdleRateOracle.sol";
-import { SuperformGateway } from "crosschain/Lib.sol";
+import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
+import {
+    DivestSuperform, InvestSuperform, LiquidateSuperform, SuperformGateway
+} from "crosschain/SuperformGateway/Lib.sol";
 import {
     IBaseRouter,
+    IHurdleRateOracle,
     IMetaVault,
     ISharePriceOracle,
     ISuperPositions,
     ISuperformFactory,
-    ISuperformGateway,
-    IHurdleRateOracle
+    ISuperformGateway
 } from "interfaces/Lib.sol";
 
 import { SuperPositionsReceiver } from "crosschain/Lib.sol";
@@ -66,46 +68,44 @@ contract BaseVaultTest is BaseTest {
         });
     }
 
-    function deployGatewayPolygon(address vault, address owner) public returns (SuperformGateway) {
+    function deployGatewayPolygon(address vault, address owner) public returns (ISuperformGateway) {
         ProxyAdmin admin = new ProxyAdmin(owner);
-        SuperformGateway implementation = new SuperformGateway();
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(implementation),
-            owner,
-            abi.encodeWithSelector(
-                SuperformGateway.initialize.selector,
-                vault,
-                owner,
-                SUPERFORM_ROUTER_POLYGON,
-                SUPERFORM_SUPERPOSITIONS_POLYGON,
-                address(0)
-            )
+        InvestSuperform invest = new InvestSuperform();
+        DivestSuperform divest = new DivestSuperform();
+        LiquidateSuperform liquidate = new LiquidateSuperform();
+        SuperformGateway gateway = new SuperformGateway(
+            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_POLYGON), ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON)
         );
-
-        return SuperformGateway(address(proxy));
-    }
-
-    function deployGatewayBase(address vault, address owner) public returns (SuperformGateway) {
-        ProxyAdmin admin = new ProxyAdmin(owner);
-        SuperformGateway implementation = new SuperformGateway();
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
-            address(implementation),
-            owner,
-            abi.encodeWithSelector(
-                SuperformGateway.initialize.selector,
-                vault,
-                owner,
-                SUPERFORM_ROUTER_BASE,
-                SUPERFORM_SUPERPOSITIONS_BASE,
-                address(0)
-            )
-        );
-
-        SuperformGateway gateway = SuperformGateway(address(proxy));
-        gateway.setRecoveryAddress(
+        bytes4[] memory investSelectors = invest.selectors();
+        gateway.addFunctions(investSelectors, address(invest), false);
+        bytes4[] memory divestSelectors = divest.selectors();
+        gateway.addFunctions(divestSelectors, address(divest), false);
+        bytes4[] memory liquidateSelectors = liquidate.selectors();
+        gateway.addFunctions(liquidateSelectors, address(liquidate), false);
+        ISuperformGateway(address(gateway)).setRecoveryAddress(
             address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
         );
-        return gateway;
+        return ISuperformGateway(address(gateway));
+    }
+
+    function deployGatewayBase(address vault, address owner) public returns (ISuperformGateway) {
+        ProxyAdmin admin = new ProxyAdmin(owner);
+        InvestSuperform invest = new InvestSuperform();
+        DivestSuperform divest = new DivestSuperform();
+        LiquidateSuperform liquidate = new LiquidateSuperform();
+        SuperformGateway gateway = new SuperformGateway(
+            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_BASE), ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE)
+        );
+        bytes4[] memory investSelectors = invest.selectors();
+        gateway.addFunctions(investSelectors, address(invest), false);
+        bytes4[] memory divestSelectors = divest.selectors();
+        gateway.addFunctions(divestSelectors, address(divest), false);
+        bytes4[] memory liquidateSelectors = liquidate.selectors();
+        gateway.addFunctions(liquidateSelectors, address(liquidate), false);
+        ISuperformGateway(address(gateway)).setRecoveryAddress(
+            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
+        );
+        return ISuperformGateway(address(gateway));
     }
 
     function _depositAtomic(uint256 assets, address receiver) internal returns (uint256 _shares) {

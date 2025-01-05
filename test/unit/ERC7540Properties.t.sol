@@ -10,10 +10,11 @@ import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { Test, console2 } from "forge-std/Test.sol";
 
 import { ERC7540 } from "lib/Lib.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { ERC4626, MetaVault } from "src/MetaVault.sol";
 
-import { SuperformGateway } from "crosschain/SuperformGateway.sol";
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { MetaVault } from "src/MetaVault.sol";
+
 import "src/helpers/AddressBook.sol";
 
 import {
@@ -49,7 +50,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         config = polygonUsdceVaultConfig();
         vault = IMetaVault(address(new MetaVault(config)));
         engine = new ERC7540Engine();
-        SuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
+        ISuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
         vault.setGateway(address(gateway));
         vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
         //vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
@@ -84,9 +85,9 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         uint256 shares = vault.deposit(amount, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 0);
-        assertEq(vault.pendingDepositRequest(users.alice), 0, "s");
-        assertEq(vault.totalAssets(), amount, "1");
-        assertEq(shares, amount, "2");
+        assertEq(vault.pendingDepositRequest(users.alice), 0);
+        assertEq(vault.totalAssets(), amount);
+        assertEq(shares, amount);
         assertEq(vault.balanceOf(users.alice), shares);
     }
 

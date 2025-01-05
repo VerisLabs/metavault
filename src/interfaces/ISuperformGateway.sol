@@ -13,6 +13,22 @@ import {
 import { SingleXChainMultiVaultWithdraw, SingleXChainSingleVaultWithdraw } from "../types/VaultTypes.sol";
 
 interface ISuperformGateway {
+    function getRequestsQueue() external view returns (bytes32[] memory requestIds);
+
+    function recoveryAddress() external view returns (address);
+
+    function addFunction(bytes4, address, bool) external;
+
+    function addFunctions(bytes4[] memory, address, bool) external;
+
+    function grantRoles(address, uint256) external;
+
+    function ADMIN_ROLE() external view returns (uint256);
+
+    function RELAYER_ROLE() external view returns (uint256);
+
+    function setRecoveryAddress(address _newRecoveryAddress) external;
+
     function superPositions() external view returns (ISuperPositions);
 
     function notifyRefund(uint256 superformId, uint256 amount) external;
@@ -126,5 +142,11 @@ interface ISuperformGateway {
         external
         returns (bytes4);
 
-    function getReceiver(address controller, bytes memory key) external returns (address receiverAddress);
+    function settleLiquidation(bytes32 key, bool force) external;
+
+    function notifyFailedInvest(uint256 superformId, uint256 refundedAssets) external;
+
+    function getReceiver(bytes32 key) external returns (address receiverAddress);
+
+    function settleDivest(bytes32 key, bool force) external;
 }
