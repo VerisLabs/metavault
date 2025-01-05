@@ -309,6 +309,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
     )
         public
         override
+        noEmergencyShutdown
         returns (uint256 requestId)
     {
         // Require deposited shares arent locked
