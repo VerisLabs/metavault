@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { Base } from "common/Lib.sol";
+import { ModuleBase } from "common/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
@@ -29,8 +29,8 @@ import {
 
 /// @title AssetsManager
 /// @notice Implementation of crosschain portfolio-management module
-/// @dev Extends Base contract and implements portfolio management functionalities
-contract AssetsManager is Base {
+/// @dev Extends ModuleBase contract and implements portfolio management functionalities
+contract AssetsManager is ModuleBase {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/

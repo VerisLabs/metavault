@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { Base } from "common/Lib.sol";
+import { ModuleBase } from "common/Lib.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
@@ -29,8 +29,8 @@ import {
 
 /// @title ERC7540Engine
 /// @notice Implementation of a ERC4626 multi-vault deposit liquidity engine with cross-chain functionalities
-/// @dev Extends Base contract and implements advanced redeem request processing
-contract ERC7540Engine is Base {
+/// @dev Extends ModuleBase contract and implements advanced redeem request processing
+contract ERC7540Engine is ModuleBase {
     /// @notice Thrown when attempting to withdraw more assets than are currently available
     error InsufficientAvailableAssets();
 

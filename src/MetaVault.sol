@@ -9,13 +9,13 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 
-import { MultiFacetProxy } from "common/Lib.sol";
+import { MetaVaultBase ,MultiFacetProxy} from "common/Lib.sol";
 
 /// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-contract MetaVault is MultiFacetProxy, Multicallable {
+contract MetaVault is MetaVaultBase, Multicallable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -105,7 +105,7 @@ contract MetaVault is MultiFacetProxy, Multicallable {
         }
     }
 
-    constructor(VaultConfig memory config) {
+    constructor(VaultConfig memory config) MultiFacetProxy(ADMIN_ROLE){
         _asset = config.asset;
         _name = config.name;
         _symbol = config.symbol;

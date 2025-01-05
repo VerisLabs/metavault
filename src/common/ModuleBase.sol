@@ -10,11 +10,11 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
-/// @title Base Contract for MetaVault Modules
+/// @title ModuleBase Contract for MetaVault Modules
 /// @author Unlockd
 /// @notice Base storage contract containing all shared state variables and helper functions for MetaVault modules
 /// @dev Implements role-based access control and core vault functionality
-contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
+contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     using VaultLib for VaultData;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -127,9 +127,6 @@ contract Base is OwnableRoles, ERC7540, ReentrancyGuard {
 
     /// @notice Mapping of chain IDs to their respective indexes
     mapping(uint64 => uint256) chainIndexes;
-
-    /// @notice Mapping of chain method selectors to implementation contracts
-    mapping(bytes4 => address) selectorToImplementation;
 
     /// @notice Custom performance fee exemptions per controller
     mapping(address controller => uint256) public performanceFeeExempt;
