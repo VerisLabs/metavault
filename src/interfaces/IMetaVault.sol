@@ -9,7 +9,7 @@ import {
     MultiVaultSFData,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestWithSignatureParams,
+    ProcessRedeemRequestParams,
     SingleDirectMultiVaultStateReq,
     SingleDirectSingleVaultStateReq,
     SingleVaultSFData,
@@ -134,15 +134,7 @@ interface IMetaVault {
 
     function claimableDepositRequest(address) external view returns (uint256);
 
-    function processRedeemRequest(
-        address controller,
-        SingleXChainSingleVaultWithdraw calldata sXsV,
-        SingleXChainMultiVaultWithdraw calldata sXmV,
-        MultiXChainSingleVaultWithdraw calldata mXsV,
-        MultiXChainMultiVaultWithdraw calldata mXmV
-    )
-        external
-        payable;
+    function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable;
 
     function investSingleDirectSingleVault(
         address vaultAddress,

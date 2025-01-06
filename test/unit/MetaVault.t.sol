@@ -46,7 +46,7 @@ import {
     LiqRequest,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestWithSignatureParams,
+    ProcessRedeemRequestParams,
     SingleVaultSFData,
     SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultStateReq,
@@ -321,7 +321,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vm.expectEmit(true, true, true, true);
         emit ProcessRedeemRequest(users.alice, sharesBalance);
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(
+            ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+        );
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalIdle(), 0);
@@ -361,7 +363,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vm.expectEmit(true, true, true, true);
         emit ProcessRedeemRequest(users.alice, sharesBalance);
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(
+            ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+        );
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalIdle(), 0);
@@ -447,7 +451,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             sXsV.value = value;
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
-            vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            vault.processRedeemRequest{ value: value }(
+                ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+            );
             requestId = gateway.getRequestsQueue()[0];
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
@@ -545,7 +551,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
-            vault.processRedeemRequest{ value: value }(users.alice, sXsV, sXmV, mXsV, mXmV);
+            vault.processRedeemRequest{ value: value }(
+                ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+            );
             requestId = gateway.getRequestsQueue()[0];
 
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);
@@ -961,7 +969,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
 
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(
+            ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+        );
 
         uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
         uint256 totalAssets = depositAmount + profit;
@@ -1210,7 +1220,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(
+            ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+        );
 
         uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
         uint256 totalAssets = depositAmount + profit;
@@ -1267,7 +1279,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(
+            ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+        );
 
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
@@ -1309,7 +1323,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
-        vault.processRedeemRequest(users.alice, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(
+            ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0)
+        );
 
         uint256 duration = block.timestamp - vault.lastRedeem(users.alice);
         uint256 totalAssets = depositAmount + profit;

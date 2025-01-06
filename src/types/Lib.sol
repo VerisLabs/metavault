@@ -8,7 +8,7 @@ import { VaultReport } from "./VaultTypes.sol";
 import {
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestWithSignatureParams,
+    ProcessRedeemRequestParams,
     SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultWithdraw,
     VaultConfig,

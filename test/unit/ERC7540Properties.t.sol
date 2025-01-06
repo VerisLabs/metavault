@@ -26,6 +26,7 @@ import {
 import {
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestParams,
     SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultWithdraw
 } from "src/types/Lib.sol";
@@ -223,6 +224,6 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
-        vault.processRedeemRequest(user, sXsV, sXmV, mXsV, mXmV);
+        vault.processRedeemRequest(ProcessRedeemRequestParams(user, sXsV, sXmV, mXsV, mXmV, block.timestamp, 0, 0, 0));
     }
 }

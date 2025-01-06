@@ -16,7 +16,6 @@ import {
 } from "interfaces/Lib.sol";
 
 import { SuperPositionsReceiver } from "crosschain/Lib.sol";
-import { ProxyAdmin } from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { MetaVault } from "src/MetaVault.sol";
 import {
@@ -69,7 +68,6 @@ contract BaseVaultTest is BaseTest {
     }
 
     function deployGatewayPolygon(address vault, address owner) public returns (ISuperformGateway) {
-        ProxyAdmin admin = new ProxyAdmin(owner);
         InvestSuperform invest = new InvestSuperform();
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
@@ -89,7 +87,6 @@ contract BaseVaultTest is BaseTest {
     }
 
     function deployGatewayBase(address vault, address owner) public returns (ISuperformGateway) {
-        ProxyAdmin admin = new ProxyAdmin(owner);
         InvestSuperform invest = new InvestSuperform();
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();

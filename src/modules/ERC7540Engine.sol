@@ -16,6 +16,7 @@ import {
     MultiVaultSFData,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestParams,
     SingleDirectMultiVaultStateReq,
     SingleDirectSingleVaultStateReq,
     SingleVaultSFData,
@@ -64,19 +65,33 @@ contract ERC7540Engine is ModuleBase {
     /// @notice Processes a redemption request for a given controller
     /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
     /// including cross-chain withdrawals
-    /// @param controller The address of the controller initiating the redemption
-    function processRedeemRequest(
-        address controller,
-        SingleXChainSingleVaultWithdraw calldata sXsV,
-        SingleXChainMultiVaultWithdraw calldata sXmV,
-        MultiXChainSingleVaultWithdraw calldata mXsV,
-        MultiXChainMultiVaultWithdraw calldata mXmV
-    )
-        external
-        payable
-        nonReentrant
-        onlyRoles(RELAYER_ROLE)
-    {
+    /// @param params redeem request parameters
+    function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable nonReentrant {
+        // Only relayer can call it by default
+        if (params.v == 0 && params.r == 0 && params.s == 0) {
+            _checkRoles(RELAYER_ROLE);
+        }
+        // If there's a explicit permission of the relayer check signature is correct
+        else {
+            if (block.timestamp < params.deadline) revert SignatureExpired();
+
+            bytes32 hash;
+            {
+                hash = keccak256(
+                    abi.encode(
+                        params.controller,
+                        keccak256(abi.encode(params.sXsV)),
+                        keccak256(abi.encode(params.sXmV)),
+                        keccak256(abi.encode(params.mXsV)),
+                        keccak256(abi.encode(params.mXmV)),
+                        ++_controllerNonces[params.controller],
+                        params.deadline
+                    )
+                );
+            }
+            // Needs explicit approval from the relayer
+            _checkSignerIsRelayer(hash, params.v, params.r, params.s);
+        }
         // Retrieve the pending redeem request for the specified controller
         // This request may involve cross-chain withdrawals from various ERC4626 vaults
 
@@ -85,10 +100,30 @@ contract ERC7540Engine is ModuleBase {
         // 1. pendingRedeemRequest(controller): Fetches the pending shares
         // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
         _processRedeemRequest(
-            ProcessRedeemRequestConfig(pendingRedeemRequest(controller), controller, controller, sXsV, sXmV, mXsV, mXmV)
+            ProcessRedeemRequestConfig(
+                pendingRedeemRequest(params.controller),
+                params.controller,
+                params.sXsV,
+                params.sXmV,
+                params.mXsV,
+                params.mXmV
+            )
         );
         // Note: After processing, the redeemed assets are held by this contract
         // The user can later claim these assets using `redeem` or `withdraw`
+    }
+
+    /// @notice Verifies that a signature is valid and was signed by the relayer
+    /// @param hash The hash of the data that was signed
+    /// @param v The v component of the signature
+    /// @param r The r component of the signature
+    /// @param s The s component of the signature
+    /// @dev Reverts if the signature is invalid
+    function _checkSignerIsRelayer(bytes32 hash, uint8 v, bytes32 r, bytes32 s) private view {
+        bool isValid = SignatureCheckerLib.isValidSignatureNow(signerRelayer, hash, v, r, s);
+        if (!isValid) {
+            revert InvalidSignature();
+        }
     }
 
     /// @notice Simulates a withdrawal route to help relayers determine how to fulfill redemption requests
@@ -321,12 +356,10 @@ contract ERC7540Engine is ModuleBase {
 
     /// @param shares to redeem and burn
     /// @param controller controller that created the request
-    /// @param owner shares owner
     /// @param receiver address of the assets receiver in case its a
     struct ProcessRedeemRequestConfig {
         uint256 shares;
         address controller;
-        address owner;
         SingleXChainSingleVaultWithdraw sXsV;
         SingleXChainMultiVaultWithdraw sXmV;
         MultiXChainSingleVaultWithdraw mXsV;
