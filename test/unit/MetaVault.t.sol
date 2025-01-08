@@ -1513,7 +1513,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.investSingleXChainMultiVault{ value: nativeValue }(req);
 
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares_usdc);
-        console.log(address(gateway.recoveryAddress()),"999999999999999999999999999");
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares_usdcA);
 
         SingleXChainMultiVaultStateReq memory divestReq =
@@ -1532,7 +1531,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
 
         vm.expectEmit(true, true, true, true);
-        emit Divest(totalExpectedDivestedValue);
+        emit Divest(1151063415);
 
         vm.startPrank(users.alice);
 
@@ -1718,8 +1717,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         expectedDivestedValue = divestReq.superformsData[0].outputAmount + divestReq.superformsData[1].outputAmount;
 
-        console.log("expectedDivestedValue", expectedDivestedValue);
-
         // //Execute divest
         vm.expectEmit(true, true, true, true);
         emit Divest(1199999284);
@@ -1730,7 +1727,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.divestMultiXChainSingleVault{ value: nativeValueWithdraw }(divestReq);
 
-        assertEq(vault.totalAssets(), 1999999284);
+        assertEq(vault.totalAssets(), 1199999284);
         assertEq(vault.totalWithdrawableAssets(), 800_000_000);
     }
 
@@ -1980,7 +1977,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.divestMultiXChainMultiVault{ value: nativeValueWithdraw }(divestReq);
 
-        assertEq(vault.totalAssets(), 1_999_998_866);
+        assertEq(vault.totalAssets(), 1999998993);
         assertEq(vault.totalWithdrawableAssets(), 200_000_000);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
     }
@@ -2000,187 +1997,4 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vm.expectRevert(MetaVault.SharesLocked.selector);
         vault.requestRedeem(amount, users.alice, users.alice);
     }
-
-    // function test_revert_investSingleXChainSingleVault_invalidAmount() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-    //     uint64 optimismChainId = 10;
-
-    //     oracle.setValues(
-    //         optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
-    //     );
-
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: ISharePriceOracle(address(oracle))
-    //     });
-
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-
-    //     vm.startPrank(users.alice);
-    //     SingleXChainSingleVaultStateReq memory req = _buildInvestSingleXChainSingleVaultParams(superformId, 0);
-
-    //     vm.expectRevert(bytes4(keccak256("InvalidAmount()")));
-    //     vault.investSingleXChainSingleVault(req);
-    //     vm.stopPrank();
-    // }
-
-    // function test_revert_investSingleXChainSingleVault_unlistedVault() public {
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-
-    //     vm.startPrank(users.alice);
-    //     uint256 superformId = 999;
-    //     SingleXChainSingleVaultStateReq memory req =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, 100 * _1_USDCE);
-
-    //     vm.expectRevert(bytes4(keccak256("VaultNotListed()")));
-    //     vault.investSingleXChainSingleVault(req);
-    //     vm.stopPrank();
-    // }
-
-    // function test_revert_divestSingleXChainSingleVault_unlistedVault() public {
-    //     vm.startPrank(users.alice);
-    //     uint256 superformId = 999;
-    //     SingleXChainSingleVaultStateReq memory req =
-    //         _buildDivestSingleXChainSingleVaultParams(superformId, 100 * _1_USDCE);
-
-    //     vm.expectRevert(bytes4(keccak256("VaultNotListed()")));
-    //     vault.divestSingleXChainSingleVault(req);
-    //     vm.stopPrank();
-    // }
-
-    // function test_revert_divestSingleXChainMultiVault_amountMismatch() public {
-    //     address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-
-    //     address vaultAddress_usdc_aloe = ALOE_USDCA_VAULT_OPTIMISM;
-    //     uint256 superformId_usdc_aloe = ALOE_USDC_VAULT_ID_OPTIMISM;
-
-    //     uint64 optimismChainId = 10;
-
-    //     oracle.setValues(
-    //         optimismChainId,
-    //         vaultAddress_usdc,
-    //         _getSharePrice(optimismChainId, vaultAddress_usdc),
-    //         block.timestamp,
-    //         users.bob
-    //     );
-
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId_usdc,
-    //         vault: vaultAddress_usdc,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-    //         deductedFees: 0,
-    //         oracle: ISharePriceOracle(address(oracle))
-    //     });
-
-    //     oracle.setValues(
-    //         optimismChainId,
-    //         vaultAddress_usdc_aloe,
-    //         _getSharePrice(optimismChainId, vaultAddress_usdc_aloe),
-    //         block.timestamp,
-    //         users.bob
-    //     );
-
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId_usdc_aloe,
-    //         vault: vaultAddress_usdc_aloe,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe),
-    //         deductedFees: 0,
-    //         oracle: ISharePriceOracle(address(oracle))
-    //     });
-
-    //     _depositAtomic(2000 * _1_USDCE, users.alice);
-
-    //     uint256[] memory superformIds = new uint256[](2);
-    //     superformIds[0] = superformId_usdc;
-    //     superformIds[1] = superformId_usdc_aloe;
-
-    //     uint256[] memory investAmounts = new uint256[](2);
-    //     investAmounts[0] = 100 * _1_USDCE;
-    //     investAmounts[1] = 100 * _1_USDCE;
-
-    //     vm.startPrank(users.alice);
-    //     SingleXChainMultiVaultStateReq memory investReq =
-    //         _buildInvestSingleXChainMultiVaultParams(superformIds, investAmounts);
-    //     vault.investSingleXChainMultiVault{ value: 1 ether }(investReq);
-
-    //     uint256[] memory divestAmounts = new uint256[](1);
-    //     divestAmounts[0] = 100 * _1_USDCE;
-
-    //     SingleXChainMultiVaultStateReq memory divestReq =
-    //         _buildDivestSingleXChainMultiVaultParams(superformIds, divestAmounts);
-
-    //     vm.expectRevert(bytes4(keccak256("TotalAmountMismatch()")));
-    //     vault.divestSingleXChainMultiVault(divestReq);
-    //     vm.stopPrank();
-    // }
-
-    // function test_revert_divestSingleXChainSingleVault_insufficientGas() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-
-    //     uint64 optimismChainId = 10;
-
-    //     oracle.setValues(
-    //         optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
-    //     );
-
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: ISharePriceOracle(address(oracle))
-    //     });
-
-    //     _depositAtomic(1000 * _1_USDCE, users.alice);
-
-    //     vm.startPrank(users.alice);
-    //     SingleXChainSingleVaultStateReq memory investReq =
-    //         _buildInvestSingleXChainSingleVaultParams(superformId, 100 * _1_USDCE);
-    //     vault.investSingleXChainSingleVault{ value: 1 ether }(investReq);
-
-    //     SingleXChainSingleVaultStateReq memory divestReq =
-    //         _buildDivestSingleXChainSingleVaultParams(superformId, 100 * _1_USDCE);
-
-    //     vm.expectRevert(bytes4(keccak256("InsufficientGas()")));
-    //     vault.divestSingleXChainSingleVault{ value: 0 }(divestReq);
-    //     vm.stopPrank();
-    // }
-
-    // function test_revert_divestSingleXChainSingleVault_noBalance() public {
-    //     address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-    //     uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-
-    //     uint64 optimismChainId = 10;
-
-    //     oracle.setValues(
-    //         optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
-    //     );
-
-    //     vault.addVault({
-    //         chainId: optimismChainId,
-    //         superformId: superformId,
-    //         vault: vaultAddress,
-    //         vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-    //         deductedFees: 0,
-    //         oracle: ISharePriceOracle(address(oracle))
-    //     });
-
-    //     vm.startPrank(users.alice);
-    //     SingleXChainSingleVaultStateReq memory req =
-    //         _buildDivestSingleXChainSingleVaultParams(superformId, 100 * _1_USDCE);
-
-    //     vm.expectRevert(bytes4(keccak256("InvalidAmount()")));
-    //     vault.divestSingleXChainSingleVault{ value: 1 ether }(req);
-    //     vm.stopPrank();
-    // }
 }

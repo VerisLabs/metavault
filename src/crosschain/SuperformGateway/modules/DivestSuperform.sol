@@ -15,7 +15,6 @@ import {
     VaultLib
 } from "types/Lib.sol";
 
-import"forge-std/console.sol";
 
 contract DivestSuperform is GatewayBase {
     using VaultLib for VaultData;
@@ -156,7 +155,6 @@ contract DivestSuperform is GatewayBase {
             address(vault), address(this), req.superformsData.superformIds, req.superformsData.amounts, ""
         );
 
-        console.log("lklklklklklklklklklklklklklklk");
         superformRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
@@ -247,7 +245,9 @@ contract DivestSuperform is GatewayBase {
             data.superformIds = superformIds;
             data.requestedAssets = totalAmount;
             req.superformsData[i].receiverAddress = receiver;
+
             superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
+
             uint256 totalChainAmount;
 
             uint256 totalExpectedAmount;
@@ -264,6 +264,8 @@ contract DivestSuperform is GatewayBase {
                 totalChainAmount += amount;
             }
             ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
+
+
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, totalChainAmount, key);
         }
