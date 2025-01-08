@@ -197,7 +197,9 @@ contract DivestSuperform is GatewayBase {
 
             totalAmount += amount;
 
-            superPositions.safeTransferFrom(address(vault), address(this), superformId, amount, "");
+            superPositions.safeTransferFrom(
+                address(vault), address(this), superformId, req.superformsData[i].amount, ""
+            );
 
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, amount, key);
@@ -207,7 +209,7 @@ contract DivestSuperform is GatewayBase {
             }
         }
 
-        superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        superformRouter.multiDstSingleVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
@@ -257,7 +259,7 @@ contract DivestSuperform is GatewayBase {
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, totalChainAmount, key);
         }
-        superformRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
+        superformRouter.multiDstMultiVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
