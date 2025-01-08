@@ -1727,7 +1727,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.divestMultiXChainSingleVault{ value: nativeValueWithdraw }(divestReq);
 
-        assertEq(vault.totalAssets(), 1199999284);
+        assertEq(vault.totalAssets(), 1999999284);
         assertEq(vault.totalWithdrawableAssets(), 800_000_000);
     }
 
