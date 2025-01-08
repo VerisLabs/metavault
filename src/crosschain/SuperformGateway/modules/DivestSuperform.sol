@@ -155,6 +155,8 @@ contract DivestSuperform is GatewayBase {
         superPositions.safeBatchTransferFrom(
             address(vault), address(this), req.superformsData.superformIds, req.superformsData.amounts, ""
         );
+
+        console.log("lklklklklklklklklklklklklklklk");
         superformRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
