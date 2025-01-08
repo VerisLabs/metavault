@@ -185,7 +185,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.investMultiXChainMultiVault(req);
+        uint256 totalAmount = gateway.investMultiXChainMultiVault{value:msg.value}(req);
         _totalIdle -= totalAmount.toUint128();
         emit Invest(totalAmount);
     }

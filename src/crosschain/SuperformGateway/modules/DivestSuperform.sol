@@ -15,6 +15,8 @@ import {
     VaultLib
 } from "types/Lib.sol";
 
+import"forge-std/console.sol";
+
 contract DivestSuperform is GatewayBase {
     using VaultLib for VaultData;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
@@ -46,6 +48,9 @@ contract DivestSuperform is GatewayBase {
 
     /// @notice Emitted when a new request is created
     event RequestCreated(bytes32 indexed key, address indexed controller, uint256[] superformIds);
+
+    error InvalidVaultAddress();
+    error InvalidReceiverAddress();
 
     /// @notice Divests assets from a single vault on a different chain
     /// @dev Transfers Superform NFTs from vault to this contract and initiates withdrawal
@@ -135,6 +140,7 @@ contract DivestSuperform is GatewayBase {
         }
 
         bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, req.superformsData.superformIds));
+
         _requestsQueue.add(key);
         address receiver = getReceiver(key);
 
