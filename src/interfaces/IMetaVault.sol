@@ -23,8 +23,6 @@ import {
 } from "types/Lib.sol";
 
 interface IMetaVault {
-    function initialize(VaultConfig memory) external;
-
     function WITHDRAWAL_QUEUE_SIZE() external view returns (uint256);
 
     function SECS_PER_YEAR() external view returns (uint256);
@@ -40,6 +38,30 @@ interface IMetaVault {
     function ORACLE_ROLE() external view returns (uint256);
 
     function EMERGENCY_ADMIN_ROLE() external view returns (uint256);
+
+    function N_CHAINS() external view returns (uint256);
+
+    function THIS_CHAIN_ID() external view returns (uint64);
+
+    function DST_CHAINS(uint256) external view returns (uint64);
+
+    function treasury() external view returns (address);
+
+    function signerRelayer() external view returns (address);
+
+    function gateway() external view returns (address);
+
+    function emergencyShutdown() external view returns (bool);
+
+    function localWithdrawalQueue(uint256) external view returns (uint256);
+
+    function xChainWithdrawalQueue(uint256) external view returns (uint256);
+
+    function performanceFeeExempt(address) external view returns (uint256);
+
+    function managementFeeExempt(address) external view returns (uint256);
+
+    function oracleFeeExempt(address) external view returns (uint256);
 
     function grantRoles(address, uint256) external;
 
@@ -88,8 +110,6 @@ interface IMetaVault {
     function hurdleRate() external view returns (uint256);
 
     function lastReport() external view returns (uint256);
-
-    function treasury() external view returns (address);
 
     function addVault(
         uint64 chainId,
