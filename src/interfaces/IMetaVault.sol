@@ -25,6 +25,8 @@ import {
 interface IMetaVault {
     function initialize(VaultConfig memory) external;
 
+    function WITHDRAWAL_QUEUE_SIZE() external view returns (uint256);
+
     function SECS_PER_YEAR() external view returns (uint256);
 
     function MAX_BPS() external view returns (uint256);
@@ -58,6 +60,8 @@ interface IMetaVault {
     function convertToAssets(uint256) external view returns (uint256);
 
     function convertToShares(uint256) external view returns (uint256);
+
+    function convertToSuperPositions(uint256 superformId, uint256 assets) external view returns (uint256);
 
     function totalWithdrawableAssets() external view returns (uint256 assets);
 

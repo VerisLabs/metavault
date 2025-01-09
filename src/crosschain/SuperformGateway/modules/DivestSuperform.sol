@@ -331,21 +331,26 @@ contract DivestSuperform is GatewayBase {
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
         view
-        returns (bytes32 requestId)
+        returns (bytes32[] memory requestIds)
     {
+        requestIds = new bytes32[](1);
         uint256 superformId = req.superformData.superformId;
-        return keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, superformId));
+        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, superformId));
+        return requestIds;
     }
 
-    function previewIdDivestMultiXChainSingleVault(SingleXChainMultiVaultStateReq memory req)
+    function previewIdDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq memory req)
         external
         view
-        returns (bytes32 requestId)
+        returns (bytes32[] memory requestIds)
     {
-        return keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, req.superformsData.superformIds));
+        requestIds = new bytes32[](1);
+        requestIds[0] =
+            keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, req.superformsData.superformIds));
+        return requestIds;
     }
 
-    function previewIdDivestSingleXChainMultiVault(MultiDstSingleVaultStateReq memory req)
+    function previewIdDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq memory req)
         external
         view
         returns (bytes32[] memory requestIds)
