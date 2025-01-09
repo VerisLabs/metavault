@@ -75,6 +75,8 @@ interface IMetaVault {
 
     function totalDebt() external view returns (uint256 assets);
 
+    function totalDeposits() external view returns (uint256 assets);
+
     function managementFee() external view returns (uint256);
 
     function sharesLockTime() external view returns (uint256);
