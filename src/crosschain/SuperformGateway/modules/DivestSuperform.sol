@@ -15,7 +15,6 @@ import {
     VaultLib
 } from "types/Lib.sol";
 
-
 contract DivestSuperform is GatewayBase {
     using VaultLib for VaultData;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
@@ -264,7 +263,6 @@ contract DivestSuperform is GatewayBase {
                 totalChainAmount += amount;
             }
             ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
-
 
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, totalChainAmount, key);

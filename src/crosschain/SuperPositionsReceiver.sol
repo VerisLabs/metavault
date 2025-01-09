@@ -118,7 +118,7 @@ contract SuperPositionsReceiver is OwnableRoles {
         // Silence compiler warnings
         operator;
         data;
-        
+
         for (uint256 i = 0; i < superformIds.length; ++i) {
             onERC1155Received(address(0), from, superformIds[i], values[i], "");
         }

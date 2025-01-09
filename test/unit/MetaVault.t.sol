@@ -22,9 +22,9 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
 import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
 
+import "forge-std/console.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
-import"forge-std/console.sol";
 
 import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
@@ -32,10 +32,10 @@ import {
     AAVE_USDC_VAULT_POLYGON,
     ALOE_USDCA_VAULT_OPTIMISM,
     ALOE_USDC_VAULT_ID_OPTIMISM,
+    CRAFT_USDCA_VAULT_OPTIMISM,
+    CRAFT_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
-    CRAFT_USDC_VAULT_ID_OPTIMISM,
-    CRAFT_USDCA_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
     SUPERFORM_CORE_STATE_REGISTRY_BASE,
     SUPERFORM_LAYERZERO_ENDPOINT_BASE,
@@ -124,7 +124,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         _setUpTestEnvironment();
         _setupContractLabels();
-
     }
 
     function test_MetaVault_initialization() public view {
@@ -1531,7 +1530,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
 
         vm.expectEmit(true, true, true, true);
-        emit Divest(1151063415);
+        emit Divest(1_151_063_415);
 
         vm.startPrank(users.alice);
 
@@ -1603,7 +1602,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amount);
 
         vm.expectEmit(true, true, true, true);
-        emit Invest(1211924246);
+        emit Invest(1_211_924_246);
 
         bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValue = multiChainDepositValues[multiVaultKey];
@@ -1621,9 +1620,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
 
-        assertEq(vault.totalAssets(), 1999999279);
-        assertEq(vault.totalWithdrawableAssets(), 1999999279);
-        assertEq(vault.totalXChainAssets(), 1211923525);
+        assertEq(vault.totalAssets(), 1_999_999_279);
+        assertEq(vault.totalWithdrawableAssets(), 1_999_999_279);
+        assertEq(vault.totalXChainAssets(), 1_211_923_525);
         assertEq(vault.totalLocalAssets(), 788_075_754);
         assertEq(vault.totalIdle(), 788_075_754);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc), shares);
@@ -1719,7 +1718,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         // //Execute divest
         vm.expectEmit(true, true, true, true);
-        emit Divest(1199999284);
+        emit Divest(1_199_999_284);
         bytes32 multiVaultKeyWithdraw = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValueWithdraw = multiChainWithdrawValues[multiVaultKeyWithdraw];
 
@@ -1727,7 +1726,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.divestMultiXChainSingleVault{ value: nativeValueWithdraw }(divestReq);
 
-        assertEq(vault.totalAssets(), 1999999284);
+        assertEq(vault.totalAssets(), 1_999_999_284);
         assertEq(vault.totalWithdrawableAssets(), 800_000_000);
     }
 
@@ -1838,9 +1837,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares3);
 
-        assertEq(vault.totalAssets(), 1999998993);
-        assertEq(vault.totalWithdrawableAssets(), 1999998993);
-        assertEq(vault.totalXChainAssets(), 1799998993);
+        assertEq(vault.totalAssets(), 1_999_998_993);
+        assertEq(vault.totalWithdrawableAssets(), 1_999_998_993);
+        assertEq(vault.totalXChainAssets(), 1_799_998_993);
         assertEq(vault.totalLocalAssets(), 200_000_000);
         assertEq(vault.totalIdle(), 200_000_000);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc), shares);
@@ -1977,7 +1976,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault.divestMultiXChainMultiVault{ value: nativeValueWithdraw }(divestReq);
 
-        assertEq(vault.totalAssets(), 1999998993);
+        assertEq(vault.totalAssets(), 1_999_998_993);
         assertEq(vault.totalWithdrawableAssets(), 200_000_000);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
     }
