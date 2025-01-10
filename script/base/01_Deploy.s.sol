@@ -38,13 +38,13 @@ contract DeployScript is Script {
 
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
+        //superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
 
-        adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
-        relayerRole = vm.envAddress("RELAYER_ROLE");
+        adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE"); // DEPLOYER/OWNER 
+        relayerRole = vm.envAddress("RELAYER_ROLE"); // Backend
         emergencyAdminRole = vm.envAddress("EMERGENCY_ADMIN_ROLE");
-        managerAddressRole = vm.envAddress("MANAGER_ADDRESS_ROLE");
+        managerAddressRole = vm.envAddress("MANAGER_ADDRESS_ROLE"); // Backend
         vm.startBroadcast(deployerPrivateKey);
 
         config = VaultConfig({
@@ -55,7 +55,7 @@ contract DeployScript is Script {
             performanceFee: 2000,
             oracleFee: 50,
             hurdleRateOracle: IHurdleRateOracle(hurdleRateOracleAddress),
-            sharesLockTime: 30 days,
+            sharesLockTime: 15 minutes,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),
             signerRelayer: relayerRole,
@@ -82,7 +82,7 @@ contract DeployScript is Script {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         gateway = ISuperformGateway(address(_gateway));
-        gateway.setRecoveryAddress(superPositionsReceiverAddress);
+        //gateway.setRecoveryAddress(superPositionsReceiverAddress);
 
         // Set gatway
         vault.setGateway(address(gateway));
