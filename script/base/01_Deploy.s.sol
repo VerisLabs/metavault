@@ -41,10 +41,10 @@ contract DeployScript is Script {
         //superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
 
-        adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE"); // DEPLOYER/OWNER 
-        relayerRole = vm.envAddress("RELAYER_ROLE"); // Backend
+        adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
+        relayerRole = vm.envAddress("RELAYER_ROLE");
         emergencyAdminRole = vm.envAddress("EMERGENCY_ADMIN_ROLE");
-        managerAddressRole = vm.envAddress("MANAGER_ADDRESS_ROLE"); // Backend
+        managerAddressRole = vm.envAddress("MANAGER_ADDRESS_ROLE");
         vm.startBroadcast(deployerPrivateKey);
 
         config = VaultConfig({
@@ -55,7 +55,7 @@ contract DeployScript is Script {
             performanceFee: 2000,
             oracleFee: 50,
             hurdleRateOracle: IHurdleRateOracle(hurdleRateOracleAddress),
-            sharesLockTime: 15 minutes,
+            sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),
             signerRelayer: relayerRole,
