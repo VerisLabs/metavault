@@ -1,4 +1,4 @@
-/// SPDX-License-Identifer: MIT
+// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
 import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";

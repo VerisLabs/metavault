@@ -15,12 +15,12 @@ contract SetRecoveryAddress is Script {
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         // same address deployed in every EVM chain
-        superPositionsReceiverAddress = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        superPositionsReceiverAddress = 0xc80c3A0D2fC0f95626F9612F893D88384B0ABa51;
 
         vm.startBroadcast(deployerPrivateKey);
 
         // our deployed SuperformGateway contract
-        gateway = ISuperformGateway(0x3228F64baE214d2562FaE387b5456BE10385648A);
+        gateway = ISuperformGateway(0x3B05001859654937d5a0927427D5C7d49178837E);
         gateway.setRecoveryAddress(superPositionsReceiverAddress);
 
         vm.stopBroadcast();
