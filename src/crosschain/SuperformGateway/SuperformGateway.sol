@@ -44,6 +44,18 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         _grantRoles(owner, ADMIN_ROLE);
     }
 
+    function setVault(IMetaVault _vault) external onlyRoles(ADMIN_ROLE) {
+        vault = _vault;
+    }
+
+    function setRouter(IBaseRouter _superformRouter) external onlyRoles(ADMIN_ROLE) {
+        superformRouter = _superformRouter;
+    }
+
+    function setSuperPositions(ISuperPositions _superPositions) external onlyRoles(ADMIN_ROLE) {
+        superPositions = _superPositions;
+    }
+
     /// @notice Gets the current queue of pending request IDs
     /// @dev Returns an array of all active request IDs in the queue
     /// @return requestIds Array of pending request IDs

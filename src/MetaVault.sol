@@ -1,7 +1,7 @@
 /// SPDX-License-Identifer: MIT
 pragma solidity ^0.8.19;
 
-import { ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { Multicallable } from "solady/utils/Multicallable.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
@@ -149,6 +149,10 @@ contract MetaVault is MetaVaultBase, Multicallable {
         gateway = _gateway;
         asset().safeApprove(address(_gateway), type(uint256).max);
         gateway.superPositions().setApprovalForAll(address(_gateway), true);
+    }
+
+    function setHurdleRateOracle(IHurdleRateOracle hurdleRateOracle) external onlyRoles(ADMIN_ROLE) {
+        _hurdleRateOracle = hurdleRateOracle;
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -433,7 +437,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     /// - For ETH: Typically set to base staking return like Lido (e.g., 3.5% APY)
     /// @return uint256 The current base hurdle rate in basis points
     function hurdleRate() public view returns (uint256) {
-        return _hurdleRateOracle.getAssetRate(asset());
+        return _hurdleRateOracle.getRate(asset());
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
