@@ -132,8 +132,8 @@ contract MetaVault is MetaVaultBase, Multicallable {
         lastFeesCharged = block.timestamp;
 
         // Initialize ownership and grant admin role
-        _initializeOwner(msg.sender);
-        _grantRoles(msg.sender, ADMIN_ROLE);
+        _initializeOwner(config.owner);
+        _grantRoles(config.owner, ADMIN_ROLE);
 
         // Initialize signer relayer
         signerRelayer = config.signerRelayer;
