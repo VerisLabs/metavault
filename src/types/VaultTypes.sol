@@ -48,6 +48,7 @@ struct VaultConfig {
     ISuperPositions superPositions;
     address treasury;
     address signerRelayer;
+    address owner;
 }
 
 /// @notice A helper library to define methods for handling VaultData

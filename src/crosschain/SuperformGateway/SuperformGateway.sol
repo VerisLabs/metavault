@@ -21,7 +21,8 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
     constructor(
         IMetaVault _vault,
         IBaseRouter _superformRouter,
-        ISuperPositions _superPositions
+        ISuperPositions _superPositions,
+        address owner
     )
         MultiFacetProxy(ADMIN_ROLE)
     {
@@ -39,8 +40,20 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         superPositions.setApprovalForAll(address(superformRouter), true);
 
         // Initialize ownership and grant admin role
-        _initializeOwner(msg.sender);
-        _grantRoles(msg.sender, ADMIN_ROLE);
+        _initializeOwner(owner);
+        _grantRoles(owner, ADMIN_ROLE);
+    }
+
+    function setVault(IMetaVault _vault) external onlyRoles(ADMIN_ROLE) {
+        vault = _vault;
+    }
+
+    function setRouter(IBaseRouter _superformRouter) external onlyRoles(ADMIN_ROLE) {
+        superformRouter = _superformRouter;
+    }
+
+    function setSuperPositions(ISuperPositions _superPositions) external onlyRoles(ADMIN_ROLE) {
+        superPositions = _superPositions;
     }
 
     /// @notice Gets the current queue of pending request IDs

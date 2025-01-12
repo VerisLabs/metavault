@@ -50,6 +50,10 @@ contract SuperPositionsReceiver is OwnableRoles {
         _grantRoles(msg.sender, ADMIN_ROLE);
     }
 
+    function setGateway(address _gateway) external onlyRoles(ADMIN_ROLE) {
+        gateway = _gateway;
+    }
+
     /// @notice Recovers stuck tokens from failed cross-chain operations
     /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
     /// @param token The address of the token to recover

@@ -38,8 +38,8 @@ contract BaseVaultTest is BaseTest {
     function polygonUsdceVaultConfig() public returns (VaultConfig memory) {
         return VaultConfig({
             asset: USDCE_POLYGON,
-            name: "MaxApyCrossUSDCeVault",
-            symbol: "maxcUSDCE",
+            name: "MetaUsdceVault",
+            symbol: "metaUSDCe",
             managementFee: 0,
             performanceFee: 0,
             oracleFee: 0,
@@ -47,15 +47,16 @@ contract BaseVaultTest is BaseTest {
             sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
             treasury: makeAddr("treasury"),
-            signerRelayer: address(new MockSignerRelayer(0xA111ce))
+            signerRelayer: address(new MockSignerRelayer(0xA111ce)),
+            owner: users.alice
         });
     }
 
     function baseChainUsdceVaultConfig() public returns (VaultConfig memory) {
         return VaultConfig({
             asset: USDCE_BASE,
-            name: "MaxApyCrossUSDCeVault",
-            symbol: "maxcUSDCE",
+            name: "MetaUsdceVault",
+            symbol: "metaUSDCe",
             managementFee: 0,
             performanceFee: 2000,
             oracleFee: 0,
@@ -63,7 +64,8 @@ contract BaseVaultTest is BaseTest {
             sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),
-            signerRelayer: address(new MockSignerRelayer(0xA111ce))
+            signerRelayer: address(new MockSignerRelayer(0xA111ce)),
+            owner: users.alice
         });
     }
 
@@ -72,7 +74,10 @@ contract BaseVaultTest is BaseTest {
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
         SuperformGateway gateway = new SuperformGateway(
-            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_POLYGON), ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON)
+            IMetaVault(vault),
+            IBaseRouter(SUPERFORM_ROUTER_POLYGON),
+            ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
+            users.alice
         );
         bytes4[] memory investSelectors = invest.selectors();
         gateway.addFunctions(investSelectors, address(invest), false);
@@ -91,7 +96,10 @@ contract BaseVaultTest is BaseTest {
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
         SuperformGateway gateway = new SuperformGateway(
-            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_BASE), ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE)
+            IMetaVault(vault),
+            IBaseRouter(SUPERFORM_ROUTER_BASE),
+            ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
+            users.alice
         );
         bytes4[] memory investSelectors = invest.selectors();
         gateway.addFunctions(investSelectors, address(invest), false);
