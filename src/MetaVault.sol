@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { Multicallable } from "solady/utils/Multicallable.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
-
 import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
+import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { NoDelegateCall } from "lib/Lib.sol";
+import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 
 /// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-contract MetaVault is MetaVaultBase, Multicallable {
+contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -171,6 +171,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 requestId)
     {
@@ -200,6 +201,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 shares)
     {
@@ -232,6 +234,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 assets)
     {
@@ -269,6 +272,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 requestId)
     {
@@ -289,6 +293,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         nonReentrant
         returns (uint256 assets)
     {
@@ -307,6 +312,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         nonReentrant
         returns (uint256 shares)
     {
