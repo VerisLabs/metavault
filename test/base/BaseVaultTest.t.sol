@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.19;
+
 import { BaseTest } from "./BaseTest.t.sol";
 
 import { MockHurdleRateOracle } from "../helpers/mock/MockHurdleRateOracle.sol";
