@@ -1,4 +1,4 @@
-/// SPDX-License-Identifer: MIT
+/// SPDX-License-Identifier: BUSL-1.1
 interface IERC1155A {
     function balanceOf(address account, uint256 id) external view returns (uint256);
 
