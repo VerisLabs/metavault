@@ -22,7 +22,6 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
 import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
 
-import "forge-std/console.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 

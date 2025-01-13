@@ -22,7 +22,6 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
 import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
 
-import "forge-std/console.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
@@ -120,7 +119,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         _setupContractLabels();
     }
 
-    function test_divestSingleDirectSingleVault() public {
+    function test_MetaVault_divestSingleDirectSingleVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         vault.addVault({
             chainId: baseChainId,
@@ -149,7 +148,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(yUsdce.balanceOf(address(vault)), 0);
     }
 
-    function test_divestSingleDirectMultiVault() public {
+    function test_MetaVault_divestSingleDirectMultiVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         MockERC4626 smUsdce = new MockERC4626(USDCE_BASE, "Sommelier USDCE", "smUSDCe", true, 0);
 
@@ -209,7 +208,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(vault.totalIdle(), 1000 * _1_USDCE);
     }
 
-    function test_divestSingleXChainSingleVault() public {
+    function test_MetaVault_divestSingleXChainSingleVault() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
@@ -375,7 +374,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         gateway.divestSingleXChainSingleVault(req);
     }
 
-    function test_divestSingleXChainSingleVault_failed() public {
+    function test_MetaVault_divestSingleXChainSingleVault_failed() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint64 optimismChainId = 10;
