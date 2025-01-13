@@ -51,12 +51,14 @@ import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
+    MultiVaultSFData,
+    SingleVaultSFData,
     SingleXChainMultiVaultStateReq,
     SingleXChainSingleVaultStateReq,
     VaultReport
 } from "src/types/Lib.sol";
 
-contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
+contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
     using LibString for bytes;
 
@@ -134,7 +136,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
         uint256 sharesToDivest = yUsdce.balanceOf(address(vault));
-        uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1; // Allow 1 wei slippage
+        uint256 minAssetsOut = yUsdce.convertToAssets(sharesToDivest) - 1;
 
         vm.expectEmit(true, true, true, true);
         emit Divest(400 * _1_USDCE);
@@ -263,6 +265,114 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(gateway.totalPendingXChainDivests(), 0);
+    }
+
+    function test_MetaVault_divestSingleXChainSingleVault_revert_InvalidSuperformId() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        SingleVaultSFData memory superformData;
+        superformData.superformId = 0;
+        superformData.amount = 600 * _1_USDCE;
+        superformData.maxSlippage = 0;
+        superformData.hasDstSwap = false;
+        superformData.retain4626 = false;
+
+        SingleXChainSingleVaultStateReq memory req;
+        req.dstChainId = optimismChainId;
+        req.superformData = superformData;
+        req.ambIds = new uint8[](1);
+        req.ambIds[0] = 1;
+
+        vm.expectRevert(abi.encodeWithSignature("InvalidSuperformId()"));
+        vault.divestSingleXChainSingleVault(req);
+    }
+
+    function test_MetaVault_divestSingleXChainSingleVault_revert_VaultNotListed() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        SingleXChainSingleVaultStateReq memory req =
+            _buildDivestSingleXChainSingleVaultParams(superformId, 600 * _1_USDCE);
+
+        vm.expectRevert(abi.encodeWithSignature("VaultNotListed()"));
+        vault.divestSingleXChainSingleVault(req);
+    }
+
+    function test_MetaVault_divestSingleXChainSingleVault_revert_InvalidAmount() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        SingleVaultSFData memory superformData;
+        superformData.superformId = superformId;
+        superformData.amount = 0;
+        superformData.maxSlippage = 0;
+        superformData.hasDstSwap = false;
+        superformData.retain4626 = false;
+
+        SingleXChainSingleVaultStateReq memory req;
+        req.dstChainId = optimismChainId;
+        req.superformData = superformData;
+        req.ambIds = new uint8[](1);
+        req.ambIds[0] = 1;
+
+        vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
+        vault.divestSingleXChainSingleVault(req);
+    }
+
+    function test_MetaVault_divestSingleXChainSingleVault_revert_Unauthorized() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        SingleXChainSingleVaultStateReq memory req =
+            _buildDivestSingleXChainSingleVaultParams(superformId, 600 * _1_USDCE);
+
+        vm.startPrank(users.bob);
+        vm.expectRevert(abi.encodeWithSignature("NotVault()"));
+        gateway.divestSingleXChainSingleVault(req);
     }
 
     function test_divestSingleXChainSingleVault_failed() public {
@@ -428,6 +538,131 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(gateway.totalPendingXChainDivests(), 1_151_063_415);
     }
 
+    function test_MetaVault_divestSingleXChainMultiVault_revert_InvalidAmount() public {
+        address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
+        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
+        uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc,
+            _getSharePrice(optimismChainId, vaultAddress_usdc),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc,
+            vault: vaultAddress_usdc,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_aloe_op,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_aloe_op,
+            vault: vaultAddress_usdc_aloe_op,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1200 * _1_USDCE, users.alice);
+
+        MultiVaultSFData memory superformsData;
+        superformsData.superformIds = new uint256[](0);
+        superformsData.amounts = new uint256[](0);
+        superformsData.outputAmounts = new uint256[](0);
+        superformsData.maxSlippages = new uint256[](0);
+        superformsData.hasDstSwaps = new bool[](0);
+        superformsData.retain4626s = new bool[](0);
+
+        SingleXChainMultiVaultStateReq memory req;
+        req.dstChainId = optimismChainId;
+        req.superformsData = superformsData;
+        req.ambIds = new uint8[](1);
+        req.ambIds[0] = 1;
+
+        vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
+        vault.divestSingleXChainMultiVault(req);
+    }
+
+    function test_MetaVault_divestSingleXChainMultiVault_revert_TotalAmountMismatch() public {
+        address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
+        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
+        uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc,
+            _getSharePrice(optimismChainId, vaultAddress_usdc),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc,
+            vault: vaultAddress_usdc,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_aloe_op,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_aloe_op,
+            vault: vaultAddress_usdc_aloe_op,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1200 * _1_USDCE, users.alice);
+
+        MultiVaultSFData memory superformsData;
+        superformsData.superformIds = new uint256[](2);
+        superformsData.superformIds[0] = superformId_usdc;
+        superformsData.superformIds[1] = superformId_usdc_aloe_op;
+
+        superformsData.amounts = new uint256[](1);
+        superformsData.amounts[0] = 600 * _1_USDCE;
+
+        superformsData.outputAmounts = new uint256[](2);
+        superformsData.maxSlippages = new uint256[](2);
+        superformsData.hasDstSwaps = new bool[](2);
+        superformsData.retain4626s = new bool[](2);
+
+        SingleXChainMultiVaultStateReq memory req;
+        req.dstChainId = optimismChainId;
+        req.superformsData = superformsData;
+        req.ambIds = new uint8[](1);
+        req.ambIds[0] = 1;
+
+        vm.expectRevert(abi.encodeWithSignature("TotalAmountMismatch()"));
+        vault.divestSingleXChainMultiVault(req);
+    }
+
     function test_MetaVault_divestMultiXChainSingleVault() public {
         address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
         address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
@@ -512,8 +747,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 lastSharePrice2 = report2.sharePrice;
 
         uint256 expectedDivestedValue = lastSharePrice2 * shares2 / 10 ** 6 + lastSharePrice * shares / 10 ** 6;
-
-        expectedDivestedValue = divestReq.superformsData[0].outputAmount + divestReq.superformsData[1].outputAmount;
 
         // //Execute divest
         vm.expectEmit(true, true, true, true);
