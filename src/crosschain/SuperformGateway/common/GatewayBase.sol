@@ -12,10 +12,13 @@ contract GatewayBase is OwnableRoles {
     /// @notice Emitted when a new receiver contract is deployed
     event ReceiverDeployed(bytes32 indexed key, address indexed receiver);
 
+    /// @notice Thrown when an unauthorized address attempts to call a function
+    error NotVault();
+
     /// @notice Modifier that restricts function access to the vault contract
     modifier onlyVault() {
         if (msg.sender != address(vault)) {
-            revert();
+            revert NotVault();
         }
         _;
     }

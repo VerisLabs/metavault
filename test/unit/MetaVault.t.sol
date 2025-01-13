@@ -28,12 +28,6 @@ import { MetaVault } from "src/MetaVault.sol";
 
 import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
-    AAVE_USDC_VAULT_ID_POLYGON,
-    AAVE_USDC_VAULT_POLYGON,
-    ALOE_USDCA_VAULT_OPTIMISM,
-    ALOE_USDC_VAULT_ID_OPTIMISM,
-    CRAFT_USDCA_VAULT_OPTIMISM,
-    CRAFT_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
@@ -51,13 +45,9 @@ import {
 import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
     LiqRequest,
-    MultiDstMultiVaultStateReq,
-    MultiDstSingleVaultStateReq,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
     ProcessRedeemRequestParams,
-    SingleVaultSFData,
-    SingleXChainMultiVaultStateReq,
     SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultStateReq,
     SingleXChainSingleVaultWithdraw,

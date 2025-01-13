@@ -32,8 +32,6 @@ import {
     AAVE_USDC_VAULT_POLYGON,
     ALOE_USDCA_VAULT_OPTIMISM,
     ALOE_USDC_VAULT_ID_OPTIMISM,
-    CRAFT_USDCA_VAULT_OPTIMISM,
-    CRAFT_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
@@ -53,13 +51,8 @@ import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
-    MultiXChainMultiVaultWithdraw,
-    MultiXChainSingleVaultWithdraw,
-    SingleVaultSFData,
     SingleXChainMultiVaultStateReq,
-    SingleXChainMultiVaultWithdraw,
     SingleXChainSingleVaultStateReq,
-    SingleXChainSingleVaultWithdraw,
     VaultReport
 } from "src/types/Lib.sol";
 
