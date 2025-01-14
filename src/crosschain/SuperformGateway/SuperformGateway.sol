@@ -1,4 +1,4 @@
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { GatewayBase, IBaseRouter, IMetaVault, ISuperPositions } from "./common/GatewayBase.sol";
@@ -21,7 +21,8 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
     constructor(
         IMetaVault _vault,
         IBaseRouter _superformRouter,
-        ISuperPositions _superPositions
+        ISuperPositions _superPositions,
+        address owner
     )
         MultiFacetProxy(ADMIN_ROLE)
     {
@@ -39,8 +40,20 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         superPositions.setApprovalForAll(address(superformRouter), true);
 
         // Initialize ownership and grant admin role
-        _initializeOwner(msg.sender);
-        _grantRoles(msg.sender, ADMIN_ROLE);
+        _initializeOwner(owner);
+        _grantRoles(owner, ADMIN_ROLE);
+    }
+
+    function setVault(IMetaVault _vault) external onlyRoles(ADMIN_ROLE) {
+        vault = _vault;
+    }
+
+    function setRouter(IBaseRouter _superformRouter) external onlyRoles(ADMIN_ROLE) {
+        superformRouter = _superformRouter;
+    }
+
+    function setSuperPositions(ISuperPositions _superPositions) external onlyRoles(ADMIN_ROLE) {
+        superPositions = _superPositions;
     }
 
     /// @notice Gets the current queue of pending request IDs
@@ -126,11 +139,9 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
     {
         // Silence compiler warnings
         operator;
-        from;
-        values;
         data;
         for (uint256 i = 0; i < superformIds.length; ++i) {
-            onERC1155Received(address(0), address(0), superformIds[i], 0, "");
+            onERC1155Received(address(0), from, superformIds[i], values[i], "");
         }
         return this.onERC1155BatchReceived.selector;
     }

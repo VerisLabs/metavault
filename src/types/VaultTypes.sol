@@ -1,13 +1,12 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { LiqRequest } from "./SuperformTypes.sol";
-import { ISharePriceOracle } from "interfaces/ISharePriceOracle.sol";
+import { ISharePriceOracle, VaultReport } from "interfaces/ISharePriceOracle.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { IBaseRouter } from "src/interfaces/IBaseRouter.sol";
 
 import { IHurdleRateOracle } from "src/interfaces/IHurdleRateOracle.sol";
-import { VaultReport } from "src/interfaces/ISharePriceOracle.sol";
 import { ISuperPositions } from "src/interfaces/ISuperPositions.sol";
 import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
 import { ISuperformGateway } from "src/interfaces/ISuperformGateway.sol";
@@ -48,6 +47,7 @@ struct VaultConfig {
     ISuperPositions superPositions;
     address treasury;
     address signerRelayer;
+    address owner;
 }
 
 /// @notice A helper library to define methods for handling VaultData
@@ -196,7 +196,7 @@ struct MultiXChainMultiVaultWithdraw {
     uint256 value;
 }
 
-struct ProcessRedeemRequestWithSignatureParams {
+struct ProcessRedeemRequestParams {
     address controller;
     SingleXChainSingleVaultWithdraw sXsV;
     SingleXChainMultiVaultWithdraw sXmV;

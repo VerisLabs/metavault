@@ -1,7 +1,9 @@
-/// SPDX-License-Identifer: MIT
+/// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import { ISharePriceOracle } from "./ISharePriceOracle.sol";
+
+import { ERC7540Engine } from "modules/Lib.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -9,7 +11,7 @@ import {
     MultiVaultSFData,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestWithSignatureParams,
+    ProcessRedeemRequestParams,
     SingleDirectMultiVaultStateReq,
     SingleDirectSingleVaultStateReq,
     SingleVaultSFData,
@@ -23,7 +25,7 @@ import {
 } from "types/Lib.sol";
 
 interface IMetaVault {
-    function initialize(VaultConfig memory) external;
+    function WITHDRAWAL_QUEUE_SIZE() external view returns (uint256);
 
     function SECS_PER_YEAR() external view returns (uint256);
 
@@ -38,6 +40,30 @@ interface IMetaVault {
     function ORACLE_ROLE() external view returns (uint256);
 
     function EMERGENCY_ADMIN_ROLE() external view returns (uint256);
+
+    function N_CHAINS() external view returns (uint256);
+
+    function THIS_CHAIN_ID() external view returns (uint64);
+
+    function DST_CHAINS(uint256) external view returns (uint64);
+
+    function treasury() external view returns (address);
+
+    function signerRelayer() external view returns (address);
+
+    function gateway() external view returns (address);
+
+    function emergencyShutdown() external view returns (bool);
+
+    function localWithdrawalQueue(uint256) external view returns (uint256);
+
+    function xChainWithdrawalQueue(uint256) external view returns (uint256);
+
+    function performanceFeeExempt(address) external view returns (uint256);
+
+    function managementFeeExempt(address) external view returns (uint256);
+
+    function oracleFeeExempt(address) external view returns (uint256);
 
     function grantRoles(address, uint256) external;
 
@@ -59,6 +85,8 @@ interface IMetaVault {
 
     function convertToShares(uint256) external view returns (uint256);
 
+    function convertToSuperPositions(uint256 superformId, uint256 assets) external view returns (uint256);
+
     function totalWithdrawableAssets() external view returns (uint256 assets);
 
     function totalLocalAssets() external view returns (uint256 assets);
@@ -70,6 +98,8 @@ interface IMetaVault {
     function totalIdle() external view returns (uint256 assets);
 
     function totalDebt() external view returns (uint256 assets);
+
+    function totalDeposits() external view returns (uint256 assets);
 
     function managementFee() external view returns (uint256);
 
@@ -83,8 +113,6 @@ interface IMetaVault {
 
     function lastReport() external view returns (uint256);
 
-    function treasury() external view returns (address);
-
     function addVault(
         uint64 chainId,
         uint256 superformId,
@@ -94,6 +122,8 @@ interface IMetaVault {
         ISharePriceOracle oracle
     )
         external;
+
+    function removeVault(uint256 superformId) external;
 
     function vaults(uint256)
         external
@@ -134,15 +164,7 @@ interface IMetaVault {
 
     function claimableDepositRequest(address) external view returns (uint256);
 
-    function processRedeemRequest(
-        address controller,
-        SingleXChainSingleVaultWithdraw calldata sXsV,
-        SingleXChainMultiVaultWithdraw calldata sXmV,
-        MultiXChainSingleVaultWithdraw calldata mXsV,
-        MultiXChainMultiVaultWithdraw calldata mXmV
-    )
-        external
-        payable;
+    function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable;
 
     function investSingleDirectSingleVault(
         address vaultAddress,
@@ -236,4 +258,9 @@ interface IMetaVault {
     function lastFeesCharged() external view returns (uint256);
 
     function chargeGlobalFees() external returns (uint256);
+
+    function previewWithdrawalRoute(uint256 assets)
+        external
+        view
+        returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);
 }

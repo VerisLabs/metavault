@@ -1,21 +1,21 @@
-/// SPDX-License-Identifer: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { Multicallable } from "solady/utils/Multicallable.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
-
 import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
+import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { NoDelegateCall } from "lib/Lib.sol";
+import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 
 /// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
 /// aggregation
-contract MetaVault is MetaVaultBase, Multicallable {
+contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           LIBRARIES                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -42,6 +42,9 @@ contract MetaVault is MetaVaultBase, Multicallable {
     /// @dev Emitted when adding a new vault to the portfolio
     event AddVault(uint64 indexed chainId, address vault);
 
+    /// @dev Emitted when removing a vault from the portfolio
+    event RemoveVault(uint64 indexed chainId, address vault);
+
     /// @dev Emitted when updating the shares lock time
     event SetSharesLockTime(uint24 time);
 
@@ -61,9 +64,6 @@ contract MetaVault is MetaVaultBase, Multicallable {
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @notice Thrown when {msg.value} cannot cover the crosschain transaction cost
-    error InsufficientGas();
-
     /// @notice Thrown when attempting to add a vault that is already listed
     error VaultAlreadyListed();
 
@@ -81,6 +81,9 @@ contract MetaVault is MetaVaultBase, Multicallable {
 
     /// @notice Thrown when attempting to perform an operation while the vault is in emergency shutdown
     error VaultShutdown();
+
+    /// @notice Thrown when attempting to to remove a vault that is still in the metavault balance
+    error SharesBalanceNotZero();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -132,8 +135,8 @@ contract MetaVault is MetaVaultBase, Multicallable {
         lastFeesCharged = block.timestamp;
 
         // Initialize ownership and grant admin role
-        _initializeOwner(msg.sender);
-        _grantRoles(msg.sender, ADMIN_ROLE);
+        _initializeOwner(config.owner);
+        _grantRoles(config.owner, ADMIN_ROLE);
 
         // Initialize signer relayer
         signerRelayer = config.signerRelayer;
@@ -149,6 +152,10 @@ contract MetaVault is MetaVaultBase, Multicallable {
         gateway = _gateway;
         asset().safeApprove(address(_gateway), type(uint256).max);
         gateway.superPositions().setApprovalForAll(address(_gateway), true);
+    }
+
+    function setHurdleRateOracle(IHurdleRateOracle hurdleRateOracle) external onlyRoles(ADMIN_ROLE) {
+        _hurdleRateOracle = hurdleRateOracle;
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -167,6 +174,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 requestId)
     {
@@ -196,6 +204,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 shares)
     {
@@ -228,6 +237,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 assets)
     {
@@ -265,6 +275,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         noEmergencyShutdown
         returns (uint256 requestId)
     {
@@ -285,6 +296,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         nonReentrant
         returns (uint256 assets)
     {
@@ -303,6 +315,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     )
         public
         override
+        noDelegateCall
         nonReentrant
         returns (uint256 shares)
     {
@@ -433,7 +446,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
     /// - For ETH: Typically set to base staking return like Lido (e.g., 3.5% APY)
     /// @return uint256 The current base hurdle rate in basis points
     function hurdleRate() public view returns (uint256) {
-        return _hurdleRateOracle.getAssetRate(asset());
+        return _hurdleRateOracle.getRate(asset());
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -537,7 +550,7 @@ contract MetaVault is MetaVaultBase, Multicallable {
         ISharePriceOracle oracle
     )
         external
-        onlyRoles(ADMIN_ROLE)
+        onlyRoles(MANAGER_ROLE)
     {
         if (superformId == 0) revert();
         // If its already listed revert
@@ -578,6 +591,63 @@ contract MetaVault is MetaVaultBase, Multicallable {
         }
 
         emit AddVault(chainId, vault);
+    }
+
+    /// @notice Remove a vault from the portfolio
+    /// @param superformId id of vault to be removed
+    function removeVault(uint256 superformId) external onlyRoles(MANAGER_ROLE) {
+        if (_sharesBalance(vaults[superformId]) > 0) revert SharesBalanceNotZero();
+        uint64 chainId = vaults[superformId].chainId;
+        address vaultAddress = vaults[superformId].vaultAddress;
+        delete vaults[superformId];
+        delete _vaultToSuperformId[vaultAddress];
+        if (chainId == THIS_CHAIN_ID) {
+            // Push it to the local withdrawal queue
+            uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = localWithdrawalQueue;
+            for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+                if (queue[i] == superformId) {
+                    localWithdrawalQueue[i] = 0;
+                    _organizeWithdrawalQueue(localWithdrawalQueue);
+                    break;
+                }
+            }
+            // If its on the same chain revoke approval to vault
+            asset().safeApprove(vaultAddress, 0);
+        } else {
+            // Push it to the crosschain withdrawal queue
+            uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = xChainWithdrawalQueue;
+            for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+                if (queue[i] == superformId) {
+                    xChainWithdrawalQueue[i] = 0;
+                    _organizeWithdrawalQueue(xChainWithdrawalQueue);
+                    break;
+                }
+            }
+        }
+        emit RemoveVault(chainId, vaultAddress);
+    }
+    /// @notice Reorganize `withdrawalQueue` based on premise that if there is an
+    /// empty value between two actual values, then the empty value should be
+    /// replaced by the later value.
+    /// @dev Relative ordering of non-zero values is maintained.
+
+    function _organizeWithdrawalQueue(uint256[WITHDRAWAL_QUEUE_SIZE] storage queue) internal {
+        uint256 offset;
+        for (uint256 i; i < WITHDRAWAL_QUEUE_SIZE;) {
+            uint256 vault = queue[i];
+            if (vault == 0) {
+                unchecked {
+                    ++offset;
+                }
+            } else if (offset > 0) {
+                queue[i - offset] = vault;
+                queue[i] = 0;
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /// @notice Sets the emergency shutdown state of the vault

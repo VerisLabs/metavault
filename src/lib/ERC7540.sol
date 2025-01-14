@@ -1,4 +1,4 @@
-/// SPDX-License-Identifer: MIT
+/// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { ERC7540Lib, ERC7540_FilledRequest, ERC7540_Request } from "../types/ERC7540Types.sol";

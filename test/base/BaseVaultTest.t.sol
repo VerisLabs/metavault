@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.19;
+
 import { BaseTest } from "./BaseTest.t.sol";
 
 import { MockHurdleRateOracle } from "../helpers/mock/MockHurdleRateOracle.sol";
@@ -16,7 +19,6 @@ import {
 } from "interfaces/Lib.sol";
 
 import { SuperPositionsReceiver } from "crosschain/Lib.sol";
-import { ProxyAdmin } from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import { TransparentUpgradeableProxy } from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import { MetaVault } from "src/MetaVault.sol";
 import {
@@ -39,8 +41,8 @@ contract BaseVaultTest is BaseTest {
     function polygonUsdceVaultConfig() public returns (VaultConfig memory) {
         return VaultConfig({
             asset: USDCE_POLYGON,
-            name: "MaxApyCrossUSDCeVault",
-            symbol: "maxcUSDCE",
+            name: "MetaUsdceVault",
+            symbol: "metaUSDCe",
             managementFee: 0,
             performanceFee: 0,
             oracleFee: 0,
@@ -48,15 +50,16 @@ contract BaseVaultTest is BaseTest {
             sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
             treasury: makeAddr("treasury"),
-            signerRelayer: address(new MockSignerRelayer(0xA111ce))
+            signerRelayer: address(new MockSignerRelayer(0xA111ce)),
+            owner: users.alice
         });
     }
 
     function baseChainUsdceVaultConfig() public returns (VaultConfig memory) {
         return VaultConfig({
             asset: USDCE_BASE,
-            name: "MaxApyCrossUSDCeVault",
-            symbol: "maxcUSDCE",
+            name: "MetaUsdceVault",
+            symbol: "metaUSDCe",
             managementFee: 0,
             performanceFee: 2000,
             oracleFee: 0,
@@ -64,17 +67,20 @@ contract BaseVaultTest is BaseTest {
             sharesLockTime: 30 days,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
             treasury: makeAddr("treasury"),
-            signerRelayer: address(new MockSignerRelayer(0xA111ce))
+            signerRelayer: address(new MockSignerRelayer(0xA111ce)),
+            owner: users.alice
         });
     }
 
     function deployGatewayPolygon(address vault, address owner) public returns (ISuperformGateway) {
-        ProxyAdmin admin = new ProxyAdmin(owner);
         InvestSuperform invest = new InvestSuperform();
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
         SuperformGateway gateway = new SuperformGateway(
-            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_POLYGON), ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON)
+            IMetaVault(vault),
+            IBaseRouter(SUPERFORM_ROUTER_POLYGON),
+            ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
+            users.alice
         );
         bytes4[] memory investSelectors = invest.selectors();
         gateway.addFunctions(investSelectors, address(invest), false);
@@ -89,12 +95,14 @@ contract BaseVaultTest is BaseTest {
     }
 
     function deployGatewayBase(address vault, address owner) public returns (ISuperformGateway) {
-        ProxyAdmin admin = new ProxyAdmin(owner);
         InvestSuperform invest = new InvestSuperform();
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
         SuperformGateway gateway = new SuperformGateway(
-            IMetaVault(vault), IBaseRouter(SUPERFORM_ROUTER_BASE), ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE)
+            IMetaVault(vault),
+            IBaseRouter(SUPERFORM_ROUTER_BASE),
+            ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
+            users.alice
         );
         bytes4[] memory investSelectors = invest.selectors();
         gateway.addFunctions(investSelectors, address(invest), false);

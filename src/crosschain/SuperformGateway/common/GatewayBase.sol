@@ -1,4 +1,4 @@
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { ERC20Receiver } from "crosschain/Lib.sol";
@@ -12,10 +12,13 @@ contract GatewayBase is OwnableRoles {
     /// @notice Emitted when a new receiver contract is deployed
     event ReceiverDeployed(bytes32 indexed key, address indexed receiver);
 
+    /// @notice Thrown when an unauthorized address attempts to call a function
+    error NotVault();
+
     /// @notice Modifier that restricts function access to the vault contract
     modifier onlyVault() {
         if (msg.sender != address(vault)) {
-            revert();
+            revert NotVault();
         }
         _;
     }
@@ -71,7 +74,7 @@ contract GatewayBase is OwnableRoles {
     uint256 public constant ADMIN_ROLE = _ROLE_0;
 
     /// @notice Role identifier for relayer
-    uint256 public constant RELAYER_ROLE = _ROLE_0;
+    uint256 public constant RELAYER_ROLE = _ROLE_1;
 
     /// @notice ERC20Receiver contract implementation to clone
     address public receiverImplementation;

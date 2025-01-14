@@ -1,7 +1,8 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { IHurdleRateOracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { IHurdleRateOracle } from "../interfaces/IHurdleRateOracle.sol";
+import { ISuperformGateway } from "../interfaces/ISuperformGateway.sol";
 
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
@@ -44,9 +45,6 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
 
     /// @notice Role identifier for relayer privileges
     uint256 public constant RELAYER_ROLE = _ROLE_4;
-
-    /// @notice Delay period for redeem requests
-    uint24 public constant REQUEST_REDEEM_DELAY = 1 days;
 
     /// @notice Chain ID of the current network
     uint64 public THIS_CHAIN_ID;
@@ -126,7 +124,7 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     mapping(address controller => uint256 nonce) internal _controllerNonces;
 
     /// @notice Mapping of chain IDs to their respective indexes
-    mapping(uint64 => uint256) chainIndexes;
+    mapping(uint64 => uint256) internal chainIndexes;
 
     /// @notice Custom performance fee exemptions per controller
     mapping(address controller => uint256) public performanceFeeExempt;

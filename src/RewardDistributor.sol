@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { MerkleProofLib } from "solady/utils/MerkleProofLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";

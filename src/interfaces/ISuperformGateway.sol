@@ -1,3 +1,4 @@
+/// SPDX-License-Identifier: MIT
 import { ISuperPositions } from "../interfaces/ISuperPositions.sol";
 import {
     MultiDstMultiVaultStateReq,
@@ -149,4 +150,71 @@ interface ISuperformGateway {
     function getReceiver(bytes32 key) external returns (address receiverAddress);
 
     function settleDivest(bytes32 key, bool force) external;
+
+    function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewIdDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq memory req)
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewIdDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq memory req)
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewIdDivestMultiXChainMultiVault(MultiDstMultiVaultStateReq memory req)
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewLiquidateSingleXChainSingleVault(
+        uint64 chainId,
+        uint256 superformId,
+        uint256 amount,
+        address receiver,
+        SingleXChainSingleVaultWithdraw memory config,
+        uint256 totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewLiquidateSingleXChainMultiVault(
+        uint64 chainId,
+        uint256[] memory superformIds,
+        uint256[] memory amounts,
+        address receiver,
+        SingleXChainMultiVaultWithdraw memory config,
+        uint256 totalRequestedAssets,
+        uint256[] memory requestedAssetsPerVault
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewLiquidateMultiDstSingleVault(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        SingleVaultSFData[] memory singleVaultDatas,
+        uint256[] memory totalRequestedAssets
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds);
+
+    function previewLiquidateMultiDstMultiVault(
+        uint8[][] memory ambIds,
+        uint64[] memory dstChainIds,
+        MultiVaultSFData[] memory multiVaultDatas,
+        uint256[] memory totalRequestedAssets,
+        uint256[][] memory totalRequestedAssetsPerVault
+    )
+        external
+        view
+        returns (bytes32[] memory requestIds);
 }

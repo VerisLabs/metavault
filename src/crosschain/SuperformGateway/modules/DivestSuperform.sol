@@ -1,4 +1,4 @@
-/// SPDX-License-Identifier: MIT
+/// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { GatewayBase } from "../common/GatewayBase.sol";
@@ -46,6 +46,9 @@ contract DivestSuperform is GatewayBase {
 
     /// @notice Emitted when a new request is created
     event RequestCreated(bytes32 indexed key, address indexed controller, uint256[] superformIds);
+
+    error InvalidVaultAddress();
+    error InvalidReceiverAddress();
 
     /// @notice Divests assets from a single vault on a different chain
     /// @dev Transfers Superform NFTs from vault to this contract and initiates withdrawal
@@ -135,6 +138,7 @@ contract DivestSuperform is GatewayBase {
         }
 
         bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, req.superformsData.superformIds));
+
         _requestsQueue.add(key);
         address receiver = getReceiver(key);
 
@@ -149,6 +153,7 @@ contract DivestSuperform is GatewayBase {
         superPositions.safeBatchTransferFrom(
             address(vault), address(this), req.superformsData.superformIds, req.superformsData.amounts, ""
         );
+
         superformRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
@@ -197,7 +202,9 @@ contract DivestSuperform is GatewayBase {
 
             totalAmount += amount;
 
-            superPositions.safeTransferFrom(address(vault), address(this), superformId, amount, "");
+            superPositions.safeTransferFrom(
+                address(vault), address(this), superformId, req.superformsData[i].amount, ""
+            );
 
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, amount, key);
@@ -207,7 +214,7 @@ contract DivestSuperform is GatewayBase {
             }
         }
 
-        superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        superformRouter.multiDstSingleVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
@@ -237,7 +244,9 @@ contract DivestSuperform is GatewayBase {
             data.superformIds = superformIds;
             data.requestedAssets = totalAmount;
             req.superformsData[i].receiverAddress = receiver;
+
             superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
+
             uint256 totalChainAmount;
 
             uint256 totalExpectedAmount;
@@ -254,10 +263,11 @@ contract DivestSuperform is GatewayBase {
                 totalChainAmount += amount;
             }
             ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
+
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, totalChainAmount, key);
         }
-        superformRouter.multiDstMultiVaultDeposit{ value: msg.value }(req);
+        superformRouter.multiDstMultiVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
@@ -321,21 +331,26 @@ contract DivestSuperform is GatewayBase {
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
         view
-        returns (bytes32 requestId)
+        returns (bytes32[] memory requestIds)
     {
+        requestIds = new bytes32[](1);
         uint256 superformId = req.superformData.superformId;
-        return keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, superformId));
+        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, superformId));
+        return requestIds;
     }
 
-    function previewIdDivestMultiXChainSingleVault(SingleXChainMultiVaultStateReq memory req)
+    function previewIdDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq memory req)
         external
         view
-        returns (bytes32 requestId)
+        returns (bytes32[] memory requestIds)
     {
-        return keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, req.superformsData.superformIds));
+        requestIds = new bytes32[](1);
+        requestIds[0] =
+            keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, req.superformsData.superformIds));
+        return requestIds;
     }
 
-    function previewIdDivestSingleXChainMultiVault(MultiDstSingleVaultStateReq memory req)
+    function previewIdDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq memory req)
         external
         view
         returns (bytes32[] memory requestIds)

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { ModuleBase } from "common/Lib.sol";
@@ -8,7 +8,6 @@ import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -16,6 +15,7 @@ import {
     MultiVaultSFData,
     MultiXChainMultiVaultWithdraw,
     MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestParams,
     SingleDirectMultiVaultStateReq,
     SingleDirectSingleVaultStateReq,
     SingleVaultSFData,
@@ -64,19 +64,13 @@ contract ERC7540Engine is ModuleBase {
     /// @notice Processes a redemption request for a given controller
     /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
     /// including cross-chain withdrawals
-    /// @param controller The address of the controller initiating the redemption
-    function processRedeemRequest(
-        address controller,
-        SingleXChainSingleVaultWithdraw calldata sXsV,
-        SingleXChainMultiVaultWithdraw calldata sXmV,
-        MultiXChainSingleVaultWithdraw calldata mXsV,
-        MultiXChainMultiVaultWithdraw calldata mXmV
-    )
-        external
-        payable
-        nonReentrant
-        onlyRoles(RELAYER_ROLE)
-    {
+    /// @param params redeem request parameters
+    function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable nonReentrant {
+        // Only relayer can call it by default
+        if (params.v == 0 && params.r == 0 && params.s == 0) {
+            _checkRoles(RELAYER_ROLE);
+        }
+
         // Retrieve the pending redeem request for the specified controller
         // This request may involve cross-chain withdrawals from various ERC4626 vaults
 
@@ -85,7 +79,14 @@ contract ERC7540Engine is ModuleBase {
         // 1. pendingRedeemRequest(controller): Fetches the pending shares
         // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
         _processRedeemRequest(
-            ProcessRedeemRequestConfig(pendingRedeemRequest(controller), controller, controller, sXsV, sXmV, mXsV, mXmV)
+            ProcessRedeemRequestConfig(
+                pendingRedeemRequest(params.controller),
+                params.controller,
+                params.sXsV,
+                params.sXmV,
+                params.mXsV,
+                params.mXmV
+            )
         );
         // Note: After processing, the redeemed assets are held by this contract
         // The user can later claim these assets using `redeem` or `withdraw`
@@ -321,12 +322,10 @@ contract ERC7540Engine is ModuleBase {
 
     /// @param shares to redeem and burn
     /// @param controller controller that created the request
-    /// @param owner shares owner
     /// @param receiver address of the assets receiver in case its a
     struct ProcessRedeemRequestConfig {
         uint256 shares;
         address controller;
-        address owner;
         SingleXChainSingleVaultWithdraw sXsV;
         SingleXChainMultiVaultWithdraw sXmV;
         MultiXChainSingleVaultWithdraw mXsV;

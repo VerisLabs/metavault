@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { ModuleBase } from "common/Lib.sol";
@@ -23,8 +23,7 @@ import {
     SingleXChainSingleVaultWithdraw,
     VaultConfig,
     VaultData,
-    VaultLib,
-    VaultReport
+    VaultLib
 } from "types/Lib.sol";
 
 /// @title AssetsManager
@@ -185,7 +184,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.investMultiXChainMultiVault(req);
+        uint256 totalAmount = gateway.investMultiXChainMultiVault{ value: msg.value }(req);
         _totalIdle -= totalAmount.toUint128();
         emit Invest(totalAmount);
     }

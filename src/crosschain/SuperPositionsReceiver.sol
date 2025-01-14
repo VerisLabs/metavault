@@ -1,4 +1,4 @@
-/// SPDX-License-Identifer: MIT
+/// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
@@ -50,6 +50,10 @@ contract SuperPositionsReceiver is OwnableRoles {
         _grantRoles(msg.sender, ADMIN_ROLE);
     }
 
+    function setGateway(address _gateway) external onlyRoles(ADMIN_ROLE) {
+        gateway = _gateway;
+    }
+
     /// @notice Recovers stuck tokens from failed cross-chain operations
     /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
     /// @param token The address of the token to recover
@@ -86,7 +90,6 @@ contract SuperPositionsReceiver is OwnableRoles {
     {
         // Silence compiler warnings
         operator;
-        value;
         data;
         if (sourceChain == block.chainid) {
             if (msg.sender != address(superPositions)) revert();
@@ -118,11 +121,10 @@ contract SuperPositionsReceiver is OwnableRoles {
     {
         // Silence compiler warnings
         operator;
-        from;
-        values;
         data;
+
         for (uint256 i = 0; i < superformIds.length; ++i) {
-            onERC1155Received(address(0), address(0), superformIds[i], 0, "");
+            onERC1155Received(address(0), from, superformIds[i], values[i], "");
         }
         return this.onERC1155BatchReceived.selector;
     }
