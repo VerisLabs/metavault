@@ -202,8 +202,4 @@ struct ProcessRedeemRequestParams {
     SingleXChainMultiVaultWithdraw sXmV;
     MultiXChainSingleVaultWithdraw mXsV;
     MultiXChainMultiVaultWithdraw mXmV;
-    uint256 deadline;
-    uint8 v;
-    bytes32 r;
-    bytes32 s;
 }
