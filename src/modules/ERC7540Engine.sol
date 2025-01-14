@@ -65,12 +65,12 @@ contract ERC7540Engine is ModuleBase {
     /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
     /// including cross-chain withdrawals
     /// @param params redeem request parameters
-    function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable nonReentrant {
-        // Only relayer can call it by default
-        if (params.v == 0 && params.r == 0 && params.s == 0) {
-            _checkRoles(RELAYER_ROLE);
-        }
-
+    function processRedeemRequest(ProcessRedeemRequestParams calldata params)
+        external
+        payable
+        onlyRoles(RELAYER_ROLE)
+        nonReentrant
+    {
         // Retrieve the pending redeem request for the specified controller
         // This request may involve cross-chain withdrawals from various ERC4626 vaults
 
