@@ -227,6 +227,58 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         });
     }
 
+    function test_MetaVault_removeVault() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        uint256 superformId = 1;
+        uint8 decimals = yUsdce.decimals();
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: superformId,
+            vault: address(yUsdce),
+            vaultDecimals: decimals,
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(0))
+        });
+
+        assertTrue(vault.isVaultListed(address(yUsdce)));
+
+        vm.expectEmit(true, true, true, true);
+        emit RemoveVault(baseChainId, address(yUsdce));
+
+        vault.removeVault(superformId);
+
+        assertFalse(vault.isVaultListed(address(yUsdce)));
+    }
+
+    function test_revert_MetaVault_removeVault_withBalance() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        uint256 superformId = 1;
+        uint8 decimals = yUsdce.decimals();
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: superformId,
+            vault: address(yUsdce),
+            vaultDecimals: decimals,
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(0))
+        });
+
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        uint256 investAmount = 500 * _1_USDCE;
+        uint256 shares = yUsdce.previewDeposit(investAmount);
+        vault.investSingleDirectSingleVault(address(yUsdce), investAmount, shares);
+
+        vm.expectRevert(MetaVault.SharesBalanceNotZero.selector);
+        vault.removeVault(superformId);
+
+        // Verify vault is still listed
+        assertTrue(vault.isVaultListed(address(yUsdce)));
+    }
+
     function test_MetaVault_setSharesLockTime() public {
         uint24 newLockTime = 60 days;
 

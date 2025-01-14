@@ -23,8 +23,7 @@ import {
     SingleXChainSingleVaultWithdraw,
     VaultConfig,
     VaultData,
-    VaultLib,
-    VaultReport
+    VaultLib
 } from "types/Lib.sol";
 
 /// @title AssetsManager

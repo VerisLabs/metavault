@@ -1,4 +1,4 @@
-/// SPDX-License-Identifier: BUSL-1.1
+/// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 /// @dev contains all the common struct and enums used for data communication between chains.

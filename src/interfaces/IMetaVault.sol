@@ -1,4 +1,4 @@
-/// SPDX-License-Identifier: BUSL-1.1
+/// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import { ISharePriceOracle } from "./ISharePriceOracle.sol";
@@ -122,6 +122,8 @@ interface IMetaVault {
         ISharePriceOracle oracle
     )
         external;
+
+    function removeVault(uint256 superformId) external;
 
     function vaults(uint256)
         external

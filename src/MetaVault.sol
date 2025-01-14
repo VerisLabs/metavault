@@ -42,6 +42,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @dev Emitted when adding a new vault to the portfolio
     event AddVault(uint64 indexed chainId, address vault);
 
+    /// @dev Emitted when removing a vault from the portfolio
+    event RemoveVault(uint64 indexed chainId, address vault);
+
     /// @dev Emitted when updating the shares lock time
     event SetSharesLockTime(uint24 time);
 
@@ -61,9 +64,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @notice Thrown when {msg.value} cannot cover the crosschain transaction cost
-    error InsufficientGas();
-
     /// @notice Thrown when attempting to add a vault that is already listed
     error VaultAlreadyListed();
 
@@ -81,6 +81,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
     /// @notice Thrown when attempting to perform an operation while the vault is in emergency shutdown
     error VaultShutdown();
+
+    /// @notice Thrown when attempting to to remove a vault that is still in the metavault balance
+    error SharesBalanceNotZero();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -547,7 +550,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         ISharePriceOracle oracle
     )
         external
-        onlyRoles(ADMIN_ROLE)
+        onlyRoles(MANAGER_ROLE)
     {
         if (superformId == 0) revert();
         // If its already listed revert
@@ -588,6 +591,63 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         }
 
         emit AddVault(chainId, vault);
+    }
+
+    /// @notice Remove a vault from the portfolio
+    /// @param superformId id of vault to be removed
+    function removeVault(uint256 superformId) external onlyRoles(MANAGER_ROLE) {
+        if (_sharesBalance(vaults[superformId]) > 0) revert SharesBalanceNotZero();
+        uint64 chainId = vaults[superformId].chainId;
+        address vaultAddress = vaults[superformId].vaultAddress;
+        delete vaults[superformId];
+        delete _vaultToSuperformId[vaultAddress];
+        if (chainId == THIS_CHAIN_ID) {
+            // Push it to the local withdrawal queue
+            uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = localWithdrawalQueue;
+            for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+                if (queue[i] == superformId) {
+                    localWithdrawalQueue[i] = 0;
+                    _organizeWithdrawalQueue(localWithdrawalQueue);
+                    break;
+                }
+            }
+            // If its on the same chain revoke approval to vault
+            asset().safeApprove(vaultAddress, 0);
+        } else {
+            // Push it to the crosschain withdrawal queue
+            uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = xChainWithdrawalQueue;
+            for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
+                if (queue[i] == superformId) {
+                    xChainWithdrawalQueue[i] = 0;
+                    _organizeWithdrawalQueue(xChainWithdrawalQueue);
+                    break;
+                }
+            }
+        }
+        emit RemoveVault(chainId, vaultAddress);
+    }
+    /// @notice Reorganize `withdrawalQueue` based on premise that if there is an
+    /// empty value between two actual values, then the empty value should be
+    /// replaced by the later value.
+    /// @dev Relative ordering of non-zero values is maintained.
+
+    function _organizeWithdrawalQueue(uint256[WITHDRAWAL_QUEUE_SIZE] storage queue) internal {
+        uint256 offset;
+        for (uint256 i; i < WITHDRAWAL_QUEUE_SIZE;) {
+            uint256 vault = queue[i];
+            if (vault == 0) {
+                unchecked {
+                    ++offset;
+                }
+            } else if (offset > 0) {
+                queue[i - offset] = vault;
+                queue[i] = 0;
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /// @notice Sets the emergency shutdown state of the vault

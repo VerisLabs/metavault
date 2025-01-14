@@ -26,6 +26,9 @@ contract MetaVaultEvents {
     /// @dev Emitted when adding a new vault to the portfolio
     event AddVault(uint64 indexed chainId, address vault);
 
+    /// @dev Emitted when removing a vault from the portfolio
+    event RemoveVault(uint64 indexed chainId, address vault);
+
     /// @dev Emitted when setting a new oracle for a chain
     event SetOracle(uint64 indexed chainId, address oracle);
 

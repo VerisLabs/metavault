@@ -1,4 +1,4 @@
-/// SPDX-License-Identifier: BUSL-1.1
+/// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
 import { IERC1155A } from "./IERC1155A.sol";
