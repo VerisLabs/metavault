@@ -2,6 +2,8 @@
 pragma solidity ^0.8.19;
 
 import { ISharePriceOracle } from "./ISharePriceOracle.sol";
+
+import { ERC7540Engine } from "modules/Lib.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -254,4 +256,9 @@ interface IMetaVault {
     function lastFeesCharged() external view returns (uint256);
 
     function chargeGlobalFees() external returns (uint256);
+
+    function previewWithdrawalRoute(uint256 assets)
+        external
+        view
+        returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);
 }

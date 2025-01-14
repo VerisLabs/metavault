@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { IHurdleRateOracle, ISuperformGateway } from "interfaces/Lib.sol";
+import { IHurdleRateOracle } from "../interfaces/IHurdleRateOracle.sol";
+import { ISuperformGateway } from "../interfaces/ISuperformGateway.sol";
 
 import { ERC7540, ReentrancyGuard } from "lib/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";

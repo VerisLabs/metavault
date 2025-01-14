@@ -74,7 +74,7 @@ contract GatewayBase is OwnableRoles {
     uint256 public constant ADMIN_ROLE = _ROLE_0;
 
     /// @notice Role identifier for relayer
-    uint256 public constant RELAYER_ROLE = _ROLE_0;
+    uint256 public constant RELAYER_ROLE = _ROLE_1;
 
     /// @notice ERC20Receiver contract implementation to clone
     address public receiverImplementation;
