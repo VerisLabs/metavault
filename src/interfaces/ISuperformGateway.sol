@@ -149,6 +149,8 @@ interface ISuperformGateway {
 
     function getReceiver(bytes32 key) external returns (address receiverAddress);
 
+    function receivers(bytes32 key) external view returns (address receiverAddress);
+
     function settleDivest(bytes32 key, bool force) external;
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)

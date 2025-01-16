@@ -47,9 +47,6 @@ contract DivestSuperform is GatewayBase {
     /// @notice Emitted when a new request is created
     event RequestCreated(bytes32 indexed key, address indexed controller, uint256[] superformIds);
 
-    error InvalidVaultAddress();
-    error InvalidReceiverAddress();
-
     /// @notice Divests assets from a single vault on a different chain
     /// @dev Transfers Superform NFTs from vault to this contract and initiates withdrawal
     /// @param req The cross-chain withdrawal request parameters
@@ -298,6 +295,7 @@ contract DivestSuperform is GatewayBase {
             totalPendingXChainDivests -= vaultRequestedAssets;
         }
         requests[key].requestedAssets -= vaultRequestedAssets;
+        _requestsQueue.remove(key);
         ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
         superPositions.safeTransferFrom(msg.sender, address(this), superformId, value, "");
         superPositions.safeTransferFrom(
