@@ -38,6 +38,7 @@ contract LiquidateSuperform is GatewayBase {
     event LiquidateXChain(
         address indexed controller, uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes32 key
     );
+
     /// @notice Emitted when a request is settled
     event RequestSettled(bytes32 indexed key, address indexed controller, uint256 settledAmount);
 

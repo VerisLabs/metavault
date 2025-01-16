@@ -11,6 +11,48 @@ import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfa
 import { NoDelegateCall } from "lib/Lib.sol";
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 
+//                                              XXSSNNNNNNNNSS
+//                                        XSEAAAAAAAAAAAAAAAAAAAAAJSS
+//                                    XEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJX
+//                                 SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX
+//                              XAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEN
+//                            SAAAAAAAAAAAAAAAAAAAAAA  AAAAAAAAAAAAAAAAAAAAAAAAAS
+//                          SAAAAAAAAAAAAAAAAAAAAAAA  AAAJX      NAAAAAAAAAAAAAAAAX
+//                         AAAAAAJ         XNAAAAEJJ XS NAAAAAAAJ   SEAAAAAAAAAAE AA
+//                       NAAAAAX   XSSS               X  A   AAAAAJX         SNA NAAAX
+//              XS      EAAAAA XAAX  XSEEX            ENSJAAAAAAEX N          ESXAAAAAJ
+//             AAAASSSXAAAAAANANAE SES                      SJENX   E       SAN ASAAAAAA
+//       XNJEAJAAAAX  AAAAAAAA  AJN          XNJJJJJJJJSX         SSES      SEJENXAAAAAAA
+//     AAENJ    XS   AAAAAAAANEAN       SAAAAAAAAAAAAEEJEAAAEN                   SAAAAAAAE
+//   EAN            JAAAAAAAA E      JAAAAAAAAAAAAAAAAAAENSX NEAAN               NAAAAAAAAS
+//  AAS             AAAAAAAAAN    JAAAAAAAAAAAAAAAAAAAAAAAAAA    JAAJ            JAAAAAAAAA
+//  AA             AAAAAAAAAN   EAAAAAAAAAAAAAAAAAAS  XXSJEAAAAE   XAAJX      JEEEAAAAAAAAAN
+//  AAS            AAAAAAAAJ  NAAAAAAAS     XJAAA           SJAAAAX  SAAJX  SAAES   NAAAAAAA
+//  EAAS          JAAAAAAAA  AAAAAAAX          N              XNEAAANNAAAASXAA        EAAAAA
+//   AAAE         AAAAAAAASSAAAAAAA                XX           XJAAAAAAAAAAA     SJJX JAAAAN
+//    NAAAJ       AAAAAAAAAAAAAAAAA         NSXXNNS EAJX           XJAAAAAAAA    XXXXJE AAAAE
+//      AAAAEX    AAAAAAAA  JAAAN  SN NJJ    A     SAAA  SN           SEAAAAA    XXXXXA JAAAA
+//       SAAAAAJS AAAAAAAX   AAAAJ    JAA    A      XAEX                SAAAA    XXXXXA NAAAA
+//          AAAAAAAAAAAAAN  JAAAAA    XJ       XXXXXSX                   SEAAN    XXXNJ AAAAE  X
+//           XNAAAAAAAAAAAAAAAAAAANXX   NS     XJ                         SAAA     XN   AAAA     JX
+//              XAAAAAAAA XXAAAAAAA     S                                  EAAAN       AAAAA       AS
+//                 AAAAAA   AAAAAAX                    XXSX   XXN          EAAJAAANXNAAAAAAE        NAX
+//                 XAAAAA   AAAAAJ               XXXS       S  XJ         NAAE  SJNAAAAAAAA           AJ
+//                  EAAAAE   AAAJ                         S  SSX        XEAAE    XEAAAAAAAN            AA
+//                   AAAAA   AAAA             XNJ X      XSXX          XEAAJ    NAAAAAAAAA              AA
+//                    AAAAA   AAAS                  XNSS             XJAAA    SEAAAAAAAAA               AA
+//                    SAAAAA  NAAAJX                               SJAAAN   XEAAAAAAAAAA                AA
+//                     SAAAAAX XAAAAAAE                         XJAAAAE   SEAAAAAAAAAAA              NSAAN
+//                      XEAAAAA  EAAAAAAE                     NEAAAAX   JAAAAAAAAAAAAN          SSSNAAAAN
+//                        NAAAAAAX SAAAAAAAAJX            NEAAAAEX   NAAAAAAAAAAAAAAAAAEJEAAAAAAAAAAAN
+//                         XEAAAAAAASSEAAAAAAAAAAAAAAAAAAAAAJX   SEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJJSX
+//                           NJAAAAAAAAAAAAAAAAAAAAAAAAENNSSJAAAAAAAAAAAAAAAAAAASSNNNNNNSSSSX
+//                              SJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJX
+//                                XNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAS
+//                                   SNJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJS
+//                                     ASSSNNEAAAAAAAAAAAAAAAAAAAAENX
+//                                           X     XSSNNNNNNNSSX
+
 /// @title MetaVault
 /// @author Unlockd
 /// @notice A ERC750 vault implementation for cross-chain yield
