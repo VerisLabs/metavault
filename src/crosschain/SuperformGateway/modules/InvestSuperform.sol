@@ -101,7 +101,7 @@ contract InvestSuperform is GatewayBase {
             if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
             req.superformsData.receiverAddressSP = recoveryAddress;
             req.superformsData.receiverAddress = recoveryAddress;
-            
+
             uint256 amount = req.superformsData.amounts[i];
 
             uint256 oldPendingAmount = pendingXChainInvests[superformId];

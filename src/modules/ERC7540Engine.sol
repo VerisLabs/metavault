@@ -80,7 +80,7 @@ contract ERC7540Engine is ModuleBase {
         // 2. controller: The address initiating the redemption (used as both 'from' and 'to')
         _processRedeemRequest(
             ProcessRedeemRequestConfig(
-                pendingRedeemRequest(params.controller),
+                params.shares == 0 ? pendingRedeemRequest(params.controller) : params.shares,
                 params.controller,
                 params.sXsV,
                 params.sXmV,
@@ -102,20 +102,25 @@ contract ERC7540Engine is ModuleBase {
     /// - First uses idle assets
     /// - Then local chain vaults
     /// - Finally cross-chain vaults
-    /// @param assets The amount of assets to be withdrawn
+    /// @param controller Address of shares owner
     /// @return cachedRoute A struct containing:
     ///         - The withdrawal route across different chains
     ///         - The shares to be redeemed from each vault
     ///         - The assets expected from each withdrawal
     ///         - The amount that can be fulfilled immediately from idle assets
     ///         - Various cached state values needed for processing
-    function previewWithdrawalRoute(uint256 assets)
+    function previewWithdrawalRoute(
+        address controller,
+        uint256 shares
+    )
         public
         view
         returns (ProcessRedeemRequestCache memory cachedRoute)
     {
-        cachedRoute.assets = assets;
-        uint256 shares = convertToShares(assets);
+        if (shares == 0) {
+            shares = pendingRedeemRequest(controller);
+        }
+        cachedRoute.assets = convertToAssets(shares);
         cachedRoute.totalIdle = _totalIdle;
         cachedRoute.totalDebt = _totalDebt;
         cachedRoute.totalAssets = totalAssets();
@@ -338,6 +343,7 @@ contract ERC7540Engine is ModuleBase {
         ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
         cache.totalDebt = _totalDebt;
+        config.shares = Math.min(balanceOf(address(this)), config.shares);
         cache.assets = convertToAssets(config.shares);
         cache.totalAssets = totalAssets();
 

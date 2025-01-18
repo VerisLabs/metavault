@@ -125,7 +125,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         MultiXChainMultiVaultWithdraw memory mXmV;
         vm.expectEmit(true, true, true, true);
         emit ProcessRedeemRequest(users.alice, sharesBalance);
-        vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV));
+        vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV));
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalIdle(), 0);
@@ -165,7 +165,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         MultiXChainMultiVaultWithdraw memory mXmV;
         vm.expectEmit(true, true, true, true);
         emit ProcessRedeemRequest(users.alice, sharesBalance);
-        vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV));
+        vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV));
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalIdle(), 0);
@@ -251,7 +251,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             sXsV.value = value;
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
-            vault.processRedeemRequest{ value: value }(ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV));
+            vault.processRedeemRequest{ value: value }(
+                ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
+            );
             requestId = gateway.getRequestsQueue()[0];
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
@@ -349,7 +351,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
             vm.expectEmit(true, true, true, true);
             emit ProcessRedeemRequest(users.alice, aliceBalance);
-            vault.processRedeemRequest{ value: value }(ProcessRedeemRequestParams(users.alice, sXsV, sXmV, mXsV, mXmV));
+            vault.processRedeemRequest{ value: value }(
+                ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
+            );
             requestId = gateway.getRequestsQueue()[0];
 
             (,,,,,, uint128 totalDebt,) = vault.vaults(1);

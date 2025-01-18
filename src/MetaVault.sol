@@ -11,7 +11,6 @@ import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfa
 import { NoDelegateCall } from "lib/Lib.sol";
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 
-
 //                                              XXSSNNNNNNNNSS
 //                                        XSEAAAAAAAAAAAAAAAAAAAAAJSS
 //                                    XEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJX
@@ -53,7 +52,6 @@ import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
 //                                   SNJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJS
 //                                     ASSSNNEAAAAAAAAAAAAAAAAAAAAENX
 //                                           X     XSSNNNNNNNSSX
-
 
 /// @title MetaVault
 /// @author Unlockd
@@ -670,11 +668,11 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         }
         emit RemoveVault(chainId, vaultAddress);
     }
+
     /// @notice Reorganize `withdrawalQueue` based on premise that if there is an
     /// empty value between two actual values, then the empty value should be
     /// replaced by the later value.
     /// @dev Relative ordering of non-zero values is maintained.
-
     function _organizeWithdrawalQueue(uint256[WITHDRAWAL_QUEUE_SIZE] storage queue) internal {
         uint256 offset;
         for (uint256 i; i < WITHDRAWAL_QUEUE_SIZE;) {

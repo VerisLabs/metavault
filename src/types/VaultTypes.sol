@@ -198,6 +198,7 @@ struct MultiXChainMultiVaultWithdraw {
 
 struct ProcessRedeemRequestParams {
     address controller;
+    uint256 shares;
     SingleXChainSingleVaultWithdraw sXsV;
     SingleXChainMultiVaultWithdraw sXmV;
     MultiXChainSingleVaultWithdraw mXsV;
