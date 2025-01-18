@@ -69,6 +69,7 @@ contract InvestSuperform is GatewayBase {
         asset.safeTransferFrom(address(vault), address(this), amount);
 
         req.superformData.receiverAddressSP = recoveryAddress;
+        req.superformData.receiverAddress = recoveryAddress;
         // Initiate the cross-chain deposit via the vault router
         superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
 
@@ -99,7 +100,8 @@ contract InvestSuperform is GatewayBase {
 
             if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
             req.superformsData.receiverAddressSP = recoveryAddress;
-
+            req.superformsData.receiverAddress = recoveryAddress;
+            
             uint256 amount = req.superformsData.amounts[i];
 
             uint256 oldPendingAmount = pendingXChainInvests[superformId];
@@ -137,6 +139,7 @@ contract InvestSuperform is GatewayBase {
 
             if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
             req.superformsData[i].receiverAddressSP = recoveryAddress;
+            req.superformsData[i].receiverAddress = recoveryAddress;
 
             // Cant invest in a vault that is not in the portfolio
             VaultData memory vaultObj = vault.getVault(superformId);
@@ -181,6 +184,7 @@ contract InvestSuperform is GatewayBase {
 
                 if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
                 req.superformsData[i].receiverAddressSP = recoveryAddress;
+                req.superformsData[i].receiverAddress = recoveryAddress;
 
                 // Cant invest in a vault that is not in the portfolio
                 VaultData memory vaultObj = vault.getVault(superformId);

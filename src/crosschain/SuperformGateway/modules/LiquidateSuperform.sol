@@ -82,7 +82,7 @@ contract LiquidateSuperform is GatewayBase {
                 hasDstSwap: config.hasDstSwap,
                 retain4626: false,
                 receiverAddress: assetReceiver,
-                receiverAddressSP: address(0),
+                receiverAddressSP: assetReceiver,
                 extraFormData: ""
             })
         });
@@ -194,6 +194,7 @@ contract LiquidateSuperform is GatewayBase {
             address assetReceiver = getReceiver(key);
             ERC20Receiver(assetReceiver).setMinExpectedBalance(singleVaultDatas[i].outputAmount);
             singleVaultDatas[i].receiverAddress = assetReceiver;
+            singleVaultDatas[i].receiverAddressSP = assetReceiver;
             RequestData storage data = requests[key];
             data.requestedAssets = totalRequestedAssets[i];
             data.controller = controller;
@@ -242,6 +243,7 @@ contract LiquidateSuperform is GatewayBase {
             }
             ERC20Receiver(assetReceiver).setMinExpectedBalance(totalMinExpectedBalance);
             multiVaultDatas[i].receiverAddress = assetReceiver;
+            multiVaultDatas[i].receiverAddressSP = assetReceiver;
             RequestData storage data = requests[key];
             data.requestedAssets = totalRequestedAssets[i];
             data.controller = controller;
