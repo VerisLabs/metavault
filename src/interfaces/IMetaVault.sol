@@ -259,7 +259,10 @@ interface IMetaVault {
 
     function chargeGlobalFees() external returns (uint256);
 
-    function previewWithdrawalRoute(address controller, uint256 shares)
+    function previewWithdrawalRoute(
+        address controller,
+        uint256 shares
+    )
         external
         view
         returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);

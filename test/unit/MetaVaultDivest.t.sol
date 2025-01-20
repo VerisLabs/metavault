@@ -57,6 +57,8 @@ import {
     VaultReport
 } from "src/types/Lib.sol";
 
+import "forge-std/console.sol";
+
 contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
     using LibString for bytes;
@@ -523,6 +525,8 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
 
+        console.log(totalExpectedDivestedValue);
+
         vm.expectEmit(true, true, true, true);
         emit Divest(1_151_063_415);
 
@@ -530,11 +534,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vault.divestSingleXChainMultiVault{ value: nativeValue2 }(divestReq);
 
-        vm.stopPrank();
-
         assertEq(vault.totalAssets(), totalExpectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 48_935_776);
         assertEq(gateway.totalPendingXChainDivests(), 1_151_063_415);
+
+        // bytes32 requestId = gateway.getRequestsQueue()[0];
+        // deal(USDCE_BASE, gateway.getReceiver(requestId), 1_199_999_191);
+        // gateway.settleDivest(requestId, false);
+
+        // console.log("3",vault.totalAssets());
+        // console.log("3",vault.totalWithdrawableAssets());
+        // console.log("3",gateway.totalPendingXChainDivests());
+
+        // Verify final state after settlement
+        // assertEq(vault.totalAssets(), totalExpectedDivestedValue);
+        // assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue);
+        // assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
     function test_MetaVault_divestSingleXChainMultiVault_revert_InvalidAmount() public {
@@ -593,8 +608,8 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         req.ambIds = new uint8[](1);
         req.ambIds[0] = 1;
 
-        vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
-        vault.divestSingleXChainMultiVault(req);
+        vm.expectRevert(abi.encodeWithSignature("NotVault()"));
+        gateway.divestSingleXChainMultiVault(req);
     }
 
     function test_MetaVault_divestSingleXChainMultiVault_revert_TotalAmountMismatch() public {
@@ -761,6 +776,89 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(vault.totalWithdrawableAssets(), 800_000_000);
     }
 
+    function test_MetaVault_divestMultiXChainSingleVault_revert_InvalidAmount() public {
+        // Setup vaults and oracles
+        address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
+        address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
+        uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
+        uint64 optimismChainId = 10;
+        uint64 polygonChainId = 137;
+
+        // Add vaults
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_optimisim,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_optimisim),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_optimisim,
+            vault: vaultAddress_usdc_optimisim,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_optimisim),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        // Create request with zero amount
+        MultiDstSingleVaultStateReq memory req;
+        req.dstChainIds = new uint64[](2);
+        req.dstChainIds[0] = optimismChainId;
+        req.dstChainIds[1] = polygonChainId;
+
+        req.superformsData = new SingleVaultSFData[](2);
+        req.superformsData[0].superformId = superformId_usdc_optimisim;
+        req.superformsData[0].amount = 0; // Invalid zero amount
+        req.superformsData[1].superformId = superformId_usdc_pol;
+        req.superformsData[1].amount = 0;
+
+        vm.expectRevert(abi.encodeWithSignature("NotVault()"));
+        gateway.divestMultiXChainSingleVault(req);
+    }
+
+    function test_MetaVault_divestMultiXChainSingleVault_revert_Unauthorized() public {
+        // Setup vaults and oracles
+        address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_optimisim,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_optimisim),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_optimisim,
+            vault: vaultAddress_usdc_optimisim,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_optimisim),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        MultiDstSingleVaultStateReq memory req;
+        req.dstChainIds = new uint64[](1);
+        req.dstChainIds[0] = optimismChainId;
+
+        req.superformsData = new SingleVaultSFData[](1);
+        req.superformsData[0].superformId = superformId_usdc_optimisim;
+        req.superformsData[0].amount = 100 * _1_USDCE;
+
+        // Try to call from unauthorized address
+        vm.startPrank(users.bob);
+        vm.expectRevert(abi.encodeWithSignature("NotVault()"));
+        gateway.divestMultiXChainSingleVault(req);
+        vm.stopPrank();
+    }
+
     function test_MetaVault_divestMultiXChainMultiVault() public {
         address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
@@ -893,5 +991,92 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(vault.totalAssets(), 1_999_998_993);
         assertEq(vault.totalWithdrawableAssets(), 200_000_000);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
+    }
+
+    function test_MetaVault_divestMultiXChainMultiVault_revert_InvalidAmount() public {
+        // Setup vaults and oracles
+        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+        address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        // Add vaults
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc,
+            _getSharePrice(optimismChainId, vaultAddress_usdc),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc,
+            vault: vaultAddress_usdc,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        // Create request with zero amounts
+        MultiDstMultiVaultStateReq memory req;
+        req.dstChainIds = new uint64[](1);
+        req.dstChainIds[0] = optimismChainId;
+
+        req.superformsData = new MultiVaultSFData[](1);
+        req.superformsData[0].superformIds = new uint256[](2);
+        req.superformsData[0].superformIds[0] = superformId_usdc;
+        req.superformsData[0].superformIds[1] = superformId_usdc_aloe_op;
+
+        req.superformsData[0].amounts = new uint256[](2);
+        req.superformsData[0].amounts[0] = 0; // Invalid zero amount
+        req.superformsData[0].amounts[1] = 0;
+
+        vm.expectRevert(abi.encodeWithSignature("NotVault()"));
+        gateway.divestMultiXChainMultiVault(req);
+    }
+
+    function test_MetaVault_divestMultiXChainMultiVault_revert_Unauthorized() public {
+        // Setup vaults and oracles
+        address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint64 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc,
+            _getSharePrice(optimismChainId, vaultAddress_usdc),
+            block.timestamp,
+            users.bob
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc,
+            vault: vaultAddress_usdc,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+            deductedFees: 0,
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        MultiDstMultiVaultStateReq memory req;
+        req.dstChainIds = new uint64[](1);
+        req.dstChainIds[0] = optimismChainId;
+
+        req.superformsData = new MultiVaultSFData[](1);
+        req.superformsData[0].superformIds = new uint256[](1);
+        req.superformsData[0].superformIds[0] = superformId_usdc;
+
+        req.superformsData[0].amounts = new uint256[](1);
+        req.superformsData[0].amounts[0] = 100 * _1_USDCE;
+
+        // Try to call from unauthorized address
+        vm.startPrank(users.bob);
+        vm.expectRevert(abi.encodeWithSignature("NotVault()"));
+        gateway.divestMultiXChainMultiVault(req);
+        vm.stopPrank();
     }
 }

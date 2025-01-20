@@ -147,7 +147,6 @@ contract DivestSuperform is GatewayBase {
         data.superformIds = req.superformsData.superformIds;
         data.requestedAssets = totalAmount;
         req.superformsData.receiverAddress = receiver;
-        req.superformsData.receiverAddressSP = receiver;
 
         superPositions.safeBatchTransferFrom(
             address(vault), address(this), req.superformsData.superformIds, req.superformsData.amounts, ""
@@ -192,7 +191,6 @@ contract DivestSuperform is GatewayBase {
 
             ERC20Receiver(receiver).setMinExpectedBalance(req.superformsData[i].outputAmount);
             req.superformsData[i].receiverAddress = receiver;
-            req.superformsData[i].receiverAddressSP = receiver;
 
             // Retrieve the vault data for the target vault
             VaultData memory vaultObj = vault.getVault(superformId);
@@ -244,7 +242,6 @@ contract DivestSuperform is GatewayBase {
             data.superformIds = superformIds;
             data.requestedAssets = totalAmount;
             req.superformsData[i].receiverAddress = receiver;
-            req.superformsData[i].receiverAddressSP = receiver;
 
             superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
 
