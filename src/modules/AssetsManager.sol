@@ -236,10 +236,9 @@ contract AssetsManager is ModuleBase {
 
         // Update the vault's internal accounting
         _totalIdle += assets.toUint128();
-        uint128 amountUint128 =
-            removeDebt ? vaults[_vaultToSuperformId[vaultAddress]].totalDebt : sharesValue.toUint128();
-        _totalDebt -= amountUint128;
-        vaults[_vaultToSuperformId[vaultAddress]].totalDebt -= amountUint128;
+        _totalDebt -= _sub0(_totalDebt, sharesValue).toUint128();
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt -=
+            _sub0(vaults[_vaultToSuperformId[vaultAddress]].totalDebt, sharesValue).toUint128();
 
         emit Divest(sharesValue);
         return assets;
