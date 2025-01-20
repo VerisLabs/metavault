@@ -255,6 +255,10 @@ interface IMetaVault {
 
     function addFunctions(bytes4[] memory, address, bool) external;
 
+    function removeFunction(bytes4) external;
+
+    function removeFunctions(bytes4[] memory) external;
+
     function lastFeesCharged() external view returns (uint256);
 
     function chargeGlobalFees() external returns (uint256);

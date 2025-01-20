@@ -18,10 +18,6 @@ interface ISuperformGateway {
 
     function recoveryAddress() external view returns (address);
 
-    function addFunction(bytes4, address, bool) external;
-
-    function addFunctions(bytes4[] memory, address, bool) external;
-
     function grantRoles(address, uint256) external;
 
     function ADMIN_ROLE() external view returns (uint256);
@@ -219,4 +215,12 @@ interface ISuperformGateway {
         external
         view
         returns (bytes32[] memory requestIds);
+
+    function addFunction(bytes4, address, bool) external;
+
+    function addFunctions(bytes4[] memory, address, bool) external;
+
+    function removeFunction(bytes4) external;
+
+    function removeFunctions(bytes4[] memory) external;
 }
