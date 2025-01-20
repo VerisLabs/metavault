@@ -669,6 +669,10 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         emit RemoveVault(chainId, vaultAddress);
     }
 
+    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external {
+        vaults[superformId].oracle = oracle;
+    }
+
     /// @notice Reorganize `withdrawalQueue` based on premise that if there is an
     /// empty value between two actual values, then the empty value should be
     /// replaced by the later value.

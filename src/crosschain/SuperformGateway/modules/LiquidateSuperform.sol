@@ -146,7 +146,7 @@ contract LiquidateSuperform is GatewayBase {
                 hasDstSwaps: config.hasDstSwaps,
                 retain4626s: _getEmptyBoolArray(len),
                 receiverAddress: assetReceiver,
-                receiverAddressSP: address(0),
+                receiverAddressSP: assetReceiver,
                 extraFormData: ""
             })
         });
