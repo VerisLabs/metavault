@@ -337,7 +337,7 @@ contract DivestSuperform is GatewayBase {
     {
         requestIds = new bytes32[](1);
         uint256 superformId = req.superformData.superformId;
-        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, superformId));
+        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)], superformId));
         return requestIds;
     }
 
@@ -348,7 +348,7 @@ contract DivestSuperform is GatewayBase {
     {
         requestIds = new bytes32[](1);
         requestIds[0] =
-            keccak256(abi.encode(address(vault), nonces[address(vault)] + 1, req.superformsData.superformIds));
+            keccak256(abi.encode(address(vault), nonces[address(vault)] , req.superformsData.superformIds));
         return requestIds;
     }
 
@@ -360,7 +360,7 @@ contract DivestSuperform is GatewayBase {
         requestIds = new bytes32[](req.superformsData.length);
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
-            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i + 1, superformId));
+            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i, superformId));
         }
     }
 
@@ -372,7 +372,7 @@ contract DivestSuperform is GatewayBase {
         requestIds = new bytes32[](req.superformsData.length);
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
-            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i + 1, superformIds));
+            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i, superformIds));
         }
     }
 
