@@ -89,7 +89,7 @@ contract BaseVaultTest is BaseTest {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         ISuperformGateway(address(gateway)).setRecoveryAddress(
-            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
+            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE, users.alice))
         );
         return ISuperformGateway(address(gateway));
     }
@@ -111,7 +111,7 @@ contract BaseVaultTest is BaseTest {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         ISuperformGateway(address(gateway)).setRecoveryAddress(
-            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
+            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE, users.alice))
         );
         return ISuperformGateway(address(gateway));
     }
