@@ -305,7 +305,7 @@ contract LiquidateSuperform is GatewayBase {
         returns (bytes32[] memory requestIds)
     {
         requestIds = new bytes32[](1);
-        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver] , superformId));
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver], superformId));
         requestIds[0] = key;
         return requestIds;
     }
@@ -324,7 +324,7 @@ contract LiquidateSuperform is GatewayBase {
         returns (bytes32[] memory requestIds)
     {
         requestIds = new bytes32[](1);
-        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver] , superformIds));
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver], superformIds));
         requestIds[0] = key;
         return requestIds;
     }
@@ -344,9 +344,7 @@ contract LiquidateSuperform is GatewayBase {
             uint256 superformId = singleVaultDatas[i].superformId;
             bytes32 key = keccak256(
                 abi.encode(
-                    singleVaultDatas[i].receiverAddress,
-                    nonces[singleVaultDatas[i].receiverAddress] + i ,
-                    superformId
+                    singleVaultDatas[i].receiverAddress, nonces[singleVaultDatas[i].receiverAddress] + i, superformId
                 )
             );
             requestIds[i] = key;

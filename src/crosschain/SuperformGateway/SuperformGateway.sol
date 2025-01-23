@@ -110,7 +110,7 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         VaultData memory vaultObj = vault.getVault(superformId);
         uint256 investedAssets = pendingXChainInvests[superformId];
         delete pendingXChainInvests[superformId];
-        uint256 bridgedAssets = vaultObj.convertToAssets(value, false);
+        uint256 bridgedAssets = vaultObj.convertToAssets(value, asset, false);
         totalpendingXChainInvests -= investedAssets;
         superPositions.safeTransferFrom(address(this), address(vault), superformId, value, "");
         vault.settleXChainInvest(superformId, bridgedAssets);

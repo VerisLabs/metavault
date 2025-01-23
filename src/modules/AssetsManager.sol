@@ -297,7 +297,7 @@ contract AssetsManager is ModuleBase {
             uint256 superformId = req.superformsData.superformIds[i];
             VaultData memory vault = vaults[superformId];
             uint256 sharesBalance = _sharesBalance(vault);
-            uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+            uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
             vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
             vaults[superformId] = vault;
             unchecked {
@@ -323,7 +323,7 @@ contract AssetsManager is ModuleBase {
             uint256 superformId = req.superformsData[i].superformId;
             VaultData memory vault = vaults[superformId];
             uint256 sharesBalance = _sharesBalance(vault);
-            uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+            uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
             vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
             vaults[superformId] = vault;
             unchecked {
@@ -351,7 +351,7 @@ contract AssetsManager is ModuleBase {
                 uint256 superformId = superformIds[j];
                 VaultData memory vault = vaults[superformId];
                 uint256 sharesBalance = _sharesBalance(vault);
-                uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+                uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
                 vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
                 vaults[superformId] = vault;
                 unchecked {

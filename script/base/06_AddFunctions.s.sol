@@ -11,12 +11,12 @@ contract AddFunctionsScript is Script {
     uint256 adminPrivateKey;
     ERC7540Engine public engine;
     AssetsManager public assetsManager;
-    
+
     function run() public {
         adminPrivateKey = vm.envUint("ADMIN_PRIVATE_KEY");
         metavault = IMetaVault(vm.envAddress("METAVAULT_ADDRESS"));
         vm.startBroadcast(adminPrivateKey);
-        
+
         engine = new ERC7540Engine();
         assetsManager = new AssetsManager();
 

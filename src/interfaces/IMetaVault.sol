@@ -114,11 +114,10 @@ interface IMetaVault {
     function lastReport() external view returns (uint256);
 
     function addVault(
-        uint64 chainId,
+        uint32 chainId,
         uint256 superformId,
         address vault,
         uint8 vaultDecimals,
-        uint16 deductedFees,
         ISharePriceOracle oracle
     )
         external;

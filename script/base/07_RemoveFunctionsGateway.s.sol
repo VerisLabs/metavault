@@ -1,17 +1,14 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { Script, console2 } from "forge-std/Script.sol";
-import { SuperformGateway } from "crosschain/SuperformGateway/SuperformGateway.sol";
 import {
     DivestSuperform, InvestSuperform, LiquidateSuperform, SuperformGateway
 } from "crosschain/SuperformGateway/Lib.sol";
+import { SuperformGateway } from "crosschain/SuperformGateway/SuperformGateway.sol";
+import { Script, console2 } from "forge-std/Script.sol";
+
 import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE } from "helpers/AddressBook.sol";
-import {
-    IBaseRouter,
-    ISuperPositions,
-    ISuperformGateway
-} from "interfaces/Lib.sol";
+import { IBaseRouter, ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 
 contract RemoveFunctionsScript is Script {
     uint256 adminPrivateKey;

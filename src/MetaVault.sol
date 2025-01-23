@@ -584,11 +584,10 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @param vaultDecimals decimals of ERC4626 token
     /// @param oracle vault shares price oracle
     function addVault(
-        uint64 chainId,
+        uint32 chainId,
         uint256 superformId,
         address vault,
         uint8 vaultDecimals,
-        uint16 deductedFees,
         ISharePriceOracle oracle
     )
         external
@@ -604,10 +603,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         vaults[superformId].vaultAddress = vault;
         vaults[superformId].decimals = vaultDecimals;
         vaults[superformId].oracle = oracle;
-        vaults[superformId].deductedFees = deductedFees;
-        uint192 lastSharePrice = vaults[superformId].sharePrice().toUint192();
+        uint192 lastSharePrice = vaults[superformId].sharePrice(asset()).toUint192();
         if (lastSharePrice == 0) revert();
-        vaults[superformId].lastReportedSharePrice = lastSharePrice;
         _vaultToSuperformId[vault] = superformId;
 
         if (chainId == THIS_CHAIN_ID) {
@@ -808,7 +805,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
     /// @dev
     function convertToSuperPositions(uint256 superformId, uint256 assets) external view returns (uint256) {
-        return vaults[superformId].convertToShares(assets, false);
+        return vaults[superformId].convertToShares(assets, asset(), false);
     }
 
     /// @notice Handles the receipt of a single ERC1155 token type

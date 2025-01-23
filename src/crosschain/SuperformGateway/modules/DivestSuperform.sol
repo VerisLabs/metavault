@@ -76,7 +76,7 @@ contract DivestSuperform is GatewayBase {
         req.superformData.receiverAddressSP = receiver;
 
         // Update the vault's internal accounting
-        sharesValue = vaultObj.convertToAssets(req.superformData.amount, true);
+        sharesValue = vaultObj.convertToAssets(req.superformData.amount, asset, true);
 
         if (sharesValue == 0) revert InvalidAmount();
 
@@ -127,7 +127,7 @@ contract DivestSuperform is GatewayBase {
             VaultData memory vaultObj = vault.getVault(superformId);
             if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
-            uint256 amount = vaultObj.convertToAssets(req.superformsData.amounts[i], true);
+            uint256 amount = vaultObj.convertToAssets(req.superformsData.amounts[i], asset, true);
             if (amount == 0) revert InvalidAmount();
 
             totalExpectedAmount += req.superformsData.outputAmounts[i];
@@ -198,7 +198,7 @@ contract DivestSuperform is GatewayBase {
             VaultData memory vaultObj = vault.getVault(superformId);
             // Cant invest in a vault that is not in the portfolio
             if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
-            uint256 amount = vaultObj.convertToAssets(req.superformsData[i].amount, true);
+            uint256 amount = vaultObj.convertToAssets(req.superformsData[i].amount, asset, true);
 
             totalAmount += amount;
 
@@ -258,7 +258,7 @@ contract DivestSuperform is GatewayBase {
                 VaultData memory vaultObj = vault.getVault(superformId);
                 if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
-                uint256 amount = vaultObj.convertToAssets(amounts[j], true);
+                uint256 amount = vaultObj.convertToAssets(amounts[j], asset, true);
                 totalExpectedAmount += req.superformsData[i].outputAmounts[j];
                 totalAmount += amount;
                 totalChainAmount += amount;
@@ -347,8 +347,7 @@ contract DivestSuperform is GatewayBase {
         returns (bytes32[] memory requestIds)
     {
         requestIds = new bytes32[](1);
-        requestIds[0] =
-            keccak256(abi.encode(address(vault), nonces[address(vault)] , req.superformsData.superformIds));
+        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)], req.superformsData.superformIds));
         return requestIds;
     }
 

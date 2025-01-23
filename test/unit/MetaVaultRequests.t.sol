@@ -62,7 +62,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     AssetsManager manager;
     MockSignerRelayer public relayer;
     ISuperformGateway public gateway;
-    uint64 baseChainId = 8453;
+    uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
@@ -145,7 +145,6 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -185,7 +184,6 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -195,17 +193,22 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -233,7 +236,13 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         {
             oracle.setValues(
-                optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+                optimismChainId,
+                vaultAddress,
+                _getSharePrice(optimismChainId, vaultAddress),
+                block.timestamp,
+                USDCE_BASE,
+                users.bob,
+                0
             );
         }
 
@@ -284,7 +293,6 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -294,17 +302,22 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -332,7 +345,13 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         {
             oracle.setValues(
-                optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+                optimismChainId,
+                vaultAddress,
+                _getSharePrice(optimismChainId, vaultAddress),
+                block.timestamp,
+                USDCE_BASE,
+                users.bob,
+                0
             );
         }
 

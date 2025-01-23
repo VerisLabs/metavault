@@ -62,7 +62,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     AssetsManager manager;
     MockSignerRelayer public relayer;
     ISuperformGateway public gateway;
-    uint64 baseChainId = 8453;
+    uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
@@ -156,17 +156,22 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_refund_gas() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -185,12 +190,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_addVault() public {
         address newVault = address(0x123);
         uint256 newSuperformId = 999;
-        uint64 newChainId = 42;
+        uint32 newChainId = 42;
         uint8 newDecimals = 18;
-        oracle.setValues(newChainId, address(newVault), 1e6, block.timestamp, address(1));
+        oracle.setValues(newChainId, address(newVault), 1e6, block.timestamp, USDCE_BASE, address(1), 0);
         vm.expectEmit(true, true, true, true);
         emit AddVault(newChainId, newVault);
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, ISharePriceOracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, ISharePriceOracle(address(oracle)));
 
         assertTrue(vault.isVaultListed(newVault));
     }
@@ -198,11 +203,11 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_addVault_ZeroSharePrice() public {
         address newVault = address(0x123);
         uint256 newSuperformId = 999;
-        uint64 newChainId = 42;
+        uint32 newChainId = 42;
         uint8 newDecimals = 18;
 
         vm.expectRevert();
-        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, 0, ISharePriceOracle(address(oracle)));
+        vault.addVault(newChainId, newSuperformId, newVault, newDecimals, ISharePriceOracle(address(oracle)));
     }
 
     function test_revert_MetaVault_addVault_alreadyListed() public {
@@ -213,7 +218,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: decimals,
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
         vm.expectRevert(MetaVault.VaultAlreadyListed.selector);
@@ -222,7 +226,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: decimals,
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
     }
@@ -237,7 +240,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             superformId: superformId,
             vault: address(yUsdce),
             vaultDecimals: decimals,
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
 
@@ -261,7 +263,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             superformId: superformId,
             vault: address(yUsdce),
             vaultDecimals: decimals,
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
 
@@ -348,17 +349,22 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_notifyFailedInvest() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -511,8 +517,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            deductedFees: 0,
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         vault.setManagementFee(100);

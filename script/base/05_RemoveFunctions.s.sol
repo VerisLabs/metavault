@@ -11,14 +11,14 @@ contract RemoveFunctionsScript is Script {
     uint256 adminPrivateKey;
     ERC7540Engine public engine;
     AssetsManager public assetsManager;
-    
+
     function run() public {
         adminPrivateKey = vm.envUint("ADMIN_PRIVATE_KEY");
         metavault = IMetaVault(vm.envAddress("METAVAULT_ADDRESS"));
         engine = ERC7540Engine(vm.envAddress("ENGINE_ADDRESS"));
         assetsManager = AssetsManager(vm.envAddress("ASSETS_MANAGER_ADDRESS"));
         vm.startBroadcast(adminPrivateKey);
-        
+
         bytes4[] memory engineSelectors = engine.selectors();
         bytes4[] memory assetsSelectors = assetsManager.selectors();
 

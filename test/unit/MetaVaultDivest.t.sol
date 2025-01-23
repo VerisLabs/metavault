@@ -68,7 +68,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     AssetsManager manager;
     MockSignerRelayer public relayer;
     ISuperformGateway public gateway;
-    uint64 baseChainId = 8453;
+    uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
@@ -128,7 +128,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
 
@@ -159,7 +158,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
 
@@ -168,7 +166,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             superformId: 2,
             vault: address(smUsdce),
             vaultDecimals: smUsdce.decimals(),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(0))
         });
 
@@ -213,17 +210,23 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestSingleXChainSingleVault() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
+
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -245,7 +248,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
-        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
+        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         divestReq.superformData.outputAmount = expectedDivestedValue;
@@ -270,12 +273,17 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
     function test_MetaVault_divestSingleXChainSingleVault_revert_InvalidSuperformId() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
-
         _depositAtomic(1000 * _1_USDCE, users.alice);
 
         SingleVaultSFData memory superformData;
@@ -298,12 +306,17 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestSingleXChainSingleVault_revert_VaultNotListed() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
-
         _depositAtomic(1000 * _1_USDCE, users.alice);
 
         SingleXChainSingleVaultStateReq memory req =
@@ -316,17 +329,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestSingleXChainSingleVault_revert_InvalidAmount() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -352,17 +370,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestSingleXChainSingleVault_revert_Unauthorized() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -379,17 +402,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestSingleXChainSingleVault_failed() public {
         address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
-            optimismChainId, vaultAddress, _getSharePrice(optimismChainId, vaultAddress), block.timestamp, users.bob
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId,
             vault: vaultAddress,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -411,7 +439,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         SingleXChainSingleVaultStateReq memory divestReq =
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
-        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress);
+        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         divestReq.superformData.outputAmount = expectedDivestedValue;
@@ -445,21 +473,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
 
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc,
             _getSharePrice(optimismChainId, vaultAddress_usdc),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc,
             vault: vaultAddress_usdc,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -468,14 +497,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_aloe_op,
             _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_aloe_op,
             vault: vaultAddress_usdc_aloe_op,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -513,9 +543,9 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         SingleXChainMultiVaultStateReq memory divestReq =
             _buildDivestSingleXChainMultiVaultParams(superformIds, amounts);
 
-        VaultReport memory report_usdc = oracle.getLatestSharePrice(optimismChainId, vaultAddress_usdc);
+        VaultReport memory report_usdc = oracle.getReport(optimismChainId, vaultAddress_usdc);
         uint256 lastSharePrice = report_usdc.sharePrice;
-        VaultReport memory report_usdcp = oracle.getLatestSharePrice(optimismChainId, vaultAddress_usdc_aloe_op);
+        VaultReport memory report_usdcp = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
         uint256 lastSharePrice2 = report_usdcp.sharePrice;
 
         uint256 nativeValue2 = multiVaultWithdrawValues[multiVaultKey];
@@ -558,21 +588,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
 
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc,
             _getSharePrice(optimismChainId, vaultAddress_usdc),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc,
             vault: vaultAddress_usdc,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -581,14 +612,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_aloe_op,
             _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_aloe_op,
             vault: vaultAddress_usdc_aloe_op,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -618,21 +650,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
 
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc,
             _getSharePrice(optimismChainId, vaultAddress_usdc),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc,
             vault: vaultAddress_usdc,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -641,14 +674,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_aloe_op,
             _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_aloe_op,
             vault: vaultAddress_usdc_aloe_op,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -684,22 +718,23 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
 
-        uint64 optimismChainId = 10;
-        uint64 polygonChainId = 137;
+        uint32 optimismChainId = 10;
+        uint32 polygonChainId = 137;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc_optimisim,
             _getSharePrice(optimismChainId, vaultAddress_usdc_optimisim),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_optimisim,
             vault: vaultAddress_usdc_optimisim,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_optimisim),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
         oracle.setValues(
@@ -707,14 +742,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_pol,
             _getSharePrice(polygonChainId, vaultAddress_usdc_pol),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: polygonChainId,
             superformId: superformId_usdc_pol,
             vault: vaultAddress_usdc_pol,
             vaultDecimals: _getDecimals(polygonChainId, vaultAddress_usdc_pol),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -754,10 +790,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         divestReq.superformsData[0].amount = shares;
         divestReq.superformsData[1].amount = shares2;
 
-        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress_usdc_optimisim);
+        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress_usdc_optimisim);
         uint256 lastSharePrice = report.sharePrice;
 
-        VaultReport memory report2 = oracle.getLatestSharePrice(polygonChainId, vaultAddress_usdc_pol);
+        VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
         uint256 lastSharePrice2 = report2.sharePrice;
 
         uint256 expectedDivestedValue = lastSharePrice2 * shares2 / 10 ** 6 + lastSharePrice * shares / 10 ** 6;
@@ -782,7 +818,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
         uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
         uint64 polygonChainId = 137;
 
         // Add vaults
@@ -791,14 +827,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_optimisim,
             _getSharePrice(optimismChainId, vaultAddress_usdc_optimisim),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_optimisim,
             vault: vaultAddress_usdc_optimisim,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_optimisim),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -824,21 +861,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         // Setup vaults and oracles
         address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc_optimisim,
             _getSharePrice(optimismChainId, vaultAddress_usdc_optimisim),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_optimisim,
             vault: vaultAddress_usdc_optimisim,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_optimisim),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -869,15 +907,17 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
 
-        uint64 optimismChainId = 10;
-        uint64 polygonChainId = 137;
+        uint32 optimismChainId = 10;
+        uint32 polygonChainId = 137;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc,
             _getSharePrice(optimismChainId, vaultAddress_usdc),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
 
         vault.addVault({
@@ -885,7 +925,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             superformId: superformId_usdc,
             vault: vaultAddress_usdc,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -894,7 +933,9 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_aloe_op,
             _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
 
         vault.addVault({
@@ -902,7 +943,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             superformId: superformId_usdc_aloe_op,
             vault: vaultAddress_usdc_aloe_op,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -911,7 +951,9 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc_pol,
             _getSharePrice(polygonChainId, vaultAddress_usdc_pol),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
 
         vault.addVault({
@@ -919,7 +961,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             superformId: superformId_usdc_pol,
             vault: vaultAddress_usdc_pol,
             vaultDecimals: _getDecimals(polygonChainId, vaultAddress_usdc_pol),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -966,13 +1007,13 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         divestReq.superformsData[1].amounts[0] = shares2;
         divestReq.superformsData[0].amounts[1] = shares3;
 
-        VaultReport memory report = oracle.getLatestSharePrice(optimismChainId, vaultAddress_usdc);
+        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress_usdc);
         uint256 lastSharePrice = report.sharePrice;
 
-        VaultReport memory report2 = oracle.getLatestSharePrice(polygonChainId, vaultAddress_usdc_pol);
+        VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
         uint256 lastSharePrice2 = report2.sharePrice;
 
-        VaultReport memory report3 = oracle.getLatestSharePrice(optimismChainId, vaultAddress_usdc_aloe_op);
+        VaultReport memory report3 = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
         uint256 lastSharePrice3 = report3.sharePrice;
 
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice2 * shares2 / 10 ** 6
@@ -999,7 +1040,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         // Add vaults
         oracle.setValues(
@@ -1007,14 +1048,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             vaultAddress_usdc,
             _getSharePrice(optimismChainId, vaultAddress_usdc),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc,
             vault: vaultAddress_usdc,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
@@ -1042,21 +1084,22 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         // Setup vaults and oracles
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint64 optimismChainId = 10;
+        uint32 optimismChainId = 10;
 
         oracle.setValues(
             optimismChainId,
             vaultAddress_usdc,
             _getSharePrice(optimismChainId, vaultAddress_usdc),
             block.timestamp,
-            users.bob
+            USDCE_BASE,
+            users.bob,
+            0
         );
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc,
             vault: vaultAddress_usdc,
             vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            deductedFees: 0,
             oracle: ISharePriceOracle(address(oracle))
         });
 
