@@ -285,7 +285,7 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
             VaultData memory vault = vaults[localWithdrawalQueue[i]];
             if (vault.vaultAddress == address(0)) break;
-            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            assets += vault.convertToAssets(_sharesBalance(vault), asset(), false);
             ++i;
         }
         return assets;
@@ -297,7 +297,7 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
             VaultData memory vault = vaults[xChainWithdrawalQueue[i]];
             if (vault.vaultAddress == address(0)) break;
-            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            assets += vault.convertToAssets(_sharesBalance(vault), asset(), false);
             ++i;
         }
         return assets;

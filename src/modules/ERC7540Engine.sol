@@ -268,7 +268,7 @@ contract ERC7540Engine is ModuleBase {
             // Cache next vault from the withdrawal queue
             VaultData memory vault = vaults[queue[i]];
             // Calcualate the maxWithdraw of the vault
-            uint256 maxWithdraw = vault.convertToAssets(_sharesBalance(vault), true);
+            uint256 maxWithdraw = vault.convertToAssets(_sharesBalance(vault), asset(), true);
 
             // Dont withdraw more than max
             uint256 withdrawAssets = Math.min(maxWithdraw, cache.amountToWithdraw);
@@ -285,7 +285,7 @@ contract ERC7540Engine is ModuleBase {
                 uint256 balance = _sharesBalance(vault);
                 shares = balance;
             } else {
-                shares = vault.convertToShares(withdrawAssets, true);
+                shares = vault.convertToShares(withdrawAssets, asset(), true);
             }
 
             if (shares == 0) continue;

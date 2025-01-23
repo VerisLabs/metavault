@@ -20,7 +20,7 @@ struct VaultData {
     /// @dev Fees to deduct when applying performance fees
     uint16 deductedFees;
     /// @dev The ID of the chain where the vault is deployed
-    uint64 chainId;
+    uint32 chainId;
     /// @dev The last reported share price of the vault
     uint192 lastReportedSharePrice;
     /// @dev The superform ID of the vault in the Superform protocol
@@ -63,6 +63,7 @@ library VaultLib {
     function convertToAssets(
         VaultData memory self,
         uint256 shares,
+        address metavaultAsset,
         bool revertIfStale
     )
         internal
@@ -70,8 +71,7 @@ library VaultLib {
         returns (uint256 assets)
     {
         if (self.chainId != _chainId()) {
-            VaultReport memory report = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress);
-            (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
+            (uint256 sharePrice_, uint64 lastUpdated) = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
             }
@@ -105,6 +105,7 @@ library VaultLib {
     function convertToShares(
         VaultData memory self,
         uint256 assets,
+        address metavaultAsset,
         bool revertIfStale
     )
         internal
@@ -112,8 +113,7 @@ library VaultLib {
         returns (uint256 shares)
     {
         if (self.chainId != _chainId()) {
-            VaultReport memory report = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress);
-            (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
+            (uint256 sharePrice_, uint64 lastUpdated) = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
             if (revertIfStale) {
                 if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
             }
@@ -127,30 +127,14 @@ library VaultLib {
     /// @notice Retrieves the current share price of the vault
     /// @param self The vault data to operate on
     /// @return The current share price
-    function sharePrice(VaultData memory self) internal view returns (uint256) {
+    function sharePrice(VaultData memory self, address metavaultAsset) internal view returns (uint256) {
         if (self.chainId != _chainId()) {
-            VaultReport memory report = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress);
-            (uint256 sharePrice_, uint256 lastUpdated) = (report.sharePrice, report.lastUpdate);
+            (uint256 sharePrice_, ) = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
             return sharePrice_;
         } else {
             // If it's on this chain, fetch the share price directly
             return ERC4626(self.vaultAddress).convertToAssets(10 ** self.decimals);
         }
-    }
-
-    /// @notice Simulates the ERC4626 {convertToShares} function using cached share price
-    /// @param self The vault data to operate on
-    /// @param assets The number of assets to convert to shares
-    /// @return shares The equivalent amount of shares for the given assets using cached share price
-    function convertToSharesCachedSharePrice(
-        VaultData memory self,
-        uint256 assets
-    )
-        internal
-        pure
-        returns (uint256 shares)
-    {
-        return assets * 10 ** self.decimals / self.lastReportedSharePrice;
     }
 
     /// @notice Retrieves the current chain ID
