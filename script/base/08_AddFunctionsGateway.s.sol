@@ -13,7 +13,7 @@ import {
     ISuperformGateway
 } from "interfaces/Lib.sol";
 
-contract AddFunctionsScript is Script {
+contract AddFunctionsGatewayScript is Script {
     uint256 adminPrivateKey;
     ISuperformGateway public gateway;
 
