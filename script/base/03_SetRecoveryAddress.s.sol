@@ -15,7 +15,7 @@ contract SetRecoveryAddress is Script {
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         // same address deployed in every EVM chain
-        superPositionsReceiverAddress = 0xc80c3A0D2fC0f95626F9612F893D88384B0ABa51;
+        superPositionsReceiverAddress = 0x0ffAd7aE8ADCA88cdF6FE873Fdf9a0ac2C287BBD;
 
         vm.startBroadcast(deployerPrivateKey);
 
