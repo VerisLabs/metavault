@@ -7,6 +7,8 @@ import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
+
+import "forge-std/console2.sol";
 import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { NoDelegateCall } from "lib/Lib.sol";
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";

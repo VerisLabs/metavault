@@ -124,10 +124,7 @@ interface IMetaVault {
 
     function removeVault(uint256 superformId) external;
 
-    function vaults(uint256)
-        external
-        view
-        returns (uint32, uint256, ISharePriceOracle,uint8, uint128, address);
+    function vaults(uint256) external view returns (uint32, uint256, ISharePriceOracle, uint8, uint128, address);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
 

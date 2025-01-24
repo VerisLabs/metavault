@@ -212,10 +212,6 @@ contract AssetsManager is ModuleBase {
     {
         uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
         uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
-        bool removeDebt;
-        if (shares == sharesBalance) {
-            removeDebt = true;
-        }
 
         // Ensure the target vault is in the approved list
         if (!isVaultListed(vaultAddress)) revert VaultNotListed();
@@ -236,7 +232,8 @@ contract AssetsManager is ModuleBase {
 
         // Update the vault's internal accounting
         _totalIdle += assets.toUint128();
-        _totalDebt -= _sub0(_totalDebt, sharesValue).toUint128();
+        _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
+
         vaults[_vaultToSuperformId[vaultAddress]].totalDebt -=
             _sub0(vaults[_vaultToSuperformId[vaultAddress]].totalDebt, sharesValue).toUint128();
 

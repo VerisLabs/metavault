@@ -549,7 +549,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 lostShares = yUsdce.convertToShares(loss);
         vm.startPrank(address(vault));
         address(yUsdce).safeTransfer(users.bob, lostShares);
-        vm.stopPrank();
+        vm.stopPrank();                                                                                                                                                                                                                                                                                                      
 
         uint256 recovery = 50 * _1_USDCE;
         deal(USDCE_BASE, users.bob, recovery);

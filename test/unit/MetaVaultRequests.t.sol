@@ -394,7 +394,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             _mintSuperpositions(receiver, superformId, shares);
 
             assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
-            (,,,,uint128 vaultDebt,) = vault.vaults(superformId);
+            (,,,, uint128 vaultDebt,) = vault.vaults(superformId);
             assertApproxEq(vaultDebt, 600 * _1_USDCE, _1_USDCE);
             assertEq(vault.totalDebt(), vaultDebt);
             assertApproxEq(vault.totalXChainAssets(), 600 * _1_USDCE, _1_USDCE);
