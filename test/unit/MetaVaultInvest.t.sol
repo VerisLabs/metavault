@@ -121,12 +121,13 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_investSingleDirectSingleVault() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
 
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -148,19 +149,21 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         MockERC4626 smUsdce = new MockERC4626(USDCE_BASE, "Sommelier USDCE", "smUSDCe", true, 0);
 
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
+        oracle.setValues(baseChainId, address(smUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
         vault.addVault({
             chainId: baseChainId,
             superformId: 2,
             vault: address(smUsdce),
             vaultDecimals: smUsdce.decimals(),
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -208,7 +211,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -260,7 +263,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.alice,
-            0
+            6
         );
 
         _depositAtomic(1000 * _1_USDCE, users.alice);
@@ -284,7 +287,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -319,7 +322,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -336,7 +339,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -408,7 +411,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -426,7 +429,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -499,7 +502,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -517,7 +520,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -535,7 +538,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -614,7 +617,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -631,7 +634,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -676,7 +679,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -693,7 +696,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -743,7 +746,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         oracle.setValues(
@@ -753,7 +756,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         _depositAtomic(1200 * _1_USDCE, users.alice);
@@ -787,7 +790,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -805,7 +808,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -850,7 +853,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -868,7 +871,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -903,7 +906,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         oracle.setValues(
@@ -913,7 +916,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         _depositAtomic(1200 * _1_USDCE, users.alice);
@@ -948,7 +951,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -965,7 +968,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: polygonChainId,
@@ -1008,7 +1011,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -1025,7 +1028,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: polygonChainId,
@@ -1060,7 +1063,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -1077,7 +1080,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: polygonChainId,
@@ -1122,7 +1125,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         oracle.setValues(
@@ -1132,7 +1135,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         oracle.setValues(
@@ -1142,7 +1145,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         _depositAtomic(2000 * _1_USDCE, users.alice);
@@ -1185,7 +1188,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -1203,7 +1206,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({
@@ -1221,7 +1224,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
 
         vault.addVault({

@@ -50,12 +50,12 @@ struct VaultConfig {
 /// @dev Provides methods to simulate conversions between shares and assets for a vault
 library VaultLib {
     error StaleSharePrice();
+
     /// @notice Simulates the ERC4626 {convertToAssets} function using vault data
     /// @param self The vault data to operate on
     /// @param shares The number of shares to convert to assets
     /// @param revertIfStale Whether to revert the transaction if the oracle data is stale
     /// @return assets The equivalent amount of assets for the given shares
-
     function convertToAssets(
         VaultData memory self,
         uint256 shares,
@@ -66,17 +66,12 @@ library VaultLib {
         view
         returns (uint256 assets)
     {
-        if (self.chainId != _chainId()) {
-            (uint256 sharePrice_, uint64 lastUpdated) =
-                self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
-            if (revertIfStale) {
-                if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
-            }
-            return sharePrice_ * shares / 10 ** self.decimals;
-        } else {
-            // If it's on this chain, fetch the share price directly
-            return ERC4626(self.vaultAddress).convertToAssets(shares);
+        (uint256 sharePrice_, uint64 lastUpdated) =
+            self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
+        if (revertIfStale) {
+            if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
         }
+        return sharePrice_ * shares / 10 ** self.decimals;
     }
 
     /// @notice Simulates the ERC4626 {convertToShares} function using vault data
@@ -94,30 +89,20 @@ library VaultLib {
         view
         returns (uint256 shares)
     {
-        if (self.chainId != _chainId()) {
-            (uint256 sharePrice_, uint64 lastUpdated) =
-                self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
-            if (revertIfStale) {
-                if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
-            }
-            return assets * 10 ** self.decimals / sharePrice_;
-        } else {
-            // If it's on this chain, fetch the share price directly
-            return ERC4626(self.vaultAddress).convertToShares(assets);
+        (uint256 sharePrice_, uint64 lastUpdated) =
+            self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
+        if (revertIfStale) {
+            if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert();
         }
+        return assets * 10 ** self.decimals / sharePrice_;
     }
 
     /// @notice Retrieves the current share price of the vault
     /// @param self The vault data to operate on
     /// @return The current share price
     function sharePrice(VaultData memory self, address metavaultAsset) internal view returns (uint256) {
-        if (self.chainId != _chainId()) {
-            (uint256 sharePrice_,) = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
-            return sharePrice_;
-        } else {
-            // If it's on this chain, fetch the share price directly
-            return ERC4626(self.vaultAddress).convertToAssets(10 ** self.decimals);
-        }
+        (uint256 sharePrice_,) = self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
+        return sharePrice_;
     }
 
     /// @notice Retrieves the current chain ID

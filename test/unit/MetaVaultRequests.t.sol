@@ -140,12 +140,13 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
     function test_MetaVault_processRedeemRequest_from_local_queue() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
         uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -162,6 +163,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
         vm.expectEmit(true, true, true, true);
         emit ProcessRedeemRequest(users.alice, sharesBalance);
         vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV));
@@ -179,12 +181,13 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
     function test_MetaVault_processRedeemRequest_from_local_and_xchain_queue() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -202,7 +205,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -242,7 +245,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
                 block.timestamp,
                 USDCE_BASE,
                 users.bob,
-                0
+                6
             );
         }
 
@@ -264,9 +267,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
                 ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
             );
             requestId = gateway.getRequestsQueue()[0];
-            (,,,,,, uint128 totalDebt,) = vault.vaults(1);
+            (,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
-            (,,,,,, totalDebt,) = vault.vaults(superformId);
+            (,,,, totalDebt,) = vault.vaults(superformId);
             assertEq(totalDebt, 0);
             assertEq(vault.totalAssets(), 0);
             assertEq(vault.totalSupply(), 0);
@@ -288,12 +291,13 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
     function test_MetaVault_processRedeemRequest_from_local_and_xchain_queue_failed() public {
         MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
         vault.addVault({
             chainId: baseChainId,
             superformId: 1,
             vault: address(yUsdce),
             vaultDecimals: yUsdce.decimals(),
-            oracle: ISharePriceOracle(address(0))
+            oracle: ISharePriceOracle(address(oracle))
         });
         _depositAtomic(1000 * _1_USDCE, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
@@ -311,7 +315,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             block.timestamp,
             USDCE_BASE,
             users.bob,
-            0
+            6
         );
         vault.addVault({
             chainId: optimismChainId,
@@ -351,7 +355,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
                 block.timestamp,
                 USDCE_BASE,
                 users.bob,
-                0
+                6
             );
         }
 
@@ -375,9 +379,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             );
             requestId = gateway.getRequestsQueue()[0];
 
-            (,,,,,, uint128 totalDebt,) = vault.vaults(1);
+            (,,,, uint128 totalDebt,) = vault.vaults(1);
             assertEq(totalDebt, 0);
-            (,,,,,, totalDebt,) = vault.vaults(superformId);
+            (,,,, totalDebt,) = vault.vaults(superformId);
             assertEq(totalDebt, 0);
             assertEq(vault.totalAssets(), 0);
             assertEq(vault.totalSupply(), 0);
@@ -390,7 +394,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             _mintSuperpositions(receiver, superformId, shares);
 
             assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
-            (,,,,,, uint128 vaultDebt,) = vault.vaults(superformId);
+            (,,,,uint128 vaultDebt,) = vault.vaults(superformId);
             assertApproxEq(vaultDebt, 600 * _1_USDCE, _1_USDCE);
             assertEq(vault.totalDebt(), vaultDebt);
             assertApproxEq(vault.totalXChainAssets(), 600 * _1_USDCE, _1_USDCE);

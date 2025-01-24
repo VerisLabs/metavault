@@ -127,7 +127,7 @@ interface IMetaVault {
     function vaults(uint256)
         external
         view
-        returns (uint16, uint64, uint192, uint256, ISharePriceOracle, uint8, uint128, address);
+        returns (uint32, uint256, ISharePriceOracle,uint8, uint128, address);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
 
