@@ -570,18 +570,13 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(vault.totalWithdrawableAssets(), 48_935_776);
         assertEq(gateway.totalPendingXChainDivests(), 1_151_063_415);
 
-        // bytes32 requestId = gateway.getRequestsQueue()[0];
-        // deal(USDCE_BASE, gateway.getReceiver(requestId), 1_199_999_191);
-        // gateway.settleDivest(requestId, false);
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        deal(USDCE_BASE, gateway.getReceiver(requestId), 1_199_999_191);
+        gateway.settleDivest(requestId, false);
 
-        // console.log("3",vault.totalAssets());
-        // console.log("3",vault.totalWithdrawableAssets());
-        // console.log("3",gateway.totalPendingXChainDivests());
-
-        // Verify final state after settlement
-        // assertEq(vault.totalAssets(), totalExpectedDivestedValue);
-        // assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue);
-        // assertEq(gateway.totalPendingXChainDivests(), 0);
+        assertEq(vault.totalAssets(), totalExpectedDivestedValue+48_935_776);
+        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue+48_935_776);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
     function test_MetaVault_divestSingleXChainMultiVault_revert_InvalidAmount() public {
@@ -812,6 +807,14 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         assertEq(vault.totalAssets(), 1_999_999_284);
         assertEq(vault.totalWithdrawableAssets(), 800_000_000);
+
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        deal(USDCE_BASE, gateway.getReceiver(requestId), 1_199_999_284);
+        gateway.settleDivest(requestId, false);
+        
+        assertEq(vault.totalAssets(), expectedDivestedValue+ 800_000_000);
+        assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue+ 800_000_000);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
     function test_MetaVault_divestMultiXChainSingleVault_revert_InvalidAmount() public {
@@ -1034,6 +1037,14 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(vault.totalAssets(), 1_999_998_993);
         assertEq(vault.totalWithdrawableAssets(), 200_000_000);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
+
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        deal(USDCE_BASE, gateway.getReceiver(requestId), 1_999_998_993);
+        gateway.settleDivest(requestId, false);
+        
+        assertEq(vault.totalAssets(), expectedDivestedValue+ 400_000_000);
+        assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue+ 400_000_000);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
     function test_MetaVault_divestMultiXChainMultiVault_revert_InvalidAmount() public {

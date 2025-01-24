@@ -290,6 +290,8 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req);
+
         for (uint256 i = 0; i < req.superformsData.superformIds.length;) {
             uint256 superformId = req.superformsData.superformIds[i];
             VaultData memory vault = vaults[superformId];
@@ -301,7 +303,6 @@ contract AssetsManager is ModuleBase {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req);
         _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
         emit Divest(totalAmount);
     }
@@ -316,6 +317,8 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req);
+
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
             VaultData memory vault = vaults[superformId];
@@ -327,7 +330,6 @@ contract AssetsManager is ModuleBase {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req);
         _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
         emit Divest(totalAmount);
     }
@@ -342,6 +344,8 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req);
+
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             for (uint256 j = 0; j < superformIds.length;) {
@@ -359,7 +363,6 @@ contract AssetsManager is ModuleBase {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req);
         _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
 
         emit Divest(totalAmount);
