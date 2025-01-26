@@ -26,6 +26,9 @@ import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
 import { ERC20Receiver } from "crosschain/Lib.sol";
+
+import "forge-std/console.sol";
+
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
@@ -52,7 +55,6 @@ import {
     SingleXChainSingleVaultWithdraw,
     VaultReport
 } from "src/types/Lib.sol";
-
 contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
     using LibString for bytes;
@@ -542,7 +544,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.prank(users.alice);
         vault.chargeGlobalFees();
-        uint256 highWatermark = vault.sharePriceWaterMark();
+        uint256 highWatermark = vault.sharePrice();
         vm.stopPrank();
 
         uint256 loss = 250 * _1_USDCE;
