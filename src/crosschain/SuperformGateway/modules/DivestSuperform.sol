@@ -257,7 +257,7 @@ contract DivestSuperform is GatewayBase {
             data.controller = address(vault);
             data.receiverAddress = receiver;
             data.superformIds = superformIds;
-            data.requestedAssets = totalAmount;
+            data.requestedAssets = totalChainAmount;
             req.superformsData[i].receiverAddress = receiver;
             req.superformsData[i].receiverAddressSP = receiver;
 
