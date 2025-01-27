@@ -27,8 +27,6 @@ import { MetaVault } from "src/MetaVault.sol";
 
 import { ERC20Receiver } from "crosschain/Lib.sol";
 
-import "forge-std/console.sol";
-
 import {
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
@@ -55,6 +53,7 @@ import {
     SingleXChainSingleVaultWithdraw,
     VaultReport
 } from "src/types/Lib.sol";
+
 contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
     using LibString for bytes;
@@ -551,7 +550,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 lostShares = yUsdce.convertToShares(loss);
         vm.startPrank(address(vault));
         address(yUsdce).safeTransfer(users.bob, lostShares);
-        vm.stopPrank();                                                                                                                                                                                                                                                                                                      
+        vm.stopPrank();
 
         uint256 recovery = 50 * _1_USDCE;
         deal(USDCE_BASE, users.bob, recovery);

@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import { GatewayBase } from "../common/GatewayBase.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
-
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import {
@@ -184,12 +183,6 @@ contract DivestSuperform is GatewayBase {
             _requestsQueue.add(key);
             address receiver = getReceiver(key);
 
-            RequestData storage data = requests[key];
-            data.controller = address(vault);
-            data.receiverAddress = receiver;
-            data.superformIds = superformIds;
-            data.requestedAssets = totalAmount;
-
             ERC20Receiver(receiver).setMinExpectedBalance(req.superformsData[i].outputAmount);
             req.superformsData[i].receiverAddress = receiver;
             req.superformsData[i].receiverAddressSP = receiver;
@@ -201,6 +194,12 @@ contract DivestSuperform is GatewayBase {
             uint256 amount = vaultObj.convertToAssets(req.superformsData[i].amount, asset, true);
 
             totalAmount += amount;
+
+            RequestData storage data = requests[key];
+            data.controller = address(vault);
+            data.receiverAddress = receiver;
+            data.superformIds = superformIds;
+            data.requestedAssets = amount;
 
             superPositions.safeTransferFrom(
                 address(vault), address(this), superformId, req.superformsData[i].amount, ""
@@ -235,19 +234,6 @@ contract DivestSuperform is GatewayBase {
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
-            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformIds));
-            _requestsQueue.add(key);
-            address receiver = getReceiver(key);
-            RequestData storage data = requests[key];
-            data.controller = address(vault);
-            data.receiverAddress = receiver;
-            data.superformIds = superformIds;
-            data.requestedAssets = totalAmount;
-            req.superformsData[i].receiverAddress = receiver;
-            req.superformsData[i].receiverAddressSP = receiver;
-
-            superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
-
             uint256 totalChainAmount;
 
             uint256 totalExpectedAmount;
@@ -263,14 +249,30 @@ contract DivestSuperform is GatewayBase {
                 totalAmount += amount;
                 totalChainAmount += amount;
             }
+
+            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformIds));
+            _requestsQueue.add(key);
+            address receiver = getReceiver(key);
+            RequestData storage data = requests[key];
+            data.controller = address(vault);
+            data.receiverAddress = receiver;
+            data.superformIds = superformIds;
+            data.requestedAssets = totalAmount;
+            req.superformsData[i].receiverAddress = receiver;
+            req.superformsData[i].receiverAddressSP = receiver;
+
+            superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
+
             ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
 
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, totalChainAmount, key);
         }
+
         superformRouter.multiDstMultiVaultWithdraw{ value: msg.value }(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
+
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
         return totalAmount;
     }
@@ -323,11 +325,13 @@ contract DivestSuperform is GatewayBase {
             if (receiverContract.balance() < receiverContract.minExpectedBalance()) revert();
         }
         uint256 settledAssets = receiverContract.balance();
+
         uint256 requestedAssets = data.requestedAssets;
+
         receiverContract.pull(settledAssets);
         totalPendingXChainDivests = _sub0(totalPendingXChainDivests, settledAssets);
         asset.safeTransfer(address(vault), settledAssets);
-        vault.settleXChainDivest(settledAssets);
+        vault.settleXChainDivest(requestedAssets);
     }
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)

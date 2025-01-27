@@ -6,7 +6,6 @@ import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
 import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
-
 import { MockERC4626 } from "../helpers/mock/MockERC4626.sol";
 import { MockERC4626Oracle } from "../helpers/mock/MockERC4626Oracle.sol";
 import { MockSignerRelayer } from "../helpers/mock/MockSignerRelayer.sol";
@@ -57,7 +56,10 @@ import {
     VaultReport
 } from "src/types/Lib.sol";
 
-import "forge-std/console.sol";
+interface IERC20 {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+}
 
 contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     using SafeTransferLib for address;
@@ -557,8 +559,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
 
-        console.log(totalExpectedDivestedValue);
-
         vm.expectEmit(true, true, true, true);
         emit Divest(1_151_063_415);
 
@@ -571,11 +571,12 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(gateway.totalPendingXChainDivests(), 1_151_063_415);
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 1_199_999_191);
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId), 1220 * _1_USDCE);
         gateway.settleDivest(requestId, false);
 
-        assertEq(vault.totalAssets(), totalExpectedDivestedValue+48_935_776);
-        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue+48_935_776);
+        assertEq(vault.totalAssets(), totalExpectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
@@ -809,11 +810,16 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(vault.totalWithdrawableAssets(), 800_000_000);
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 1_199_999_284);
+        bytes32 requestId2 = gateway.getRequestsQueue()[1];
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId), 620 * _1_USDCE);
         gateway.settleDivest(requestId, false);
-        
-        assertEq(vault.totalAssets(), expectedDivestedValue+ 800_000_000);
-        assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue+ 800_000_000);
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), 620 * _1_USDCE);
+        gateway.settleDivest(requestId2, false);
+
+        assertEq(vault.totalAssets(), expectedDivestedValue + 800_000_000);
+        assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue + 800_000_000);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
@@ -1039,11 +1045,16 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 1_999_998_993);
+        bytes32 requestId2 = gateway.getRequestsQueue()[1];
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId), 1300 * _1_USDCE);
         gateway.settleDivest(requestId, false);
-        
-        assertEq(vault.totalAssets(), expectedDivestedValue+ 400_000_000);
-        assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue+ 400_000_000);
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), 1300 * _1_USDCE);
+        gateway.settleDivest(requestId2, false);
+
+        assertEq(vault.totalAssets(), expectedDivestedValue + 200 * _1_USDCE);
+        assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue + 200 * _1_USDCE);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
