@@ -188,10 +188,17 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         sharePriceWaterMark = 10 ** decimals();
     }
 
+    receive() external payable {}
+
     /// @notice Sets the gateway contract for cross-chain communication
     /// @param _gateway The address of the new gateway contract
     /// @dev Only callable by addresses with ADMIN_ROLE
     function setGateway(ISuperformGateway _gateway) external onlyRoles(ADMIN_ROLE) {
+        if (address(gateway) != address(0)) {
+            gateway.superPositions().setApprovalForAll(address(gateway), false);
+            asset().safeApprove(address(gateway), 0);
+        }
+
         gateway = _gateway;
         asset().safeApprove(address(_gateway), type(uint256).max);
         gateway.superPositions().setApprovalForAll(address(_gateway), true);
