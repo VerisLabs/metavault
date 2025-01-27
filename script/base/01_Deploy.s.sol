@@ -49,8 +49,8 @@ contract DeployScript is Script {
 
         config = VaultConfig({
             asset: USDCE_BASE,
-            name: "MetaUsdceVault",
-            symbol: "metaUSDCe",
+            name: "MaxUSD Vault",
+            symbol: "maxUSD",
             managementFee: 100,
             performanceFee: 2000,
             oracleFee: 50,

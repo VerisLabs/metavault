@@ -188,8 +188,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         sharePriceWaterMark = 10 ** decimals();
     }
 
-    receive() external payable {}
-
     /// @notice Sets the gateway contract for cross-chain communication
     /// @param _gateway The address of the new gateway contract
     /// @dev Only callable by addresses with ADMIN_ROLE
