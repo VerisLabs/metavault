@@ -48,9 +48,9 @@ contract DeployScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         config = VaultConfig({
-            asset: WETH_BASE,
-            name: "MaxETH Vault",
-            symbol: "maxETH",
+            asset: USDCE_BASE,
+            name: "MaxUSD Vault",
+            symbol: "maxUSD",
             managementFee: 100,
             performanceFee: 2000,
             oracleFee: 50,
@@ -103,6 +103,11 @@ contract DeployScript is Script {
 
         console2.log("Vault deployed at: ", address(vault));
         console2.log("Gateway deployed at: ", address(gateway));
+        console2.log("Engine deployed at: ", address(engine));
+        console2.log("AssetManager deployed at: ", address(assetManager));
+        console2.log("InvestSuperform deployed at: ", address(invest));
+        console2.log("DivestSuperform deployed at: ", address(divest));
+        console2.log("LiquidateSuperform deployed at: ", address(liquidate));
 
         vm.stopBroadcast();
     }
