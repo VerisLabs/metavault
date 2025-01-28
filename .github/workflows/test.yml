@@ -43,5 +43,9 @@ jobs:
       - name: Run Forge tests
         run: |
           export FOUNDRY_PROFILE=fork
+          export FORK=true
           forge test -vvv
+        env:
+          RPC_POLYGON: ${{ secrets.POLYGON_RPC_URL }}
+          RPC_BASE: ${{ secrets.BASE_RPC_URL }}
         id: test
