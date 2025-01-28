@@ -7,6 +7,9 @@ on:
 
 env:
   FOUNDRY_PROFILE: fork
+  FORK: true
+  RPC_BASE: ${{ secrets.BASE_RPC_URL }}
+  RPC_POLYGON: ${{ secrets.POLYGON_RPC_URL }}
 
 jobs:
   check:
@@ -25,8 +28,6 @@ jobs:
 
       - name: Install and run soldeer
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source "$HOME/.cargo/env"
           cargo install soldeer
           soldeer install
         id: soldeer
@@ -37,10 +38,5 @@ jobs:
         id: build
 
       - name: Run Forge tests
-        run: |
-          export FOUNDRY_PROFILE=fork
-          export FORK=true
-          export RPC_BASE="${{ secrets.BASE_RPC_URL }}"
-          export RPC_POLYGON="${{ secrets.POLYGON_RPC_URL }}"
-          forge test -vvv
+        run: forge test -vvv
         id: test
