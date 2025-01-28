@@ -50,7 +50,7 @@ contract InvestSuperform is GatewayBase {
     }
 
     /// @notice Invests assets from this vault into a single target vault on a different chain
-    /// @dev Only callable by addresses with the MANAGER_ROLE
+    /// @dev Only callable by the vault address 
     /// @param req Crosschain deposit request
     function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
@@ -184,13 +184,13 @@ contract InvestSuperform is GatewayBase {
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
+            req.superformsData[i].receiverAddressSP = recoveryAddress;
+            req.superformsData[i].receiverAddress = recoveryAddress;
+            
             if (superformIds.length != amounts.length) revert TotalAmountMismatch();
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
                 uint256 amount = amounts[j];
-
-                req.superformsData[i].receiverAddressSP = recoveryAddress;
-                req.superformsData[i].receiverAddress = recoveryAddress;
 
                 // Cant invest in a vault that is not in the portfolio
                 VaultData memory vaultObj = vault.getVault(superformId);

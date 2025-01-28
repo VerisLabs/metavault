@@ -200,7 +200,6 @@ interface IMetaVault {
         uint256[] calldata minAssetsOuts
     )
         external
-        payable
         returns (uint256[] memory assets);
 
     function setFeeExcemption(

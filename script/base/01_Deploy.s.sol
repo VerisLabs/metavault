@@ -6,7 +6,7 @@ import {
 } from "crosschain/SuperformGateway/Lib.sol";
 import { Script, console2 } from "forge-std/Script.sol";
 
-import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE } from "helpers/AddressBook.sol";
+import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, WETH_BASE } from "helpers/AddressBook.sol";
 import {
     IBaseRouter,
     IHurdleRateOracle,
@@ -38,7 +38,7 @@ contract DeployScript is Script {
 
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        //superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
+        superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
 
         adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
@@ -48,9 +48,9 @@ contract DeployScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         config = VaultConfig({
-            asset: USDCE_BASE,
-            name: "MaxUSD Vault",
-            symbol: "maxUSD",
+            asset: WETH_BASE,
+            name: "MaxETH Vault",
+            symbol: "maxETH",
             managementFee: 100,
             performanceFee: 2000,
             oracleFee: 50,
@@ -82,7 +82,7 @@ contract DeployScript is Script {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         gateway = ISuperformGateway(address(_gateway));
-        //gateway.setRecoveryAddress(superPositionsReceiverAddress);
+        gateway.setRecoveryAddress(superPositionsReceiverAddress);
 
         // Set gatway
         vault.setGateway(address(gateway));
