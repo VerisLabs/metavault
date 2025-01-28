@@ -15,3 +15,5 @@ docs/
 dependencies/
 
 node_modules/
+
+.secrets

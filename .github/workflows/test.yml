@@ -10,11 +10,9 @@ env:
 
 jobs:
   check:
-    strategy:
-      fail-fast: true
-
     name: Foundry project
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,12 +23,10 @@ jobs:
         with:
           version: nightly-0d5ad758e08fc5ddbd2069f068093c4a94347d1c
 
-      - name: Show Forge version
-        run: |
-          forge --version
-
       - name: Install and run soldeer
         run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
           cargo install soldeer
           soldeer install
         id: soldeer
@@ -44,8 +40,7 @@ jobs:
         run: |
           export FOUNDRY_PROFILE=fork
           export FORK=true
+          export RPC_BASE="${{ secrets.BASE_RPC_URL }}"
+          export RPC_POLYGON="${{ secrets.POLYGON_RPC_URL }}"
           forge test -vvv
-        env:
-          RPC_POLYGON: ${{ secrets.POLYGON_RPC_URL }}
-          RPC_BASE: ${{ secrets.BASE_RPC_URL }}
         id: test
