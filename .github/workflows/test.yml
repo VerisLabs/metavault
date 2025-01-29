@@ -5,16 +5,11 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  FOUNDRY_PROFILE: fork
-  FORK: true
-  RPC_BASE: ${{ secrets.BASE_RPC_URL }}
-  RPC_POLYGON: ${{ secrets.POLYGON_RPC_URL }}
-
 jobs:
   check:
     name: Foundry project
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -30,13 +25,13 @@ jobs:
         run: |
           cargo install soldeer
           soldeer install
-        id: soldeer
 
-      - name: Run Forge build
+      - name: Run tests
         run: |
-          forge build --sizes
-        id: build
-
-      - name: Run Forge tests
-        run: forge test -vvv
-        id: test
+          forge test -vv
+        env:
+          FOUNDRY_PROFILE: fork
+          FORK: true
+          RPC_BASE: ${{ secrets.BASE_RPC_URL }}
+          RPC_POLYGON: ${{ secrets.POLYGON_RPC_URL }}
+          
