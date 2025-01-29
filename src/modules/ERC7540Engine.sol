@@ -192,10 +192,10 @@ contract ERC7540Engine is ModuleBase {
         uint256 totalDebt;
         // Convert shares to assets at current price
         uint256 assets;
-        // Wether is a single chain or multichain withdrawal
+        // Whether is a single or multivault withdrawal
         bool isSingleChain;
         bool isMultiChain;
-        // Wether is a single or multivault withdrawal
+        // Whether is a single or multivault withdrawal
         bool isMultiVault;
     }
 
@@ -300,7 +300,7 @@ contract ERC7540Engine is ModuleBase {
             // Reduce needed assets
             cache.amountToWithdraw -= withdrawAssets;
 
-            // Cache wether is single chain or multichain
+            // Cache whether withdrawal spans multiple chains
             if (vault.chainId != THIS_CHAIN_ID) {
                 uint256 numberOfVaults = cache.lens[chainIndex];
                 if (numberOfVaults != 0) {
@@ -426,7 +426,7 @@ contract ERC7540Engine is ModuleBase {
             //////////////////////////////// WITHDRAW FROM EXTERNAL CHAINS ////////////////////////////////
             // If its not multichain
             if (!cache.isMultiChain) {
-                // If its multivault
+                // If its single vault
                 if (!cache.isMultiVault) {
                     uint256 superformId;
                     uint256 amount;
@@ -654,6 +654,7 @@ contract ERC7540Engine is ModuleBase {
     /// @param amount Amount of shares to withdraw
     /// @param receiver Address to receive the withdrawn assets
     /// @param config Configuration for the cross-chain withdrawal
+    /// @param totalDebtReduction total debt reductions per chain
     function _liquidateSingleXChainSingleVault(
         uint64 chainId,
         uint256 superformId,
@@ -675,6 +676,7 @@ contract ERC7540Engine is ModuleBase {
     /// @param amounts Array of share amounts to withdraw from each superform
     /// @param receiver Address to receive the withdrawn assets
     /// @param config Configuration for the cross-chain withdrawals
+    /// @param totalDebtReduction Total debt reduction for this chain's vaults
     function _liquidateSingleXChainMultiVault(
         uint64 chainId,
         uint256[] memory superformIds,
@@ -696,6 +698,7 @@ contract ERC7540Engine is ModuleBase {
     /// @param dstChainIds Array of destination chain IDs
     /// @param singleVaultDatas Array of SingleVaultSFData structures for each withdrawal
     /// @param value Amount of native tokens to send with the transaction
+    /// @param totalDebtReductions Array of total debt reductions per destination chain
     function _liquidateMultiDstSingleVault(
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
@@ -715,6 +718,8 @@ contract ERC7540Engine is ModuleBase {
     /// @param dstChainIds Array of destination chain IDs
     /// @param multiVaultDatas Array of MultiVaultSFData structures for each chain's withdrawals
     /// @param value Amount of native tokens to send with the transaction
+    /// @param totalDebtReduction Array of total debt reductions per chain
+    /// @param debtReductionsPerVault Array of arrays detailing debt reductions per vault per chain
     function _liquidateMultiDstMultiVault(
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,

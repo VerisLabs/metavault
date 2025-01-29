@@ -210,11 +210,9 @@ contract AssetsManager is ModuleBase {
         onlyRoles(MANAGER_ROLE)
         returns (uint256 assets)
     {
+        if (!isVaultListed(vaultAddress)) revert VaultNotListed();
         uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
         uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
-
-        // Ensure the target vault is in the approved list
-        if (!isVaultListed(vaultAddress)) revert VaultNotListed();
 
         // Record the balance before deposit to calculate received assets
         uint256 balanceBefore = asset().balanceOf(address(this));
@@ -234,7 +232,7 @@ contract AssetsManager is ModuleBase {
         _totalIdle += assets.toUint128();
         _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
 
-        vaults[_vaultToSuperformId[vaultAddress]].totalDebt -=
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt = 
             _sub0(vaults[_vaultToSuperformId[vaultAddress]].totalDebt, sharesValue).toUint128();
 
         emit Divest(sharesValue);
@@ -254,7 +252,6 @@ contract AssetsManager is ModuleBase {
         uint256[] calldata minAssetsOuts
     )
         external
-        payable
         returns (uint256[] memory assets)
     {
         assets = new uint256[](vaultAddresses.length);
