@@ -43,6 +43,12 @@ contract DivestSuperform is GatewayBase {
     /// @param key Unique identifier for the divest assets receiver contract
     event DivestXChain(uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes32 key);
 
+    /// @notice Emitted when a divestment fails and SuperPositions are refunded
+    /// @param superformId The ID of the Superform being refunded
+    /// @param value The amount of SuperPositions being refunded
+    /// @param key The unique identifier for the divest request
+    event DivestRefunded(uint256 indexed superformId, uint256 indexed value, bytes32 indexed key);
+
     /// @notice Emitted when a new request is created
     event RequestCreated(bytes32 indexed key, address indexed controller, uint256[] superformIds);
 
@@ -307,6 +313,8 @@ contract DivestSuperform is GatewayBase {
         superPositions.safeTransferFrom(
             address(this), address(vault), superformId, value, abi.encode(vaultRequestedAssets)
         );
+
+        emit DivestRefunded(superformId, value, key);
     }
 
     /// @notice Settles a cross-chain divestment by processing received assets
