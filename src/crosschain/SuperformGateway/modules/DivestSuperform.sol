@@ -14,6 +14,9 @@ import {
     VaultLib
 } from "types/Lib.sol";
 
+/// @title DivestSuperform module contract to divest from crosschain ERC4626 vaults using Superform
+/// @author Unlockd
+/// @notice All this actions are restricted to the portfolio manager role
 contract DivestSuperform is GatewayBase {
     using VaultLib for VaultData;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
@@ -394,6 +397,7 @@ contract DivestSuperform is GatewayBase {
         }
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](10);
         s[0] = this.divestSingleXChainSingleVault.selector;

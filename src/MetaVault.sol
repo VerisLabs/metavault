@@ -192,6 +192,11 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @param _gateway The address of the new gateway contract
     /// @dev Only callable by addresses with ADMIN_ROLE
     function setGateway(ISuperformGateway _gateway) external onlyRoles(ADMIN_ROLE) {
+        if (address(gateway) != address(0)) {
+            gateway.superPositions().setApprovalForAll(address(gateway), false);
+            asset().safeApprove(address(gateway), 0);
+        }
+
         gateway = _gateway;
         asset().safeApprove(address(_gateway), type(uint256).max);
         gateway.superPositions().setApprovalForAll(address(_gateway), true);
@@ -236,7 +241,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     }
 
     /// @notice Mints shares Vault shares to receiver by claiming the Request of the controller.
-    /// @param shares to mint
+    /// @param assets to mint
     /// @param to shares receiver
     /// @param controller controller address
     /// @return shares minted shares

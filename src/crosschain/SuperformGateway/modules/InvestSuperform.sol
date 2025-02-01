@@ -12,6 +12,9 @@ import {
     VaultData
 } from "types/Lib.sol";
 
+/// @title InvestSuperform module contract to invest in crosschain ERC4626 vaults using Superform
+/// @author Unlockd
+/// @notice All this actions are restricted to the portfolio manager role
 contract InvestSuperform is GatewayBase {
     using SafeTransferLib for address;
 
@@ -50,7 +53,7 @@ contract InvestSuperform is GatewayBase {
     }
 
     /// @notice Invests assets from this vault into a single target vault on a different chain
-    /// @dev Only callable by addresses with the MANAGER_ROLE
+    /// @dev Only callable by the vault address 
     /// @param req Crosschain deposit request
     function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
@@ -58,6 +61,8 @@ contract InvestSuperform is GatewayBase {
         onlyVault
         refundGas
     {
+        if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
+
         uint256 superformId = req.superformData.superformId;
 
         VaultData memory vaultObj = vault.getVault(superformId);
@@ -70,13 +75,15 @@ contract InvestSuperform is GatewayBase {
 
         req.superformData.receiverAddressSP = recoveryAddress;
         req.superformData.receiverAddress = recoveryAddress;
-        // Initiate the cross-chain deposit via the vault router
-        superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
-
+        
         uint256 oldPendingAmount = pendingXChainInvests[superformId];
         pendingXChainInvests[superformId] += amount;
         uint256 oldTotalPending = totalpendingXChainInvests;
         totalpendingXChainInvests += amount;
+        
+       // Initiate the cross-chain deposit via the vault router
+        superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
+
         emit PendingInvestUpdated(superformId, oldPendingAmount, pendingXChainInvests[superformId]);
         emit PendingInvestUpdated(0, oldTotalPending, totalpendingXChainInvests);
     }
@@ -92,13 +99,13 @@ contract InvestSuperform is GatewayBase {
         refundGas
         returns (uint256 totalAmount)
     {
+        if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
         if (req.superformsData.superformIds.length == 0) revert InvalidAmount();
         if (req.superformsData.superformIds.length != req.superformsData.amounts.length) revert TotalAmountMismatch();
         req.superformsData.receiverAddressSP = address(this);
         for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
             uint256 superformId = req.superformsData.superformIds[i];
 
-            if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
             req.superformsData.receiverAddressSP = recoveryAddress;
             req.superformsData.receiverAddress = recoveryAddress;
 
@@ -132,12 +139,12 @@ contract InvestSuperform is GatewayBase {
         refundGas
         returns (uint256 totalAmount)
     {
+        if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
         if (req.superformsData.length == 0) revert InvalidAmount();
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
             uint256 amount = req.superformsData[i].amount;
 
-            if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
             req.superformsData[i].receiverAddressSP = recoveryAddress;
             req.superformsData[i].receiverAddress = recoveryAddress;
 
@@ -145,7 +152,7 @@ contract InvestSuperform is GatewayBase {
             VaultData memory vaultObj = vault.getVault(superformId);
             if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
             uint256 oldPendingAmount = pendingXChainInvests[superformId];
-            pendingXChainInvests[superformId] = amount;
+            pendingXChainInvests[superformId] += amount;
             emit PendingInvestUpdated(superformId, oldPendingAmount, amount);
 
             totalAmount += amount;
@@ -153,10 +160,13 @@ contract InvestSuperform is GatewayBase {
                 ++i;
             }
         }
-        asset.safeTransferFrom(address(vault), address(this), totalAmount);
-        superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        
         uint256 oldTotalPending = totalpendingXChainInvests;
         totalpendingXChainInvests += totalAmount;
+
+        asset.safeTransferFrom(address(vault), address(this), totalAmount);
+        superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
+        
         emit PendingInvestUpdated(0, oldTotalPending, totalpendingXChainInvests);
     }
 
@@ -171,26 +181,25 @@ contract InvestSuperform is GatewayBase {
         refundGas
         returns (uint256 totalAmount)
     {
+        if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
         if (req.superformsData.length == 0) revert InvalidAmount();
 
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
-
+            req.superformsData[i].receiverAddressSP = recoveryAddress;
+            req.superformsData[i].receiverAddress = recoveryAddress;
+            
             if (superformIds.length != amounts.length) revert TotalAmountMismatch();
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
                 uint256 amount = amounts[j];
 
-                if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
-                req.superformsData[i].receiverAddressSP = recoveryAddress;
-                req.superformsData[i].receiverAddress = recoveryAddress;
-
                 // Cant invest in a vault that is not in the portfolio
                 VaultData memory vaultObj = vault.getVault(superformId);
                 if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
                 uint256 oldPendingAmount = pendingXChainInvests[superformId];
-                pendingXChainInvests[superformId] = amount;
+                pendingXChainInvests[superformId] += amount;
                 emit PendingInvestUpdated(superformId, oldPendingAmount, amount);
                 totalAmount += amount;
             }
@@ -224,6 +233,7 @@ contract InvestSuperform is GatewayBase {
         }
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](6);
         s[0] = this.setRecoveryAddress.selector;

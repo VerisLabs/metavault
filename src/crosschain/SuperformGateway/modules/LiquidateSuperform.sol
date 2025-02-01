@@ -19,6 +19,8 @@ import {
     SingleXChainSingleVaultWithdraw
 } from "types/Lib.sol";
 
+/// @title LiquidateSuperform module contract to process metavault crosschain liquidations for users withdrawals
+/// @author Unlockd
 contract LiquidateSuperform is GatewayBase {
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using SafeTransferLib for address;
@@ -382,6 +384,7 @@ contract LiquidateSuperform is GatewayBase {
         return requestIds;
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](8);
         s[0] = this.liquidateSingleXChainSingleVault.selector;
