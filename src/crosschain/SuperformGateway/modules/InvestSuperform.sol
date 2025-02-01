@@ -12,6 +12,9 @@ import {
     VaultData
 } from "types/Lib.sol";
 
+/// @title InvestSuperform module contract to invest in crosschain ERC4626 vaults using Superform
+/// @author Unlockd
+/// @notice All this actions are restricted to the portfolio manager role
 contract InvestSuperform is GatewayBase {
     using SafeTransferLib for address;
 
@@ -230,6 +233,7 @@ contract InvestSuperform is GatewayBase {
         }
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](6);
         s[0] = this.setRecoveryAddress.selector;

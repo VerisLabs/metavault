@@ -389,6 +389,7 @@ contract AssetsManager is ModuleBase {
         emit SettleXChainDivest(withdrawnAssets);
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](14);
         s[0] = this.investSingleDirectSingleVault.selector;

@@ -735,6 +735,7 @@ contract ERC7540Engine is ModuleBase {
         );
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](3);
         s[0] = this.processRedeemRequest.selector;

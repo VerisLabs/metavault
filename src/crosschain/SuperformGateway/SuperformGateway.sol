@@ -9,6 +9,10 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
+/// @title SuperformGateway gateway contract for all crosschain operations involving Superform protofol
+/// @author Unlockd
+/// @notice Uses a modular proxy pattern similar to diamond pattern to easily upgrade functionality
+/// @dev Inherits from GatewayBase
 contract SuperformGateway is GatewayBase, MultiFacetProxy {
     using VaultLib for VaultData;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
