@@ -14,7 +14,7 @@ import {
     VaultLib
 } from "types/Lib.sol";
 
-/// @title InvestSuperform module contract to divest from crosschain ERC4626 vaults using Superform
+/// @title DivestSuperform module contract to divest from crosschain ERC4626 vaults using Superform
 /// @author Unlockd
 /// @notice All this actions are restricted to the portfolio manager role
 contract DivestSuperform is GatewayBase {
