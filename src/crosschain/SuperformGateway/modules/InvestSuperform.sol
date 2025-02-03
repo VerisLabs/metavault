@@ -53,7 +53,7 @@ contract InvestSuperform is GatewayBase {
     }
 
     /// @notice Invests assets from this vault into a single target vault on a different chain
-    /// @dev Only callable by the vault address 
+    /// @dev Only callable by the vault address
     /// @param req Crosschain deposit request
     function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
@@ -75,13 +75,13 @@ contract InvestSuperform is GatewayBase {
 
         req.superformData.receiverAddressSP = recoveryAddress;
         req.superformData.receiverAddress = recoveryAddress;
-        
+
         uint256 oldPendingAmount = pendingXChainInvests[superformId];
         pendingXChainInvests[superformId] += amount;
         uint256 oldTotalPending = totalpendingXChainInvests;
         totalpendingXChainInvests += amount;
-        
-       // Initiate the cross-chain deposit via the vault router
+
+        // Initiate the cross-chain deposit via the vault router
         superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
 
         emit PendingInvestUpdated(superformId, oldPendingAmount, pendingXChainInvests[superformId]);
@@ -160,13 +160,13 @@ contract InvestSuperform is GatewayBase {
                 ++i;
             }
         }
-        
+
         uint256 oldTotalPending = totalpendingXChainInvests;
         totalpendingXChainInvests += totalAmount;
 
         asset.safeTransferFrom(address(vault), address(this), totalAmount);
         superformRouter.multiDstSingleVaultDeposit{ value: msg.value }(req);
-        
+
         emit PendingInvestUpdated(0, oldTotalPending, totalpendingXChainInvests);
     }
 
@@ -189,7 +189,7 @@ contract InvestSuperform is GatewayBase {
             uint256[] memory amounts = req.superformsData[i].amounts;
             req.superformsData[i].receiverAddressSP = recoveryAddress;
             req.superformsData[i].receiverAddress = recoveryAddress;
-            
+
             if (superformIds.length != amounts.length) revert TotalAmountMismatch();
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];

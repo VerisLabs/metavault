@@ -16,8 +16,7 @@ contract DeploySuperPositionsReceiver is Script {
 
         // Generate bytecode + constructor args dynamically
         bytes memory bytecode = abi.encodePacked(
-            type(SuperPositionsReceiver).creationCode,
-            abi.encode(8453, GATEWAY, SUPERPOSITIONS, OWNER)
+            type(SuperPositionsReceiver).creationCode, abi.encode(8453, GATEWAY, SUPERPOSITIONS, OWNER)
         );
 
         vm.startBroadcast(adminPrivateKey);
