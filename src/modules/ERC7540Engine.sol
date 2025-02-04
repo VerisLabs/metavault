@@ -348,7 +348,7 @@ contract ERC7540Engine is ModuleBase {
         cache.totalAssets = totalAssets();
 
         // Cannot process more assets than the
-        if (cache.assets > cache.totalAssets - gateway.totalpendingXChainInvests()) {
+        if (cache.assets > totalWithdrawableAssets()) {
             revert InsufficientAvailableAssets();
         }
 
