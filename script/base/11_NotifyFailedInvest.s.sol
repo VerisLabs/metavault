@@ -15,7 +15,9 @@ contract NotifyFailedInvestScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         gateway = ISuperformGateway(gatewayAddress);
-        gateway.notifyFailedInvest(859962937749922588313557709134519540517673317306582405362791, 5990000);
+        gateway.notifyFailedInvest(
+            859_962_937_749_922_588_313_557_709_134_519_540_517_673_317_306_582_405_362_791, 5_990_000
+        );
 
         vm.stopBroadcast();
     }

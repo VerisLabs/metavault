@@ -5,6 +5,7 @@ import { GatewayBase } from "../common/GatewayBase.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+
 import {
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -332,17 +333,21 @@ contract DivestSuperform is GatewayBase {
         _requestsQueue.remove(key);
         ERC20Receiver receiverContract = ERC20Receiver(getReceiver(key));
         if (data.controller != address(vault)) revert();
+
         if (!force) {
             if (receiverContract.balance() < receiverContract.minExpectedBalance()) revert();
         }
-        uint256 settledAssets = receiverContract.balance();
 
+        uint256 settledAssets = receiverContract.balance();
         uint256 requestedAssets = data.requestedAssets;
 
-        receiverContract.pull(settledAssets);
-        totalPendingXChainDivests = _sub0(totalPendingXChainDivests, requestedAssets);
-        asset.safeTransfer(address(vault), settledAssets);
-        vault.settleXChainDivest(settledAssets);
+        // Only settle up to the requested amount
+        uint256 actualSettlement = settledAssets > requestedAssets ? requestedAssets : settledAssets;
+
+        receiverContract.pull(actualSettlement);
+        totalPendingXChainDivests -= requestedAssets;
+        asset.safeTransfer(address(vault), actualSettlement);
+        vault.settleXChainDivest(actualSettlement);
     }
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)

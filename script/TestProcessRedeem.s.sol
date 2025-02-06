@@ -1,24 +1,24 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {Script, console2} from "forge-std/Script.sol";
-import {IMetaVault} from "interfaces/Lib.sol";
+import { Script, console2 } from "forge-std/Script.sol";
+import { IMetaVault } from "interfaces/Lib.sol";
 import {
     LiqRequest,
-    SingleXChainSingleVaultWithdraw,
-    SingleXChainMultiVaultWithdraw,
-    MultiXChainSingleVaultWithdraw,
     MultiXChainMultiVaultWithdraw,
-    ProcessRedeemRequestParams
+    MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestParams,
+    SingleXChainMultiVaultWithdraw,
+    SingleXChainSingleVaultWithdraw
 } from "types/Lib.sol";
 
 contract TestProcessRedeem is Script {
     IMetaVault public metavault;
-    
+
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("RELAYER_PRIVATE_KEY");
         address metavaultAddress = vm.envAddress("METAVAULT_ADDRESS");
-        
+
         vm.startBroadcast(deployerPrivateKey);
         metavault = IMetaVault(metavaultAddress);
 
@@ -42,7 +42,7 @@ contract TestProcessRedeem is Script {
             maxSlippage: 1521,
             liqRequest: sXsVLiqRequest,
             hasDstSwap: false,
-            value: 150103667585979
+            value: 150_103_667_585_979
         });
 
         // Setup empty sXmV (SingleXChainMultiVaultWithdraw)
@@ -63,7 +63,7 @@ contract TestProcessRedeem is Script {
 
         // Setup empty mXsV (MultiXChainSingleVaultWithdraw)
         uint8[][] memory emptyUint8ArrayArray = new uint8[][](0);
-        
+
         MultiXChainSingleVaultWithdraw memory mXsV = MultiXChainSingleVaultWithdraw({
             ambIds: emptyUint8ArrayArray,
             outputAmounts: emptyOutputAmounts,
@@ -89,7 +89,7 @@ contract TestProcessRedeem is Script {
         });
 
         // Call processRedeemRequest
-        metavault.processRedeemRequest{value: 150103667585979}(
+        metavault.processRedeemRequest{ value: 150_103_667_585_979 }(
             ProcessRedeemRequestParams({
                 controller: 0x429796dAc057E7C15724196367007F1e9Cff82F9,
                 shares: 0,

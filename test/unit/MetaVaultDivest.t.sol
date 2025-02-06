@@ -812,10 +812,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 620 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
         gateway.settleDivest(requestId, false);
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), 620 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestedValue);
         gateway.settleDivest(requestId2, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 800_000_000);
@@ -1054,7 +1054,9 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         gateway.settleDivest(requestId2, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 200 * _1_USDCE);
+
         assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue + 200 * _1_USDCE);
+
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
