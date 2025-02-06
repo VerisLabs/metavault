@@ -18,16 +18,16 @@ contract AddFunctionsScript is Script {
         vm.startBroadcast(adminPrivateKey);
 
         engine = new ERC7540Engine();
-        assetsManager = new AssetsManager();
+        //assetsManager = new AssetsManager();
 
         bytes4[] memory engineSelectors = engine.selectors();
-        bytes4[] memory assetsSelectors = assetsManager.selectors();
+        //bytes4[] memory assetsSelectors = assetsManager.selectors();
 
         metavault.addFunctions(engineSelectors, address(engine), false);
-        metavault.addFunctions(assetsSelectors, address(assetsManager), false);
+        //metavault.addFunctions(assetsSelectors, address(assetsManager), false);
 
         console2.log("ERC7540Engine address: ", address(engine));
-        console2.log("AssetsManager address: ", address(assetsManager));
+        //console2.log("AssetsManager address: ", address(assetsManager));
 
         vm.stopBroadcast();
     }

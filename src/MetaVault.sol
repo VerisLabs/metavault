@@ -569,7 +569,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         // Transfer fees to treasury if any were charged
         if (totalFees > 0) {
             _mint(treasury, convertToShares(totalFees));
-            _afterDeposit(totalFees, 0);
         }
         assembly {
             let m := shr(96, not(0))
@@ -672,7 +671,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         emit RemoveVault(chainId, vaultAddress);
     }
 
-    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external {
+    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external onlyRoles(ADMIN_ROLE) {
         vaults[superformId].oracle = oracle;
     }
 
@@ -763,13 +762,13 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
     /// @notice Updates the average entry share price of a controller
     function _updatePosition(address controller, uint256 mintedShares) internal {
-        uint256 averateEntryPrice = positions[controller];
+        uint256 averageEntryPrice = positions[controller];
         uint256 currentSharePrice = sharePrice();
         uint256 sharesBalance = balanceOf(controller);
-        if (averateEntryPrice == 0 || sharesBalance == 0) {
+        if (averageEntryPrice == 0 || sharesBalance == 0) {
             positions[controller] = currentSharePrice;
         } else {
-            uint256 totalCost = sharesBalance * averateEntryPrice + mintedShares * currentSharePrice;
+            uint256 totalCost = sharesBalance * averageEntryPrice + mintedShares * currentSharePrice;
             uint256 newTotalAmount = sharesBalance + mintedShares;
             uint256 newAverageEntryPrice = totalCost / newTotalAmount;
             positions[controller] = newAverageEntryPrice;
