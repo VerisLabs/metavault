@@ -1,9 +1,9 @@
 /// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
+import "forge-std/console.sol";
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import "forge-std/console.sol";
 
 /// @title ERC20Receiver Contract
 /// @notice A contract that receives and manages assets and SuperPositions during cross-chain operations
