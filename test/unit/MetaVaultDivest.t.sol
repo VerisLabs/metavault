@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
-
+import "forge-std/console.sol";
 import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
@@ -79,6 +79,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+        console.log("gateway address : %s", address(gateway));
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
@@ -1047,10 +1048,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 1300 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId),expectedDivestedValue);
         gateway.settleDivest(requestId, false);
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), 1300 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestedValue);
         gateway.settleDivest(requestId2, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 200 * _1_USDCE);

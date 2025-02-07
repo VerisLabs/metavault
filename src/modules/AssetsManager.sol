@@ -4,6 +4,8 @@ pragma solidity ^0.8.19;
 import { ModuleBase } from "common/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 
+import "forge-std/console.sol";
+
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -185,7 +187,9 @@ contract AssetsManager is ModuleBase {
         onlyRoles(MANAGER_ROLE)
     {
         uint256 totalAmount = gateway.investMultiXChainMultiVault{ value: msg.value }(req);
+        console.log(_totalIdle,"invest idle1");
         _totalIdle -= totalAmount.toUint128();
+        console.log(_totalIdle,"invest idle2");
         emit Invest(totalAmount);
     }
 
@@ -386,7 +390,10 @@ contract AssetsManager is ModuleBase {
     /// @dev Only callable by the gateway contract
     function settleXChainDivest(uint256 withdrawnAssets) public {
         if (msg.sender != address(gateway)) revert Unauthorized();
+        console.log(_totalIdle,"1");
+        console.log(withdrawnAssets.toUint128(),"1");
         _totalIdle += withdrawnAssets.toUint128();
+        console.log(_totalIdle,"2");
         emit SettleXChainDivest(withdrawnAssets);
     }
 

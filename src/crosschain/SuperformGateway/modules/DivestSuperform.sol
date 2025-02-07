@@ -6,6 +6,8 @@ import { ERC20Receiver } from "crosschain/Lib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
+import"forge-std/console.sol";
+
 import {
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -328,26 +330,25 @@ contract DivestSuperform is GatewayBase {
     /// For each Superform ID involved, notifies the vault of the settlement.
     /// @param key Identifier of the receiver contract
     function settleDivest(bytes32 key, bool force) external onlyRoles(RELAYER_ROLE) {
-        if (!_requestsQueue.contains(key)) revert();
+       if (!_requestsQueue.contains(key)) revert();
         RequestData memory data = requests[key];
         _requestsQueue.remove(key);
         ERC20Receiver receiverContract = ERC20Receiver(getReceiver(key));
         if (data.controller != address(vault)) revert();
-
         if (!force) {
             if (receiverContract.balance() < receiverContract.minExpectedBalance()) revert();
         }
-
         uint256 settledAssets = receiverContract.balance();
+
+        console.log("settledAssets", settledAssets);
+
         uint256 requestedAssets = data.requestedAssets;
-
-        // Only settle up to the requested amount
-        uint256 actualSettlement = settledAssets > requestedAssets ? requestedAssets : settledAssets;
-
-        receiverContract.pull(actualSettlement);
-        totalPendingXChainDivests -= requestedAssets;
-        asset.safeTransfer(address(vault), actualSettlement);
-        vault.settleXChainDivest(actualSettlement);
+        console.log("requestedAssets", requestedAssets);
+        receiverContract.pull(settledAssets);
+        console.log(totalPendingXChainDivests,"totalPendingXChainDivests");
+        totalPendingXChainDivests = _sub0(totalPendingXChainDivests, requestedAssets);
+        asset.safeTransfer(address(vault), requestedAssets);
+        vault.settleXChainDivest(requestedAssets);
     }
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)

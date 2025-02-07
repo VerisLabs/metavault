@@ -3,6 +3,7 @@ pragma solidity ^0.8.19;
 
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import "forge-std/console.sol";
 
 /// @title ERC20Receiver Contract
 /// @notice A contract that receives and manages assets and SuperPositions during cross-chain operations
@@ -44,6 +45,8 @@ contract ERC20Receiver {
     /// @dev Can only be called by the deployer
     /// @param amount The amount of tokens to transfer
     function pull(uint256 amount) external {
+        console.log(msg.sender);
+        console.log(_deployer);
         if (msg.sender != _deployer) revert();
         _asset.safeTransfer(_deployer, amount);
     }
