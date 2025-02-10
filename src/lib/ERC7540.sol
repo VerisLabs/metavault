@@ -19,9 +19,7 @@ abstract contract ERC7540 is ERC4626 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Emitted when `assets` tokens are deposited into the vault
-    event DepositRequest(
-        address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
-    );
+    event DepositRequest(address indexed controller, address indexed owner, uint256 indexed requestId, uint256 assets);
 
     /// @dev Emitted when `shares` vault shares are redeemed
     event RedeemRequest(
@@ -136,7 +134,8 @@ abstract contract ERC7540 is ERC4626 {
         returns (uint256 requestId)
     {
         if (assets == 0) revert InvalidZeroAssets();
-        requestId = _requestDeposit(assets, controller, owner, msg.sender);
+
+        requestId = _requestDeposit(assets, controller, owner);
     }
 
     /// @dev Assumes control of shares from sender into the Vault and submits a Request for asynchronous redeem.
@@ -339,17 +338,15 @@ abstract contract ERC7540 is ERC4626 {
     function _requestDeposit(
         uint256 assets,
         address controller,
-        address owner,
-        address source
+        address owner
     )
         internal
         virtual
         returns (uint256 requestId)
     {
-        source;
-        asset().safeTransferFrom(source, address(this), assets);
+        asset().safeTransferFrom(owner, address(this), assets);
         _pendingDepositRequest[controller] = _pendingDepositRequest[controller].add(assets);
-        emit DepositRequest(controller, owner, requestId, source, assets);
+        emit DepositRequest(controller, owner, requestId, assets);
         return 0;
     }
 

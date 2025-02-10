@@ -128,6 +128,21 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Thrown when attempting to to remove a vault that is still in the metavault balance
     error SharesBalanceNotZero();
 
+    /// @notice Thrown when attempting to operate on an invalid superform ID
+    error InvalidSuperformId();
+
+    /// @notice Thrown when attempting to add a vault with invalid address
+    error InvalidVaultAddress();
+
+    /// @notice Thrown when attempting to add a vault with invalid oracle
+    error InvalidOracleAddress();
+
+    /// @notice Thrown when attempting to set a fee higher than the maximum allowed
+    error FeeExceedsMaximum();
+
+    /// @dev Maximum fee that can be set (20% = 2000 basis points)
+    uint16 constant MAX_FEE = 2000;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -141,7 +156,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         _;
     }
 
-    /// @notice Modifier to update the share price water-mark before running a function
+    /// @notice Modifier to update the share price water-mark after running a function
+    /// @dev Updates the high water mark if the current share price exceeds the previous mark
     modifier updateGlobalWatermark() {
         _;
         uint256 sp = sharePrice();
@@ -213,7 +229,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Transfers assets from sender into the Vault and submits a Request for asynchronous deposit.
     /// @param assets the amount of deposit assets to transfer from owner
     /// @param controller the controller of the request who will be able to operate the request
-    /// @param owner the source of the deposit assets
     /// @return requestId
     function requestDeposit(
         uint256 assets,
@@ -226,6 +241,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         noEmergencyShutdown
         returns (uint256 requestId)
     {
+        if (owner != msg.sender) revert InvalidOperator();
         requestId = super.requestDeposit(assets, controller, owner);
         // fulfill the request directly
         _fulfillDepositRequest(controller, assets, convertToShares(assets));
@@ -584,7 +600,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
     /// @notice Add a new vault to the portfolio
     /// @param chainId chainId of the vault
-    /// @param superformId id of superform in case its crosschain
+    /// @param superformId id of superform
     /// @param vault vault address
     /// @param vaultDecimals decimals of ERC4626 token
     /// @param oracle vault shares price oracle
@@ -640,13 +656,18 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Remove a vault from the portfolio
     /// @param superformId id of vault to be removed
     function removeVault(uint256 superformId) external onlyRoles(MANAGER_ROLE) {
-        if (_sharesBalance(vaults[superformId]) > 0) revert SharesBalanceNotZero();
+        if (superformId == 0) revert InvalidSuperformId();
+        uint256 sharesBalance = _sharesBalance(vaults[superformId]);
+
+        if (sharesBalance > 0) revert SharesBalanceNotZero();
+        if (sharesBalance > MINIMUM_SHARES_THRESHOLD) revert SharesBalanceNotZero();
+
         uint64 chainId = vaults[superformId].chainId;
         address vaultAddress = vaults[superformId].vaultAddress;
         delete vaults[superformId];
         delete _vaultToSuperformId[vaultAddress];
         if (chainId == THIS_CHAIN_ID) {
-            // Push it to the local withdrawal queue
+            // Remove vault from the local withdrawal queue
             uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = localWithdrawalQueue;
             for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
                 if (queue[i] == superformId) {
@@ -658,7 +679,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             // If its on the same chain revoke approval to vault
             asset().safeApprove(vaultAddress, 0);
         } else {
-            // Push it to the crosschain withdrawal queue
+            // Remove vault from the crosschain withdrawal queue
             uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = xChainWithdrawalQueue;
             for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
                 if (queue[i] == superformId) {
@@ -671,7 +692,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         emit RemoveVault(chainId, vaultAddress);
     }
 
-    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external onlyRoles(ADMIN_ROLE) {
+    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external {
+        //@audit no access control?
         vaults[superformId].oracle = oracle;
     }
 
@@ -722,13 +744,14 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     }
 
     function setSharesLockTime(uint24 time) external onlyRoles(ADMIN_ROLE) {
-        sharesLockTime = time;
+        sharesLockTime = time; //@audit validate against some min/max
         emit SetSharesLockTime(time);
     }
 
     /// @notice sets the annually management fee
     /// @param _managementFee new BPS management fee
     function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
+        if (_managementFee > MAX_FEE) revert FeeExceedsMaximum();
         managementFee = _managementFee;
         emit SetManagementFee(_managementFee);
     }
@@ -736,6 +759,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice sets the annually management fee
     /// @param _performanceFee new BPS management fee
     function setPerformanceFee(uint16 _performanceFee) external onlyRoles(ADMIN_ROLE) {
+        if (_performanceFee > MAX_FEE) revert FeeExceedsMaximum();
         performanceFee = _performanceFee;
         emit SetPerformanceFee(_performanceFee);
     }
@@ -743,6 +767,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice sets the annually oracle fee
     /// @param _oracleFee new BPS oracle fee
     function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
+        if (_oracleFee > MAX_FEE) revert FeeExceedsMaximum();
         oracleFee = _oracleFee;
         emit SetOracleFee(_oracleFee);
     }
@@ -752,6 +777,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @param assets The amount of assets to donate
     function donate(uint256 assets) external {
         asset().safeTransferFrom(msg.sender, address(this), assets);
+        _mint(treasury, convertToShares(assets));
         _afterDeposit(assets, 0);
     }
 
@@ -782,9 +808,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     }
 
     /// @dev Reverts if deposited shares are locked
-    /// @param controller shares controller
-    function _checkSharesLocked(address controller) private view {
-        if (block.timestamp < _depositLockCheckPoint[controller] + sharesLockTime) revert SharesLocked();
+    /// @param to shares controller
+    function _checkSharesLocked(address to) private view {
+        if (block.timestamp < _depositLockCheckPoint[to] + sharesLockTime) revert SharesLocked();
     }
 
     /// @dev Locks the deposited shares for a fixed period
@@ -873,4 +899,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155BatchReceived.selector;
     }
+
+    receive() external payable { }
 }

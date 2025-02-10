@@ -52,6 +52,9 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
+    /// @notice Minimum shares threshold
+    uint256 public MINIMUM_SHARES_THRESHOLD = 10;
+
     /// @notice mapping from address to the average share price of their deposits
     mapping(address => uint256 averageEntryPrice) public positions;
 

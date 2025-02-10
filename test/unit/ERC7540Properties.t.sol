@@ -63,7 +63,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     function test_erc7540_requestDeposit() public {
         uint256 amount = 100 * _1_USDCE;
         vm.expectEmit();
-        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
+        emit DepositRequest(users.alice, users.alice, 0, amount);
         vault.requestDeposit(amount, users.alice, users.alice);
         assertEq(USDCE_POLYGON.balanceOf(address(vault)), amount);
         assertEq(vault.claimableDepositRequest(users.alice), 100 * _1_USDCE);

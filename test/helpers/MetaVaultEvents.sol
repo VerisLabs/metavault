@@ -42,9 +42,7 @@ contract MetaVaultEvents {
     event SetOracleFee(uint16 fee);
 
     /// @dev Emitted when a deposit request is made
-    event DepositRequest(
-        address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
-    );
+    event DepositRequest(address indexed controller, address indexed owner, uint256 indexed requestId, uint256 assets);
 
     /// @dev Emitted when a deposit is completed
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);

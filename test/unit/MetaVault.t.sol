@@ -133,7 +133,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_depositAtomic() public {
         uint256 amount = 1000 * _1_USDCE;
         vm.expectEmit(true, true, true, true);
-        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
+        emit DepositRequest(users.alice, users.alice, 0, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
         uint256 shares = _depositAtomic(amount, users.alice);
@@ -145,7 +145,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_mintAtomic() public {
         uint256 amount = 1000 * _1_USDCE;
         vm.expectEmit(true, true, true, true);
-        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
+        emit DepositRequest(users.alice, users.alice, 0, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
         uint256 assets = _mintAtomic(amount, users.alice);
@@ -298,11 +298,25 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_setManagementFee() public {
         uint16 newFee = 3000;
 
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setManagementFee(newFee);
+
+        newFee = 1500; // Set to a valid fee below MAX_FEE (2000)
         vm.expectEmit(true, true, true, true);
         emit SetManagementFee(newFee);
         vault.setManagementFee(newFee);
 
         assertEq(vault.managementFee(), newFee);
+    }
+
+    function test_revert_MetaVault_setManagementFee_exceedsMax() public {
+        uint16 tooHighFee = 2001; // MAX_FEE is 2000
+
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setManagementFee(tooHighFee);
+
+        // Verify fee wasn't changed
+        assertEq(vault.managementFee(), 0);
     }
 
     function test_MetaVault_setOracleFee() public {
@@ -751,11 +765,28 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV));
 
+        uint256 vaultBalanceBefore = USDCE_BASE.balanceOf(address(vault));
+
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
-        uint256 totalAssets = depositAmount + initialProfit - loss + recoveryProfit;
-        assertEq(receivedAssets, totalAssets);
-        assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
+        uint256 expectedTotalAssets = depositAmount + initialProfit - loss + recoveryProfit;
+
+  
+        uint256 duration = block.timestamp - vault.lastFeesCharged();
+        uint256 managementFee =
+            (expectedTotalAssets * duration * vault.managementFee()) / (vault.SECS_PER_YEAR() * vault.MAX_BPS());
+        uint256 oracleFee =
+            (expectedTotalAssets * duration * vault.oracleFee()) / (vault.SECS_PER_YEAR() * vault.MAX_BPS());
+        uint256 expectedFees = managementFee + oracleFee;
+
+        uint256 expectedReceivedAssets = expectedTotalAssets - expectedFees;
+
+        // Assertions
+        assertEq(receivedAssets, expectedReceivedAssets, "Received assets don't match expected");
+        assertEq(USDCE_BASE.balanceOf(vault.treasury()), expectedFees, "Treasury fees don't match expected");
+        assertEq(
+            USDCE_BASE.balanceOf(address(vault)), vaultBalanceBefore - receivedAssets, "Vault balance change incorrect"
+        );
     }
 
     function test_MetaVault_exitFees_feeExemption() public {
