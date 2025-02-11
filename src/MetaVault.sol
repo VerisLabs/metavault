@@ -776,10 +776,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Allows direct donation of assets to the vault
     /// @dev Transfers assets from sender to vault and updates idle balance
     /// @param assets The amount of assets to donate
-    /// @param expectedAmount The expected amount that should have been transferred originally
-    function donate(uint256 assets, uint256 expectedAmount) external {
-        if (assets > expectedAmount) revert DonationExceedsExpected(assets, expectedAmount);
-
+    function donate(uint256 assets) external {
         asset().safeTransferFrom(msg.sender, address(this), assets);
         _afterDeposit(assets, 0);
     }

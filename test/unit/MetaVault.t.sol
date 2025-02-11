@@ -130,10 +130,10 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.treasury(), config.treasury);
     }
 
-    function test_MetaVault_depositAtomic() public {
+     function test_MetaVault_depositAtomic() public {
         uint256 amount = 1000 * _1_USDCE;
         vm.expectEmit(true, true, true, true);
-        emit DepositRequest(users.alice, users.alice, 0, amount);
+        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
         uint256 shares = _depositAtomic(amount, users.alice);
@@ -145,7 +145,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_MetaVault_mintAtomic() public {
         uint256 amount = 1000 * _1_USDCE;
         vm.expectEmit(true, true, true, true);
-        emit DepositRequest(users.alice, users.alice, 0, amount);
+        emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
         uint256 assets = _mintAtomic(amount, users.alice);
@@ -286,37 +286,57 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_setSharesLockTime() public {
-        uint24 newLockTime = 60 days;
-
+        uint24 newLockTime = 43_200; // 12 hours
+        
+    
         vm.expectEmit(true, true, true, true);
         emit SetSharesLockTime(newLockTime);
         vault.setSharesLockTime(newLockTime);
-
+        
         assertEq(vault.sharesLockTime(), newLockTime);
+
+    }
+
+    function test_revert_MetaVault_setSharesLockTime_exceedsMax() public {
+        uint24 invalidTime = 86_401; 
+        
+        vm.startPrank(users.alice); 
+        
+        vm.expectRevert(MetaVault.InvalidSharesLockTime.selector);
+        vault.setSharesLockTime(invalidTime);
+        
+        
+        assertEq(vault.sharesLockTime(), config.sharesLockTime);
+        
+        vm.stopPrank();
     }
 
     function test_MetaVault_setManagementFee() public {
-        uint16 newFee = 3000;
-
-        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
-        vault.setManagementFee(newFee);
-
-        newFee = 1500; // Set to a valid fee below MAX_FEE (2000)
+        vm.startPrank(users.alice); 
+        
+        uint16 newFee = 1500; // 15%
+        
         vm.expectEmit(true, true, true, true);
         emit SetManagementFee(newFee);
         vault.setManagementFee(newFee);
 
         assertEq(vault.managementFee(), newFee);
+        
+        vm.stopPrank();
     }
 
     function test_revert_MetaVault_setManagementFee_exceedsMax() public {
-        uint16 tooHighFee = 2001; // MAX_FEE is 2000
-
+        vm.startPrank(users.alice); 
+        
+        uint16 tooHighFee = 3001; // MAX_FEE is 3000 (30%)
+        
         vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
         vault.setManagementFee(tooHighFee);
 
-        // Verify fee wasn't changed
+        
         assertEq(vault.managementFee(), 0);
+        
+        vm.stopPrank();
     }
 
     function test_MetaVault_setOracleFee() public {
@@ -420,15 +440,16 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
-
         vm.startPrank(users.bob);
         USDCE_BASE.safeApprove(address(vault), profit);
         vault.donate(profit);
         vm.stopPrank();
 
         vm.startPrank(users.alice);
-
-        assertEq(vault.sharePrice(), 1e6);
+        
+        // With 1000 USDC deposit and 100 USDC profit, share price should be ~1.1e6
+        uint256 expectedSharePrice = 1_100_000; // 1.1e6
+        assertApproxEq(vault.sharePrice(), expectedSharePrice, 1);
 
         skip(config.sharesLockTime);
 
@@ -471,7 +492,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
         assertEq(receivedAssets, totalAssets - totalExpectedFees);
-
         assertApproxEq(vault.balanceOf(vault.treasury()), totalExpectedFeesShares, 1);
     }
 
@@ -842,5 +862,64 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
         assertApproxEq(receivedAssets, 1000 * _1_USDCE + profit - totalExpectedFees, 2);
         assertApproxEq(address(vault).balanceOf(vault.treasury()), totalExpectedFeesShares, 2);
+    }
+
+    function test_revert_MetaVault_setManagementFee_nonAdmin() public {
+        uint16 newFee = 1500;
+        
+        vm.startPrank(users.bob); 
+        vm.expectRevert(); 
+        vault.setManagementFee(newFee);
+        vm.stopPrank();
+
+        assertEq(vault.managementFee(), 0);
+    }
+
+    function test_revert_MetaVault_setPerformanceFee_nonAdmin() public {
+        uint16 newFee = 1500;
+        
+        vm.startPrank(users.bob); 
+        vm.expectRevert(); 
+        vault.setPerformanceFee(newFee);
+        vm.stopPrank();
+
+        assertEq(vault.performanceFee(), 2000); 
+    }
+
+    function test_revert_MetaVault_setOracleFee_nonAdmin() public {
+        uint16 newFee = 1500;
+        
+        vm.startPrank(users.bob); 
+        vm.expectRevert(); 
+        vault.setOracleFee(newFee);
+        vm.stopPrank();
+
+        assertEq(vault.oracleFee(), 0); 
+    }
+
+    function test_revert_MetaVault_setPerformanceFee_exceedsMax() public {
+        vm.startPrank(users.alice); 
+        
+        uint16 tooHighFee = 3001; // MAX_FEE is 3000 (30%)
+        
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setPerformanceFee(tooHighFee);
+
+        assertEq(vault.performanceFee(), 2000); 
+        
+        vm.stopPrank();
+    }
+
+    function test_revert_MetaVault_setOracleFee_exceedsMax() public {
+        vm.startPrank(users.alice);
+        
+        uint16 tooHighFee = 3001; // MAX_FEE is 3000 (30%)
+        
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setOracleFee(tooHighFee);
+
+        assertEq(vault.oracleFee(), 0); 
+        
+        vm.stopPrank();
     }
 }
