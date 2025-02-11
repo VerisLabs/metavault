@@ -61,6 +61,7 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @dev Maximum time that can be set (24 hours)
     uint256 public MAX_TIME = 86_400;
 
+
     /// @notice mapping from address to the average share price of their deposits
     mapping(address => uint256 averageEntryPrice) public positions;
 

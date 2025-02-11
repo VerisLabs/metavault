@@ -278,7 +278,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         uint256 sharesBalance = balanceOf(to);
         shares = super.deposit(assets, to, controller);
         // Start shares lock time
-        _lockShares(to, sharesBalance, shares);
+        _lockShares(controller, sharesBalance, shares);
         _afterDeposit(assets, shares);
         return shares;
     }
@@ -310,7 +310,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     {
         uint256 sharesBalance = balanceOf(to);
         assets = super.mint(shares, to, controller);
-        _lockShares(to, sharesBalance, shares);
+        _lockShares(controller, sharesBalance, shares);
         _afterDeposit(assets, shares);
     }
 
@@ -808,21 +808,21 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     }
 
     /// @dev Reverts if deposited shares are locked
-    /// @param to shares controller
-    function _checkSharesLocked(address to) private view {
-        if (block.timestamp < _depositLockCheckPoint[to] + sharesLockTime) revert SharesLocked();
+    /// @param controller shares controller
+    function _checkSharesLocked(address controller) private view {
+        if (block.timestamp < _depositLockCheckPoint[controller] + sharesLockTime) revert SharesLocked();
     }
 
     /// @dev Locks the deposited shares for a fixed period
-    /// @param to shares receiver
+    /// @param controller shares receiver
     /// @param sharesBalance current shares balance
     /// @param newShares newly minted shares
-    function _lockShares(address to, uint256 sharesBalance, uint256 newShares) private {
+    function _lockShares(address controller, uint256 sharesBalance, uint256 newShares) private {
         uint256 newBalance = sharesBalance + newShares;
         if (sharesBalance == 0) {
-            _depositLockCheckPoint[to] = block.timestamp;
+            _depositLockCheckPoint[controller] = block.timestamp;
         } else {
-            _depositLockCheckPoint[to] = ((_depositLockCheckPoint[to] * sharesBalance) / newBalance)
+            _depositLockCheckPoint[controller] = ((_depositLockCheckPoint[controller] * sharesBalance) / newBalance)
                 + ((block.timestamp * newShares) / newBalance);
         }
     }

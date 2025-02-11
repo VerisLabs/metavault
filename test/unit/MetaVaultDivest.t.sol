@@ -460,7 +460,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
         address receiver = gateway.getReceiver(requestId);
-        bytes32 key = ERC20Receiver(receiver).key();
         _mintSuperpositions(receiver, superformId, shares);
 
         assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
@@ -826,7 +825,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestMultiXChainSingleVault_revert_InvalidAmount() public {
         // Setup vaults and oracles
         address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
         uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
         uint32 optimismChainId = 10;
@@ -1062,7 +1060,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
     function test_MetaVault_divestMultiXChainMultiVault_revert_InvalidAmount() public {
         // Setup vaults and oracles
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;

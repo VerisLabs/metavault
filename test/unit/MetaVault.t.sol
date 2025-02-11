@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
+import { IBaseRouter } from "interfaces/Lib.sol";
 
 import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
@@ -312,9 +313,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_setManagementFee() public {
-        vm.startPrank(users.alice); 
+        uint16 newFee = 1500;
         
-        uint16 newFee = 1500; // 15%
+        vm.startPrank(users.alice); 
         
         vm.expectEmit(true, true, true, true);
         emit SetManagementFee(newFee);
@@ -921,5 +922,101 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.oracleFee(), 0); 
         
         vm.stopPrank();
+    }
+
+    function test_MetaVault_convertToSuperPositions() public {
+        uint256 superformId = 1;
+        uint256 assets = 100 * _1_USDCE;
+        
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
+        
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: superformId,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+        
+        uint256 superPositions = vault.convertToSuperPositions(superformId, assets);
+        assertGt(superPositions, 0);
+    }
+
+    function test_MetaVault_chargeGlobalFees_zeroFees() public {
+        vault.setManagementFee(0);
+        vault.setPerformanceFee(0);
+        vault.setOracleFee(0);
+        
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+        
+        skip(180 days);
+        
+        vm.startPrank(users.alice);
+        uint256 fees = vault.chargeGlobalFees();
+        vm.stopPrank();
+        
+        assertEq(fees, 0);
+    }
+
+    function test_MetaVault_setPerformanceFee() public {
+        uint16 newFee = 1500;
+        
+        vm.startPrank(users.alice); 
+        
+        vm.expectEmit(true, true, true, true);
+        emit SetPerformanceFee(newFee);
+        vault.setPerformanceFee(newFee);
+        
+        assertEq(vault.performanceFee(), newFee);
+        vm.stopPrank();
+    }
+
+
+    function test_revert_MetaVault_setSharesLockTime_tooHigh() public {
+        uint24 tooHighTime = 86401; // MAX_TIME is 86400 (1 day)
+        
+        vm.startPrank(users.alice);
+        vm.expectRevert(MetaVault.InvalidSharesLockTime.selector);
+        vault.setSharesLockTime(tooHighTime);
+        vm.stopPrank();
+    }
+
+
+    function test_MetaVault_feeExemption() public {
+        vm.startPrank(users.alice); 
+        
+        uint256 managementFeeExemption = 500; // 5%
+        uint256 performanceFeeExemption = 1000; // 10%
+        uint256 oracleFeeExemption = 200; // 2%
+        
+        vault.setFeeExcemption(
+            users.bob,
+            managementFeeExemption,
+            performanceFeeExemption,
+            oracleFeeExemption
+        );
+        
+        assertEq(vault.managementFeeExempt(users.bob), managementFeeExemption);
+        assertEq(vault.performanceFeeExempt(users.bob), performanceFeeExemption);
+        assertEq(vault.oracleFeeExempt(users.bob), oracleFeeExemption);
+        
+        vm.stopPrank();
+    }
+
+    function test_MetaVault_donate() public {
+        uint256 donationAmount = 1000 * _1_USDCE;
+        
+        uint256 vaultBalanceBefore = USDCE_BASE.balanceOf(address(vault));
+        uint256 totalIdleBefore = vault.totalIdle();
+        
+        vm.startPrank(users.alice);
+        USDCE_BASE.safeApprove(address(vault), donationAmount);
+        vault.donate(donationAmount);
+        vm.stopPrank();
+        
+        assertEq(USDCE_BASE.balanceOf(address(vault)), vaultBalanceBefore + donationAmount);
+        assertEq(vault.totalIdle(), totalIdleBefore + donationAmount);
     }
 }
