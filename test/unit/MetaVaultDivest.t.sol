@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
-
 import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
@@ -460,7 +459,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
         address receiver = gateway.getReceiver(requestId);
-        bytes32 key = ERC20Receiver(receiver).key();
         _mintSuperpositions(receiver, superformId, shares);
 
         assertEq(config.superPositions.balanceOf(address(vault), superformId), shares);
@@ -812,10 +810,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 620 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
         gateway.settleDivest(requestId, false);
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), 620 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestedValue);
         gateway.settleDivest(requestId2, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 800_000_000);
@@ -826,7 +824,6 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     function test_MetaVault_divestMultiXChainSingleVault_revert_InvalidAmount() public {
         // Setup vaults and oracles
         address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
         uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
         uint32 optimismChainId = 10;
@@ -1030,6 +1027,14 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice2 * shares2 / 10 ** 6
             + lastSharePrice3 * shares3 / 10 ** 6;
 
+        uint256 expectedOptimismValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice3 * shares3 / 10 ** 6; // EXACTLY
+            // + ALOE vaults
+        uint256 expectedPolygonValue = lastSharePrice2 * shares2 / 10 ** 6;
+
+        divestReq.superformsData[0].outputAmounts[0] = expectedOptimismValue / 2; // EXACTLY
+        divestReq.superformsData[0].outputAmounts[1] = expectedOptimismValue / 2; // ALOE
+        divestReq.superformsData[1].outputAmounts[0] = expectedPolygonValue;
+
         // //Execute divest
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValue);
@@ -1047,20 +1052,21 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 1300 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedOptimismValue);
         gateway.settleDivest(requestId, false);
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), 1300 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedPolygonValue);
         gateway.settleDivest(requestId2, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 200 * _1_USDCE);
+
         assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue + 200 * _1_USDCE);
+
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
     function test_MetaVault_divestMultiXChainMultiVault_revert_InvalidAmount() public {
         // Setup vaults and oracles
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;

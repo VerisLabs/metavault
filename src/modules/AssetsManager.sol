@@ -232,7 +232,7 @@ contract AssetsManager is ModuleBase {
         _totalIdle += assets.toUint128();
         _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
 
-        vaults[_vaultToSuperformId[vaultAddress]].totalDebt = 
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt =
             _sub0(vaults[_vaultToSuperformId[vaultAddress]].totalDebt, sharesValue).toUint128();
 
         emit Divest(sharesValue);
@@ -319,9 +319,10 @@ contract AssetsManager is ModuleBase {
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
             VaultData memory vault = vaults[superformId];
-            uint256 sharesBalance = _sharesBalance(vault);
-            uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
-            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+
+            // Only reduce debt by the actual amount being divested
+            uint256 divestAmount = vault.convertToAssets(req.superformsData[i].amount, asset(), true);
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, divestAmount).toUint128();
             vaults[superformId] = vault;
             unchecked {
                 ++i;

@@ -28,7 +28,6 @@ contract DeployScript is Script {
     AssetsManager public assetManager;
 
     uint256 deployerPrivateKey;
-    address superPositionsReceiverAddress;
     address hurdleRateOracleAddress;
 
     address adminAndOwnerRole;
@@ -38,7 +37,6 @@ contract DeployScript is Script {
 
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
 
         adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
@@ -82,7 +80,6 @@ contract DeployScript is Script {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         gateway = ISuperformGateway(address(_gateway));
-        gateway.setRecoveryAddress(superPositionsReceiverAddress);
 
         // Set gatway
         vault.setGateway(address(gateway));

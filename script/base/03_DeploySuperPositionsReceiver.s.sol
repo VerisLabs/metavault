@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { SuperPositionsReceiver } from "../../src/crosschain/SuperPositionsReceiver.sol";
+import { SUPERFORM_SUPERPOSITIONS_BASE } from "../../src/helpers/AddressBook.sol";
 import "forge-std/Script.sol";
 
 contract DeploySuperPositionsReceiver is Script {
@@ -9,15 +10,14 @@ contract DeploySuperPositionsReceiver is Script {
 
     function run() external {
         adminPrivateKey = vm.envUint("ADMIN_PRIVATE_KEY");
-        address CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-        address GATEWAY = 0xEd552f8e7Face613d720f97DAbCDA5d6448F6184;
-        address SUPERPOSITIONS = 0x01dF6fb6a28a89d6bFa53b2b3F20644AbF417678;
-        address OWNER = 0x429796dAc057E7C15724196367007F1e9Cff82F9;
+        address CREATE2_DEPLOYER = vm.envAddress("CREATE2_DEPLOYER_ADDRESS");
+        address GATEWAY = vm.envAddress("SUPERFORM_GATEWAY_ADDRESS");
+        address SUPERPOSITIONS = SUPERFORM_SUPERPOSITIONS_BASE;
+        address OWNER = vm.envAddress("ADMIN_AND_OWNER_ROLE");
 
         // Generate bytecode + constructor args dynamically
         bytes memory bytecode = abi.encodePacked(
-            type(SuperPositionsReceiver).creationCode,
-            abi.encode(8453, GATEWAY, SUPERPOSITIONS, OWNER)
+            type(SuperPositionsReceiver).creationCode, abi.encode(8453, GATEWAY, SUPERPOSITIONS, OWNER)
         );
 
         vm.startBroadcast(adminPrivateKey);

@@ -22,7 +22,6 @@ abstract contract ERC7540 is ERC4626 {
     event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
     );
-
     /// @dev Emitted when `shares` vault shares are redeemed
     event RedeemRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 shares
@@ -415,7 +414,7 @@ abstract contract ERC7540 is ERC4626 {
         internal
         virtual
     {
-        _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
+        _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub0(sharesFulfilled);
         _claimableRedeemRequest[controller].assets += assetsWithdrawn;
         _claimableRedeemRequest[controller].shares += sharesFulfilled;
     }

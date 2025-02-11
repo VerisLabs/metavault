@@ -20,10 +20,10 @@ contract RemoveFunctionsScript is Script {
         vm.startBroadcast(adminPrivateKey);
 
         bytes4[] memory engineSelectors = engine.selectors();
-        bytes4[] memory assetsSelectors = assetsManager.selectors();
+        //bytes4[] memory assetsSelectors = assetsManager.selectors();
 
         metavault.removeFunctions(engineSelectors);
-        metavault.removeFunctions(assetsSelectors);
+        //metavault.removeFunctions(assetsSelectors);
         vm.stopBroadcast();
     }
 }

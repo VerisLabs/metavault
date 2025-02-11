@@ -1160,8 +1160,6 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         amounts[1] = 600 * _1_USDCE;
         amounts[2] = 600 * _1_USDCE;
 
-        uint256 investAmount = 1800 * _1_USDCE;
-
         MultiDstMultiVaultStateReq memory req = _buildInvestMultiXChainMultiVaultParams(superformIds, amounts);
 
         vm.expectRevert(abi.encodeWithSignature("VaultNotListed()"));

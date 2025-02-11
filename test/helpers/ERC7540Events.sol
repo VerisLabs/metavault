@@ -6,7 +6,6 @@ contract ERC7540Events {
     event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
     );
-
     /// @dev Emitted when `shares` vault shares are redeemed
     event RedeemRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 shares

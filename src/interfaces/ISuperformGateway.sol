@@ -223,4 +223,6 @@ interface ISuperformGateway {
     function removeFunction(bytes4) external;
 
     function removeFunctions(bytes4[] memory) external;
+
+    function requests(bytes32 key) external view returns (address, uint256, address);
 }

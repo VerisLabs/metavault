@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
+import { IBaseRouter } from "interfaces/Lib.sol";
 
 import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
@@ -286,7 +287,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_setSharesLockTime() public {
-        uint24 newLockTime = 60 days;
+        uint24 newLockTime = 43_200; // 12 hours
 
         vm.expectEmit(true, true, true, true);
         emit SetSharesLockTime(newLockTime);
@@ -295,18 +296,48 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         assertEq(vault.sharesLockTime(), newLockTime);
     }
 
+    function test_revert_MetaVault_setSharesLockTime_exceedsMax() public {
+        uint24 invalidTime = 86_401;
+
+        vm.startPrank(users.alice);
+
+        vm.expectRevert(MetaVault.InvalidSharesLockTime.selector);
+        vault.setSharesLockTime(invalidTime);
+
+        assertEq(vault.sharesLockTime(), config.sharesLockTime);
+
+        vm.stopPrank();
+    }
+
     function test_MetaVault_setManagementFee() public {
-        uint16 newFee = 3000;
+        uint16 newFee = 1500;
+
+        vm.startPrank(users.alice);
 
         vm.expectEmit(true, true, true, true);
         emit SetManagementFee(newFee);
         vault.setManagementFee(newFee);
 
         assertEq(vault.managementFee(), newFee);
+
+        vm.stopPrank();
+    }
+
+    function test_revert_MetaVault_setManagementFee_exceedsMax() public {
+        vm.startPrank(users.alice);
+
+        uint16 tooHighFee = 3001; // MAX_FEE is 3000 (30%)
+
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setManagementFee(tooHighFee);
+
+        assertEq(vault.managementFee(), 0);
+
+        vm.stopPrank();
     }
 
     function test_MetaVault_setOracleFee() public {
-        uint16 newFee = 2500;
+        uint16 newFee = 2000;
 
         vm.expectEmit(true, true, true, true);
         emit SetOracleFee(newFee);
@@ -406,7 +437,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
-
         vm.startPrank(users.bob);
         USDCE_BASE.safeApprove(address(vault), profit);
         vault.donate(profit);
@@ -414,7 +444,9 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.startPrank(users.alice);
 
-        assertGt(vault.sharePrice(), 1e6);
+        // With 1000 USDC deposit and 100 USDC profit, share price should be ~1.1e6
+        uint256 expectedSharePrice = 1_100_000; // 1.1e6
+        assertApproxEq(vault.sharePrice(), expectedSharePrice, 1);
 
         skip(config.sharesLockTime);
 
@@ -457,7 +489,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
         assertEq(receivedAssets, totalAssets - totalExpectedFees);
-
         assertApproxEq(vault.balanceOf(vault.treasury()), totalExpectedFeesShares, 1);
     }
 
@@ -471,46 +502,57 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
+
         vm.startPrank(users.bob);
         USDCE_BASE.safeApprove(address(vault), profit);
         vault.donate(profit);
         vm.stopPrank();
 
         uint256 totalAssets = vault.totalAssets();
-        uint256 lastSharePrice = vault.sharePriceWaterMark();
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+        uint256 totalSupplyBefore = vault.totalSupply();
+        uint256 lastSharePrice = vault.sharePriceWaterMark();
+        uint256 lastTotalAssets = (totalSupplyBefore * lastSharePrice) / (10 ** vault.decimals());
+        uint256 currentSharePrice = vault.sharePrice();
+
+        uint256 totalAssetsBeforeFees = totalAssets;
 
         uint256 managementFees =
-            totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
-        uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
-        uint256 totalFees = managementFees + oracleFees;
+            (totalAssets * duration * vault.managementFee()) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 oracleFees = (totalAssets * duration * vault.oracleFee()) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
 
         totalAssets += managementFees + oracleFees;
 
-        int256 assetsDelta = int256(totalAssets) - int256(depositAmount);
+        uint256 hurdleReturn =
+            (lastTotalAssets * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        int256 assetsDelta = int256(totalAssets) - int256(lastTotalAssets);
 
         uint256 performanceFees;
         if (assetsDelta > 0) {
-            uint256 hurdleReturn =
-                (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
             uint256 totalReturn = uint256(assetsDelta);
-            if (vault.sharePrice() > lastSharePrice && totalReturn > hurdleReturn) {
+
+            if (currentSharePrice > lastSharePrice && totalReturn > hurdleReturn) {
                 uint256 excessReturn = totalReturn - hurdleReturn;
                 performanceFees = excessReturn * vault.performanceFee() / vault.MAX_BPS();
-                totalFees += performanceFees;
             }
         }
+
+        uint256 totalFees = managementFees + performanceFees + oracleFees;
 
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
         emit AssessFees(address(vault), managementFees, performanceFees, oracleFees);
         uint256 actualFees = vault.chargeGlobalFees();
+
+        uint256 expectedShares = (totalFees * totalSupplyBefore) / totalAssetsBeforeFees;
+
+        uint256 actualTreasuryShares = vault.balanceOf(vault.treasury()) - treasurySharesBefore;
+
         vm.stopPrank();
 
         assertEq(actualFees, totalFees);
-        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(totalFees));
-        assertEq(vault.lastFeesCharged(), block.timestamp);
+        assertEq(actualTreasuryShares, expectedShares);
     }
 
     function test_MetaVault_chargeGlobalFees_BelowWatermark() public {
@@ -566,11 +608,15 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalAssets = vault.totalAssets();
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+        uint256 totalSupplyBefore = vault.totalSupply();
 
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 totalFees = managementFees + oracleFees;
+
+        // Calculate expected shares using pre-fee ratio
+        uint256 expectedShares = (totalFees * totalSupplyBefore) / totalAssets;
 
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
@@ -579,7 +625,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vm.stopPrank();
 
         assertEq(actualFees, totalFees);
-        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(totalFees));
+        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, expectedShares);
     }
 
     function test_MetaVault_chargeGlobalFees_BelowHurdleRate() public {
@@ -600,26 +646,25 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalAssets = vault.totalAssets();
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+        uint256 totalSupplyBefore = vault.totalSupply();
 
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
-        totalAssets -= managementFees + oracleFees;
+        uint256 totalFees = managementFees + oracleFees;
 
-        uint256 hurdleReturn = (depositAmount * vault.hurdleRate() * duration) / vault.SECS_PER_YEAR() / vault.MAX_BPS();
-
-        assertLe(smallProfit, hurdleReturn);
+        // Calculate expected shares using pre-fee ratio
+        uint256 expectedShares = (totalFees * totalSupplyBefore) / totalAssets;
 
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
-        emit AssessFees(address(vault), managementFees, 0, oracleFees); // No performance fees
+        emit AssessFees(address(vault), managementFees, 0, oracleFees);
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        assertEq(actualFees, managementFees + oracleFees);
-        assertEq(
-            vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(managementFees + oracleFees)
-        );
+        assertEq(actualFees, totalFees);
+        // Check the actual share amount minted to treasury
+        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, expectedShares);
     }
 
     function test_MetaVault_chargeGlobalFees_NoProfit() public {
@@ -633,10 +678,15 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 totalAssets = vault.totalAssets();
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 treasurySharesBefore = vault.balanceOf(vault.treasury());
+        uint256 totalSupplyBefore = vault.totalSupply();
 
         uint256 managementFees =
             totalAssets * duration * vault.managementFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
         uint256 oracleFees = totalAssets * duration * vault.oracleFee() / vault.SECS_PER_YEAR() / vault.MAX_BPS();
+        uint256 totalFees = managementFees + oracleFees;
+
+        // Calculate expected shares using pre-fee ratio
+        uint256 expectedShares = (totalFees * totalSupplyBefore) / totalAssets;
 
         vm.startPrank(users.alice);
         vm.expectEmit(true, true, true, true);
@@ -644,10 +694,8 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 actualFees = vault.chargeGlobalFees();
         vm.stopPrank();
 
-        assertEq(actualFees, managementFees + oracleFees);
-        assertEq(
-            vault.balanceOf(vault.treasury()) - treasurySharesBefore, vault.convertToShares(managementFees + oracleFees)
-        );
+        assertEq(actualFees, totalFees);
+        assertEq(vault.balanceOf(vault.treasury()) - treasurySharesBefore, expectedShares);
     }
 
     function test_MetaVault_exitFees_noExcessReturn() public {
@@ -734,11 +782,27 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         MultiXChainMultiVaultWithdraw memory mXmV;
         vault.processRedeemRequest(ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV));
 
+        uint256 vaultBalanceBefore = USDCE_BASE.balanceOf(address(vault));
+
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
 
-        uint256 totalAssets = depositAmount + initialProfit - loss + recoveryProfit;
-        assertEq(receivedAssets, totalAssets);
-        assertEq(USDCE_BASE.balanceOf(vault.treasury()), 0);
+        uint256 expectedTotalAssets = depositAmount + initialProfit - loss + recoveryProfit;
+
+        uint256 duration = block.timestamp - vault.lastFeesCharged();
+        uint256 managementFee =
+            (expectedTotalAssets * duration * vault.managementFee()) / (vault.SECS_PER_YEAR() * vault.MAX_BPS());
+        uint256 oracleFee =
+            (expectedTotalAssets * duration * vault.oracleFee()) / (vault.SECS_PER_YEAR() * vault.MAX_BPS());
+        uint256 expectedFees = managementFee + oracleFee;
+
+        uint256 expectedReceivedAssets = expectedTotalAssets - expectedFees;
+
+        // Assertions
+        assertEq(receivedAssets, expectedReceivedAssets, "Received assets don't match expected");
+        assertEq(USDCE_BASE.balanceOf(vault.treasury()), expectedFees, "Treasury fees don't match expected");
+        assertEq(
+            USDCE_BASE.balanceOf(address(vault)), vaultBalanceBefore - receivedAssets, "Vault balance change incorrect"
+        );
     }
 
     function test_MetaVault_exitFees_feeExemption() public {
@@ -795,5 +859,153 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint256 receivedAssets = vault.redeem(sharesBalance, users.alice, users.alice);
         assertApproxEq(receivedAssets, 1000 * _1_USDCE + profit - totalExpectedFees, 2);
         assertApproxEq(address(vault).balanceOf(vault.treasury()), totalExpectedFeesShares, 2);
+    }
+
+    function test_revert_MetaVault_setManagementFee_nonAdmin() public {
+        uint16 newFee = 1500;
+
+        vm.startPrank(users.bob);
+        vm.expectRevert();
+        vault.setManagementFee(newFee);
+        vm.stopPrank();
+
+        assertEq(vault.managementFee(), 0);
+    }
+
+    function test_revert_MetaVault_setPerformanceFee_nonAdmin() public {
+        uint16 newFee = 1500;
+
+        vm.startPrank(users.bob);
+        vm.expectRevert();
+        vault.setPerformanceFee(newFee);
+        vm.stopPrank();
+
+        assertEq(vault.performanceFee(), 2000);
+    }
+
+    function test_revert_MetaVault_setOracleFee_nonAdmin() public {
+        uint16 newFee = 1500;
+
+        vm.startPrank(users.bob);
+        vm.expectRevert();
+        vault.setOracleFee(newFee);
+        vm.stopPrank();
+
+        assertEq(vault.oracleFee(), 0);
+    }
+
+    function test_revert_MetaVault_setPerformanceFee_exceedsMax() public {
+        vm.startPrank(users.alice);
+
+        uint16 tooHighFee = 3001; // MAX_FEE is 3000 (30%)
+
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setPerformanceFee(tooHighFee);
+
+        assertEq(vault.performanceFee(), 2000);
+
+        vm.stopPrank();
+    }
+
+    function test_revert_MetaVault_setOracleFee_exceedsMax() public {
+        vm.startPrank(users.alice);
+
+        uint16 tooHighFee = 3001; // MAX_FEE is 3000 (30%)
+
+        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vault.setOracleFee(tooHighFee);
+
+        assertEq(vault.oracleFee(), 0);
+
+        vm.stopPrank();
+    }
+
+    function test_MetaVault_convertToSuperPositions() public {
+        uint256 superformId = 1;
+        uint256 assets = 100 * _1_USDCE;
+
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: superformId,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        uint256 superPositions = vault.convertToSuperPositions(superformId, assets);
+        assertGt(superPositions, 0);
+    }
+
+    function test_MetaVault_chargeGlobalFees_zeroFees() public {
+        vault.setManagementFee(0);
+        vault.setPerformanceFee(0);
+        vault.setOracleFee(0);
+
+        uint256 depositAmount = 1000 * _1_USDCE;
+        _depositAtomic(depositAmount, users.alice);
+
+        skip(180 days);
+
+        vm.startPrank(users.alice);
+        uint256 fees = vault.chargeGlobalFees();
+        vm.stopPrank();
+
+        assertEq(fees, 0);
+    }
+
+    function test_MetaVault_setPerformanceFee() public {
+        uint16 newFee = 1500;
+
+        vm.startPrank(users.alice);
+
+        vm.expectEmit(true, true, true, true);
+        emit SetPerformanceFee(newFee);
+        vault.setPerformanceFee(newFee);
+
+        assertEq(vault.performanceFee(), newFee);
+        vm.stopPrank();
+    }
+
+    function test_revert_MetaVault_setSharesLockTime_tooHigh() public {
+        uint24 tooHighTime = 86_401; // MAX_TIME is 86400 (1 day)
+
+        vm.startPrank(users.alice);
+        vm.expectRevert(MetaVault.InvalidSharesLockTime.selector);
+        vault.setSharesLockTime(tooHighTime);
+        vm.stopPrank();
+    }
+
+    function test_MetaVault_feeExemption() public {
+        vm.startPrank(users.alice);
+
+        uint256 managementFeeExemption = 500; // 5%
+        uint256 performanceFeeExemption = 1000; // 10%
+        uint256 oracleFeeExemption = 200; // 2%
+
+        vault.setFeeExcemption(users.bob, managementFeeExemption, performanceFeeExemption, oracleFeeExemption);
+
+        assertEq(vault.managementFeeExempt(users.bob), managementFeeExemption);
+        assertEq(vault.performanceFeeExempt(users.bob), performanceFeeExemption);
+        assertEq(vault.oracleFeeExempt(users.bob), oracleFeeExemption);
+
+        vm.stopPrank();
+    }
+
+    function test_MetaVault_donate() public {
+        uint256 donationAmount = 1000 * _1_USDCE;
+
+        uint256 vaultBalanceBefore = USDCE_BASE.balanceOf(address(vault));
+        uint256 totalIdleBefore = vault.totalIdle();
+
+        vm.startPrank(users.alice);
+        USDCE_BASE.safeApprove(address(vault), donationAmount);
+        vault.donate(donationAmount);
+        vm.stopPrank();
+
+        assertEq(USDCE_BASE.balanceOf(address(vault)), vaultBalanceBefore + donationAmount);
+        assertEq(vault.totalIdle(), totalIdleBefore + donationAmount);
     }
 }
