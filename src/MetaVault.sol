@@ -143,9 +143,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Thrown when attempting to set a shares lock time higher than the maximum allowed
     error InvalidSharesLockTime();
 
-    /// @notice Thrown when attempting to donate more than the expected amount
-    error DonationExceedsExpected(uint256 donated, uint256 expected);
-
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -232,6 +229,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Transfers assets from sender into the Vault and submits a Request for asynchronous deposit.
     /// @param assets the amount of deposit assets to transfer from owner
     /// @param controller the controller of the request who will be able to operate the request
+    /// @param owner the owner of the shares to be deposited
     /// @return requestId
     function requestDeposit(
         uint256 assets,

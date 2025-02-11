@@ -55,8 +55,7 @@ contract MetaVaultEvents {
 
     /// @dev Emitted when an operator is set or unset for a controller
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
+
     /// @dev Emitted when the performance fee is set
     event SetPerformanceFee(uint16 fee);
-    /// @dev Emitted when the emergency shutdown is set
-    event EmergencyShutdown(bool shutdown);
 }
