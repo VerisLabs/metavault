@@ -62,14 +62,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
     AssetsManager manager;
-    MockSignerRelayer public relayer;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
-        relayer = MockSignerRelayer(address(config.signerRelayer));
-        config.signerRelayer = relayer.signerAddress();
+        config.signerRelayer = relayer;
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
@@ -256,6 +254,86 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.removeVault(superformId);
 
         assertFalse(vault.isVaultListed(address(yUsdce)));
+    }
+
+    function test_MetaVault_rearrangeWithdrawalQueue() public {
+        // Setup 3 vaults
+        MockERC4626 vault1 = new MockERC4626(USDCE_BASE, "Vault1", "V1", true, 0);
+        MockERC4626 vault2 = new MockERC4626(USDCE_BASE, "Vault2", "V2", true, 0);
+        MockERC4626 vault3 = new MockERC4626(USDCE_BASE, "Vault3", "V3", true, 0);
+
+        // Add vaults to MetaVault
+        oracle.setValues(baseChainId, address(vault1), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
+        oracle.setValues(baseChainId, address(vault2), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
+        oracle.setValues(baseChainId, address(vault3), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(vault1),
+            vaultDecimals: vault1.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 2,
+            vault: address(vault2),
+            vaultDecimals: vault2.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 3,
+            vault: address(vault3),
+            vaultDecimals: vault3.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Create new order array (all zeros by default)
+        uint256[30] memory newOrder;
+        // Set new order: [3,1,2,0,0,...]
+        newOrder[0] = 3;
+        newOrder[1] = 1;
+        newOrder[2] = 2;
+
+        // Rearrange local withdrawal queue (type 0)
+        vault.rearrangeWithdrawalQueue(0, newOrder);
+
+        // Verify new order
+        assertEq(vault.localWithdrawalQueue(0), 3);
+        assertEq(vault.localWithdrawalQueue(1), 1);
+        assertEq(vault.localWithdrawalQueue(2), 2);
+        assertEq(vault.localWithdrawalQueue(3), 0); // Rest should be zero
+    }
+
+    function test_revert_MetaVault_rearrangeWithdrawalQueue_invalidQueueType() public {
+        uint256[30] memory newOrder;
+        vm.expectRevert(MetaVault.InvalidQueueType.selector);
+        vault.rearrangeWithdrawalQueue(2, newOrder); // Only 0 and 1 are valid
+    }
+
+    function test_revert_MetaVault_rearrangeWithdrawalQueue_duplicateVault() public {
+        // Setup vault
+        MockERC4626 vault1 = new MockERC4626(USDCE_BASE, "Vault1", "V1", true, 0);
+        oracle.setValues(baseChainId, address(vault1), _1_USDCE, block.timestamp, USDCE_BASE, users.alice, 6);
+
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(vault1),
+            vaultDecimals: vault1.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Create new order with duplicate entries
+        uint256[30] memory newOrder;
+        newOrder[0] = 1;
+        newOrder[1] = 1; // Duplicate entry
+
+        vm.expectRevert(MetaVault.DuplicateVaultInOrder.selector);
+        vault.rearrangeWithdrawalQueue(0, newOrder);
     }
 
     function test_revert_MetaVault_removeVault_withBalance() public {

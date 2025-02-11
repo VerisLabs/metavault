@@ -63,15 +63,12 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
     AssetsManager manager;
-    MockSignerRelayer public relayer;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
-        relayer = MockSignerRelayer(address(config.signerRelayer));
-        config.signerRelayer = relayer.signerAddress();
-
+        config.signerRelayer = relayer;
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
         vault.setGateway(address(gateway));

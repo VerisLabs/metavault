@@ -61,14 +61,13 @@ contract MetaVaultInvestTest is BaseVaultTest {
     using LibString for bytes;
 
     MockERC4626Oracle public oracle;
-    MockSignerRelayer public relayer;
+
     ISuperformGateway public gateway;
     uint64 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
-        relayer = MockSignerRelayer(address(config.signerRelayer));
-        config.signerRelayer = relayer.signerAddress();
+        config.signerRelayer = relayer;
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);

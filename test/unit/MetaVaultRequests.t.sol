@@ -60,14 +60,12 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
     AssetsManager manager;
-    MockSignerRelayer public relayer;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
         config = baseChainUsdceVaultConfig();
-        relayer = MockSignerRelayer(address(config.signerRelayer));
-        config.signerRelayer = relayer.signerAddress();
+        config.signerRelayer = relayer;
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
@@ -177,6 +175,64 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         emit Withdraw(users.alice, users.alice, users.alice, totalAssetsAfterLock, sharesBalance);
         uint256 assets = vault.redeem(sharesBalance, users.alice, users.alice);
         assertEq(assets, totalAssetsAfterLock);
+    }
+
+    function test_MetaVault_processSignedRedeemRequest() public {
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        skip(config.sharesLockTime);
+
+        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
+
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+
+        ProcessRedeemRequestParams memory params = ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV);
+
+        uint256 deadline = block.timestamp + 1000;
+        uint256 nonce = vault.nonces(users.alice);
+
+        // Generate signature from relayer
+        bytes32 paramsHash = keccak256(abi.encode(params, deadline, nonce));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(relayerKey, paramsHash);
+
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
+
+        vm.expectEmit(true, true, true, true);
+        emit ProcessRedeemRequest(users.alice, sharesBalance);
+
+        uint256 totalAssetsBeforeRedeem = vault.totalAssets();
+        // Process request with signature
+        // vm.prank(users.alice);
+        vault.processSignedRequest(params, deadline, v, r, s);
+
+        assertEq(vault.totalSupply(), 0);
+        assertEq(vault.totalAssets(), 0);
+        assertEq(vault.totalIdle(), 0);
+        assertEq(vault.totalDebt(), 0);
+        assertEq(vault.claimableRedeemRequest(users.alice), sharesBalance);
+        assertEq(vault.pendingRedeemRequest(users.alice), 0);
+
+
+        vm.expectEmit(true, true, true, true);
+        emit Withdraw(users.alice, users.alice, users.alice, totalAssetsBeforeRedeem, sharesBalance);
+
+        uint256 assets = vault.redeem(sharesBalance, users.alice, users.alice);
+        assertEq(assets, totalAssetsBeforeRedeem);
     }
 
     function test_MetaVault_processRedeemRequest_from_local_and_xchain_queue() public {

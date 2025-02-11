@@ -124,6 +124,8 @@ interface IMetaVault {
 
     function removeVault(uint256 superformId) external;
 
+    function rearrangeWithdrawalQueue(uint8 queueType, uint256[30] calldata newOrder) external;
+
     function vaults(uint256) external view returns (uint32, uint256, ISharePriceOracle, uint8, uint128, address);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
@@ -161,6 +163,17 @@ interface IMetaVault {
     function claimableDepositRequest(address) external view returns (uint256);
 
     function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable;
+
+    function processSignedRequest(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external;
+
+    function nonces(address) external view returns (uint256);
 
     function investSingleDirectSingleVault(
         address vaultAddress,

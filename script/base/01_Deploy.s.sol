@@ -16,7 +16,7 @@ import {
     ISuperformFactory,
     ISuperformGateway
 } from "interfaces/Lib.sol";
-import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, ERC7540EngineReader } from "modules/Lib.sol";
 import { MetaVault } from "src/MetaVault.sol";
 import { VaultConfig } from "types/Lib.sol";
 
@@ -25,6 +25,7 @@ contract DeployScript is Script {
     IMetaVault public vault;
     ISuperformGateway public gateway;
     ERC7540Engine public engine;
+    ERC7540EngineReader public engineReader;
     AssetsManager public assetManager;
 
     uint256 deployerPrivateKey;
@@ -88,6 +89,10 @@ contract DeployScript is Script {
         engine = new ERC7540Engine();
         bytes4[] memory engineSelectors = engine.selectors();
         vault.addFunctions(engineSelectors, address(engine), false);
+
+        engineReader = new ERC7540EngineReader();
+        bytes4[] memory engineReaderSelectors = engineReader.selectors();
+        vault.addFunctions(engineReaderSelectors, address(engineReader), false);
 
         assetManager = new AssetsManager();
         bytes4[] memory assetManagerSelectors = assetManager.selectors();

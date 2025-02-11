@@ -107,6 +107,21 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @notice Thrown when attempting to rearrange with invalid queue type
+    error InvalidQueueType();
+
+    /// @notice Thrown when new queue order contains duplicate vaults
+    error DuplicateVaultInOrder();
+
+    /// @notice Thrown when new queue order has different number of vaults than current queue
+    error VaultCountMismatch();
+
+    /// @notice Thrown when new queue order is missing vaults from current queue
+    error MissingVaultFromCurrentQueue();
+
+    /// @notice Thrown when new queue order contains vaults not in current queue
+    error NewVaultNotInCurrentQueue();
+
     /// @notice Thrown when attempting to add a vault that is already listed
     error VaultAlreadyListed();
 
@@ -167,6 +182,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         }
     }
 
+    /// @notice Constructor for the MetaVault contract
+    /// @param config The initial configuration parameters for the vault
     constructor(VaultConfig memory config) MultiFacetProxy(ADMIN_ROLE) {
         _asset = config.asset;
         _name = config.name;
@@ -218,6 +235,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         gateway.superPositions().setApprovalForAll(address(_gateway), true);
     }
 
+    /// @notice Sets the hurdle rate oracle for performance fee calculations
+    /// @param hurdleRateOracle The new oracle address to set
+    /// @dev Only callable by addresses with ADMIN_ROLE
     function setHurdleRateOracle(IHurdleRateOracle hurdleRateOracle) external onlyRoles(ADMIN_ROLE) {
         _hurdleRateOracle = hurdleRateOracle;
     }
@@ -691,6 +711,89 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         emit RemoveVault(chainId, vaultAddress);
     }
 
+    /// @notice Rearranges the withdrawal queue order
+    /// @param queueType 0 for local queue, 1 for cross-chain queue
+    /// @param newOrder Array of superformIds in desired order
+    /// @dev Only callable by MANAGER_ROLE
+    /// @dev Maintains same vaults but in different order
+    function rearrangeWithdrawalQueue(
+        uint8 queueType,
+        uint256[WITHDRAWAL_QUEUE_SIZE] calldata newOrder
+    )
+        external
+        onlyRoles(MANAGER_ROLE)
+    {
+        // Select queue based on type
+        uint256[WITHDRAWAL_QUEUE_SIZE] storage queue;
+        if (queueType == 0) {
+            queue = localWithdrawalQueue;
+        } else if (queueType == 1) {
+            queue = xChainWithdrawalQueue;
+        } else {
+            revert InvalidQueueType();
+        }
+
+        // Create temporary arrays for validation
+        uint256[] memory currentVaults = new uint256[](WITHDRAWAL_QUEUE_SIZE);
+        uint256[] memory newVaults = new uint256[](WITHDRAWAL_QUEUE_SIZE);
+        uint256 currentCount;
+        uint256 newCount;
+
+        // Collect non-zero vaults from current queue
+        for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) {
+            if (queue[i] != 0) {
+                currentVaults[currentCount++] = queue[i];
+            }
+        }
+
+        // Collect non-zero vaults from new order
+        for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) {
+            if (newOrder[i] != 0) {
+                // Check for duplicates
+                for (uint256 j = 0; j < newCount; j++) {
+                    if (newVaults[j] == newOrder[i]) revert DuplicateVaultInOrder();
+                }
+                newVaults[newCount++] = newOrder[i];
+            }
+        }
+
+        // Verify same number of non-zero vaults
+        if (currentCount != newCount) revert VaultCountMismatch();
+
+        // Verify all current vaults are in new order
+        for (uint256 i = 0; i < currentCount; i++) {
+            bool found = false;
+            for (uint256 j = 0; j < newCount; j++) {
+                if (currentVaults[i] == newVaults[j]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) revert MissingVaultFromCurrentQueue();
+        }
+
+        // Verify all new vaults were in current queue
+        for (uint256 i = 0; i < newCount; i++) {
+            bool found = false;
+            for (uint256 j = 0; j < currentCount; j++) {
+                if (newVaults[i] == currentVaults[j]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) revert NewVaultNotInCurrentQueue();
+        }
+
+        // Update queue with new order
+        for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) {
+            queue[i] = newOrder[i];
+        }
+    }
+
+    /// @notice Sets the oracle for a specific vault
+    /// @dev Can only be called by addresses with the ADMIN_ROLE
+    /// @param superformId The ID of the superform to set the oracle for
+    /// @param oracle The new oracle address to set
     function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external onlyRoles(ADMIN_ROLE) {
         vaults[superformId].oracle = oracle;
     }

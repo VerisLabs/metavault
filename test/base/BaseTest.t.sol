@@ -14,11 +14,14 @@ contract BaseTest is Test {
         address payable charlie;
         address payable keeper;
         address payable allocator;
+        address payable relayer;
     }
 
     Utilities public utils;
     Users public users;
     uint256 public chainFork;
+    address public relayer;
+    uint256 public relayerKey;
 
     uint256 internal constant MAX_BPS = 10_000;
 
@@ -33,6 +36,8 @@ contract BaseTest is Test {
 
         address[] memory tokens = getTokensList(chain);
 
+        (relayer, relayerKey) = makeAddrAndKey("Relayer");
+
         // Create users for testing.
         users = Users({
             alice: utils.createUser("Alice", tokens),
@@ -40,7 +45,8 @@ contract BaseTest is Test {
             eve: utils.createUser("Eve", tokens),
             charlie: utils.createUser("Charlie", tokens),
             keeper: utils.createUser("Keeper", tokens),
-            allocator: utils.createUser("Allocator", tokens)
+            allocator: utils.createUser("Allocator", tokens),
+            relayer: payable(relayer)
         });
 
         // Make Alice both the caller and the origin.

@@ -53,9 +53,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         engine = new ERC7540Engine();
         ISuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
         vault.setGateway(address(gateway));
-        vault.addFunction(ERC7540Engine.processRedeemRequest.selector, address(engine), false);
-        //vault.addFunction(ERC7540Engine.processRedeemRequestWithSignature.selector, address(engine), false);
-        vault.addFunction(ERC7540Engine.previewWithdrawalRoute.selector, address(engine), false);
+        vault.addFunctions(engine.selectors(), address(engine), false);
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
     }

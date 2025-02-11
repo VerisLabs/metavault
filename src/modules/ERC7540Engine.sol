@@ -7,6 +7,7 @@ import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
 import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 
 import {
     LiqRequest,
@@ -40,6 +41,9 @@ contract ERC7540Engine is ModuleBase {
     /// @notice Thrown when signature verification fails
     error InvalidSignature();
 
+    /// @notice Thrown when nonce is invalid
+    error InvalidNonce();
+
     /// @notice Thrown when there are not enough assets to fulfill a request
     error InsufficientAssets();
 
@@ -57,9 +61,6 @@ contract ERC7540Engine is ModuleBase {
 
     /// @dev Library for vault-related operations
     using VaultLib for VaultData;
-
-    /// @dev Library for math
-    using Math for uint256;
 
     /// @notice Processes a redemption request for a given controller
     /// @dev This function is restricted to the RELAYER_ROLE and handles asynchronous processing of redemption requests,
@@ -92,6 +93,93 @@ contract ERC7540Engine is ModuleBase {
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
+    /// @notice Verifies that a signature is valid for the given request parameters
+    /// @param params The request parameters to verify
+    /// @param deadline The timestamp after which the signature is no longer valid
+    /// @param nonce The user's current nonce
+    /// @param v The recovery byte of the signature
+    /// @param r The r value of the signature
+    /// @param s The s value of the signature
+    function verifySignature(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        internal
+        view
+        returns (bool)
+    {
+        // Check deadline
+        if (block.timestamp > deadline) {
+            revert SignatureExpired();
+        }
+
+        // Check nonce
+        if (nonce != nonces(params.controller)) {
+            revert InvalidNonce();
+        }
+
+        // Hash the parameters including deadline and nonce
+        bytes32 paramsHash = keccak256(
+            abi.encode(
+                params.controller, params.shares, params.sXsV, params.sXmV, params.mXsV, params.mXmV, deadline, nonce
+            )
+        );
+
+        // Verify signature using SignatureCheckerLib
+        return SignatureCheckerLib.isValidSignatureNow(signerRelayer, paramsHash, abi.encodePacked(r, s, v));
+    }
+
+    /// @notice Process a request with a valid relayer signature
+    /// @param params The request parameters
+    /// @param deadline The timestamp after which the signature is no longer valid
+    /// @param v The recovery byte of the signature
+    /// @param r The r value of the signature
+    /// @param s The s value of the signature
+    function processSignedRequest(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external
+    {
+        address controller = params.controller;
+        // Get and increment nonce
+        uint256 nonce = nonces(controller);
+
+        // Verify signature
+        if (!verifySignature(params, deadline, nonce, v, r, s)) {
+            revert InvalidSignature();
+        }
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Compute the nonce slot and load its value
+            mstore(0x0c, _NONCES_SLOT_SEED)
+            mstore(0x00, controller)
+            let nonceSlot := keccak256(0x0c, 0x20)
+            let nonceValue := sload(nonceSlot)
+            // Increment and store the updated nonce
+            sstore(nonceSlot, add(nonceValue, 1))
+        }
+        // Process the request
+        _processRedeemRequest(
+            ProcessRedeemRequestConfig(
+                params.shares == 0 ? pendingRedeemRequest(params.controller) : params.shares,
+                params.controller,
+                params.sXsV,
+                params.sXmV,
+                params.mXsV,
+                params.mXmV
+            )
+        );
+    }
+
     /// @notice Simulates a withdrawal route to help relayers determine how to fulfill redemption requests
     /// @dev This is an off-chain helper function that calculates the optimal route for processing
     /// withdrawals across different chains and vaults. It computes:
@@ -109,46 +197,46 @@ contract ERC7540Engine is ModuleBase {
     ///         - The assets expected from each withdrawal
     ///         - The amount that can be fulfilled immediately from idle assets
     ///         - Various cached state values needed for processing
-    function previewWithdrawalRoute(
-        address controller,
-        uint256 shares
-    )
-        public
-        view
-        returns (ProcessRedeemRequestCache memory cachedRoute)
-    {
-        if (shares == 0) {
-            shares = pendingRedeemRequest(controller);
-        }
-        cachedRoute.assets = convertToAssets(shares);
-        cachedRoute.totalIdle = _totalIdle;
-        cachedRoute.totalDebt = _totalDebt;
-        cachedRoute.totalAssets = totalAssets();
+    // function previewWithdrawalRoute(
+    //     address controller,
+    //     uint256 shares
+    // )
+    //     public
+    //     view
+    //     returns (ProcessRedeemRequestCache memory cachedRoute)
+    // {
+    //     if (shares == 0) {
+    //         shares = pendingRedeemRequest(controller);
+    //     }
+    //     cachedRoute.assets = convertToAssets(shares);
+    //     cachedRoute.totalIdle = _totalIdle;
+    //     cachedRoute.totalDebt = _totalDebt;
+    //     cachedRoute.totalAssets = totalAssets();
 
-        // Cannot process more assets than the available
-        if (cachedRoute.assets > totalWithdrawableAssets()) {
-            revert InsufficientAvailableAssets();
-        }
+    //     // Cannot process more assets than the available
+    //     if (cachedRoute.assets > totalWithdrawableAssets()) {
+    //         revert InsufficientAvailableAssets();
+    //     }
 
-        // If totalIdle can covers the amount fulfill directly
-        if (cachedRoute.totalIdle >= cachedRoute.assets) {
-            cachedRoute.sharesFulfilled = shares;
-            cachedRoute.totalClaimableWithdraw = cachedRoute.assets;
-        }
-        // Otherwise perform Superform withdrawals
-        else {
-            // Cache amount to withdraw before reducing totalIdle
-            cachedRoute.amountToWithdraw = cachedRoute.assets - cachedRoute.totalIdle;
-            // Use totalIdle to fulfill the request
-            if (cachedRoute.totalIdle > 0) {
-                cachedRoute.totalClaimableWithdraw = cachedRoute.totalIdle;
-                cachedRoute.sharesFulfilled = _convertToShares(cachedRoute.totalIdle, cachedRoute.totalAssets);
-            }
-            ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
-            _prepareWithdrawalRoute(cachedRoute);
-        }
-        return cachedRoute;
-    }
+    //     // If totalIdle can covers the amount fulfill directly
+    //     if (cachedRoute.totalIdle >= cachedRoute.assets) {
+    //         cachedRoute.sharesFulfilled = shares;
+    //         cachedRoute.totalClaimableWithdraw = cachedRoute.assets;
+    //     }
+    //     // Otherwise perform Superform withdrawals
+    //     else {
+    //         // Cache amount to withdraw before reducing totalIdle
+    //         cachedRoute.amountToWithdraw = cachedRoute.assets - cachedRoute.totalIdle;
+    //         // Use totalIdle to fulfill the request
+    //         if (cachedRoute.totalIdle > 0) {
+    //             cachedRoute.totalClaimableWithdraw = cachedRoute.totalIdle;
+    //             cachedRoute.sharesFulfilled = _convertToShares(cachedRoute.totalIdle, cachedRoute.totalAssets);
+    //         }
+    //         ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
+    //         _prepareWithdrawalRoute(cachedRoute);
+    //     }
+    //     return cachedRoute;
+    // }
 
     /// @notice Fulfills a settled cross-chain redemption request
     /// @dev Called by the gateway contract when cross-chain assets have been received.
@@ -739,7 +827,7 @@ contract ERC7540Engine is ModuleBase {
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](3);
         s[0] = this.processRedeemRequest.selector;
-        s[1] = this.previewWithdrawalRoute.selector;
+        s[1] = this.processSignedRequest.selector;
         s[2] = this.fulfillSettledRequest.selector;
         return s;
     }
