@@ -1,7 +1,6 @@
 /// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import "forge-std/console.sol";
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
@@ -45,8 +44,6 @@ contract ERC20Receiver {
     /// @dev Can only be called by the deployer
     /// @param amount The amount of tokens to transfer
     function pull(uint256 amount) external {
-        console.log(msg.sender);
-        console.log(_deployer);
         if (msg.sender != _deployer) revert();
         _asset.safeTransfer(_deployer, amount);
     }

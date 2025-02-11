@@ -55,6 +55,12 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Minimum shares threshold
     uint256 public MINIMUM_SHARES_THRESHOLD = 10;
 
+    /// @dev Maximum fee that can be set (30% = 3000 basis points)
+    uint16 constant MAX_FEE = 3000;
+
+    /// @dev Maximum time that can be set (24 hours)
+    uint256 public MAX_TIME = 86_400;
+
     /// @notice mapping from address to the average share price of their deposits
     mapping(address => uint256 averageEntryPrice) public positions;
 

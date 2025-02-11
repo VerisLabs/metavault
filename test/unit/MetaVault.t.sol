@@ -320,7 +320,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_setOracleFee() public {
-        uint16 newFee = 2500;
+        uint16 newFee = 2000;
 
         vm.expectEmit(true, true, true, true);
         emit SetOracleFee(newFee);
@@ -428,7 +428,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.startPrank(users.alice);
 
-        assertGt(vault.sharePrice(), 1e6);
+        assertEq(vault.sharePrice(), 1e6);
 
         skip(config.sharesLockTime);
 
@@ -771,7 +771,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint256 expectedTotalAssets = depositAmount + initialProfit - loss + recoveryProfit;
 
-  
         uint256 duration = block.timestamp - vault.lastFeesCharged();
         uint256 managementFee =
             (expectedTotalAssets * duration * vault.managementFee()) / (vault.SECS_PER_YEAR() * vault.MAX_BPS());

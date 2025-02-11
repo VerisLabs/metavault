@@ -140,8 +140,11 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Thrown when attempting to set a fee higher than the maximum allowed
     error FeeExceedsMaximum();
 
-    /// @dev Maximum fee that can be set (20% = 2000 basis points)
-    uint16 constant MAX_FEE = 2000;
+    /// @notice Thrown when attempting to set a shares lock time higher than the maximum allowed
+    error InvalidSharesLockTime();
+
+    /// @notice Thrown when attempting to donate more than the expected amount
+    error DonationExceedsExpected(uint256 donated, uint256 expected);
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -657,10 +660,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @param superformId id of vault to be removed
     function removeVault(uint256 superformId) external onlyRoles(MANAGER_ROLE) {
         if (superformId == 0) revert InvalidSuperformId();
-        uint256 sharesBalance = _sharesBalance(vaults[superformId]);
 
-        if (sharesBalance > 0) revert SharesBalanceNotZero();
-        if (sharesBalance > MINIMUM_SHARES_THRESHOLD) revert SharesBalanceNotZero();
+        if (_sharesBalance(vaults[superformId]) > MINIMUM_SHARES_THRESHOLD) revert SharesBalanceNotZero();
 
         uint64 chainId = vaults[superformId].chainId;
         address vaultAddress = vaults[superformId].vaultAddress;
@@ -692,8 +693,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         emit RemoveVault(chainId, vaultAddress);
     }
 
-    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external {
-        //@audit no access control?
+    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external onlyRoles(ADMIN_ROLE) {
         vaults[superformId].oracle = oracle;
     }
 
@@ -743,9 +743,10 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         oracleFeeExempt[controller] = oracleFeeExcemption;
     }
 
-    function setSharesLockTime(uint24 time) external onlyRoles(ADMIN_ROLE) {
-        sharesLockTime = time; //@audit validate against some min/max
-        emit SetSharesLockTime(time);
+    function setSharesLockTime(uint24 _time) external onlyRoles(ADMIN_ROLE) {
+        if (_time > MAX_TIME) revert InvalidSharesLockTime();
+        sharesLockTime = _time;
+        emit SetSharesLockTime(_time);
     }
 
     /// @notice sets the annually management fee
@@ -775,9 +776,11 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Allows direct donation of assets to the vault
     /// @dev Transfers assets from sender to vault and updates idle balance
     /// @param assets The amount of assets to donate
-    function donate(uint256 assets) external {
+    /// @param expectedAmount The expected amount that should have been transferred originally
+    function donate(uint256 assets, uint256 expectedAmount) external {
+        if (assets > expectedAmount) revert DonationExceedsExpected(assets, expectedAmount);
+
         asset().safeTransferFrom(msg.sender, address(this), assets);
-        _mint(treasury, convertToShares(assets));
         _afterDeposit(assets, 0);
     }
 
@@ -899,6 +902,4 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155BatchReceived.selector;
     }
-
-    receive() external payable { }
 }

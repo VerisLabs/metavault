@@ -49,7 +49,9 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
     }
 
     function setVault(IMetaVault _vault) external onlyRoles(ADMIN_ROLE) {
+        asset.safeApprove(address(vault), 0);
         vault = _vault;
+        asset.safeApprove(address(vault), type(uint256).max);
     }
 
     function setRouter(IBaseRouter _superformRouter) external onlyRoles(ADMIN_ROLE) {
