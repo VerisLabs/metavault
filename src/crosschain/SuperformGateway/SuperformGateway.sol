@@ -58,14 +58,12 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         asset.safeApprove(address(vault), 0);
         superformRouter = _superformRouter;
         asset.safeApprove(address(vault), type(uint256).max);
-
     }
 
     function setSuperPositions(ISuperPositions _superPositions) external onlyRoles(ADMIN_ROLE) {
         asset.safeApprove(address(vault), 0);
         superPositions = _superPositions;
         asset.safeApprove(address(vault), type(uint256).max);
-
     }
 
     /// @notice Gets the current queue of pending request IDs

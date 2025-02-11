@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
-
 import { MetaVaultEvents } from "../helpers/MetaVaultEvents.sol";
 import { SuperformActions } from "../helpers/SuperformActions.sol";
 import { _1_USDCE } from "../helpers/Tokens.sol";
@@ -1028,6 +1027,14 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice2 * shares2 / 10 ** 6
             + lastSharePrice3 * shares3 / 10 ** 6;
 
+        uint256 expectedOptimismValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice3 * shares3 / 10 ** 6; // EXACTLY
+            // + ALOE vaults
+        uint256 expectedPolygonValue = lastSharePrice2 * shares2 / 10 ** 6;
+
+        divestReq.superformsData[0].outputAmounts[0] = expectedOptimismValue / 2; // EXACTLY
+        divestReq.superformsData[0].outputAmounts[1] = expectedOptimismValue / 2; // ALOE
+        divestReq.superformsData[1].outputAmounts[0] = expectedPolygonValue;
+
         // //Execute divest
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValue);
@@ -1045,10 +1052,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedOptimismValue);
         gateway.settleDivest(requestId, false);
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestedValue);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedPolygonValue);
         gateway.settleDivest(requestId2, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 200 * _1_USDCE);

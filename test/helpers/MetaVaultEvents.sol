@@ -42,7 +42,7 @@ contract MetaVaultEvents {
     event SetOracleFee(uint16 fee);
 
     /// @dev Emitted when a deposit request is made
-  event DepositRequest(
+    event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
     );
     /// @dev Emitted when a deposit is completed
@@ -55,7 +55,7 @@ contract MetaVaultEvents {
 
     /// @dev Emitted when an operator is set or unset for a controller
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
-    /// @dev Emitted when the performance fee is set    
+    /// @dev Emitted when the performance fee is set
     event SetPerformanceFee(uint16 fee);
     /// @dev Emitted when the emergency shutdown is set
     event EmergencyShutdown(bool shutdown);
