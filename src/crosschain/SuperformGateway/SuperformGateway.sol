@@ -55,15 +55,15 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
     }
 
     function setRouter(IBaseRouter _superformRouter) external onlyRoles(ADMIN_ROLE) {
-        asset.safeApprove(address(vault), 0);
+        asset.safeApprove(address(superformRouter), 0);
         superformRouter = _superformRouter;
-        asset.safeApprove(address(vault), type(uint256).max);
+        asset.safeApprove(address(superformRouter), type(uint256).max);
     }
 
     function setSuperPositions(ISuperPositions _superPositions) external onlyRoles(ADMIN_ROLE) {
-        asset.safeApprove(address(vault), 0);
-        superPositions = _superPositions;
-        asset.safeApprove(address(vault), type(uint256).max);
+    superPositions.setApprovalForAll(address(superformRouter), false);
+    superPositions = _superPositions;
+    superPositions.setApprovalForAll(address(superformRouter), true); 
     }
 
     /// @notice Gets the current queue of pending request IDs
