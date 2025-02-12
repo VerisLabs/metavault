@@ -554,17 +554,19 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report_usdcp = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
         uint256 lastSharePrice2 = report_usdcp.sharePrice;
 
-        uint256 nativeValue2 = multiVaultWithdrawValues[multiVaultKey];
-
         uint256 expectedDivestedValue1 = lastSharePrice * shares_usdc / 10 ** 6;
         uint256 expectedDivestedValue2 = lastSharePrice2 * shares_usdcA / 10 ** 6;
 
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
 
+        divestReq.superformsData.outputAmounts[0] = expectedDivestedValue1; // EXACTLY
+        divestReq.superformsData.outputAmounts[1] = expectedDivestedValue2; // ALOE
+
         vm.expectEmit(true, true, true, true);
         emit Divest(1_151_063_415);
 
         vm.startPrank(users.alice);
+        uint256 nativeValue2 = multiVaultWithdrawValues[multiVaultKey];
 
         vault.divestSingleXChainMultiVault{ value: nativeValue2 }(divestReq);
 
@@ -574,11 +576,11 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), 1220 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId), totalExpectedDivestedValue);
         gateway.settleDivest(requestId, 0, false);
 
-        assertEq(vault.totalAssets(), totalExpectedDivestedValue);
-        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue);
+        assertEq(vault.totalAssets(), totalExpectedDivestedValue + 48_935_776);
+        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue + 48_935_776);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
@@ -796,7 +798,13 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
         uint256 lastSharePrice2 = report2.sharePrice;
 
-        uint256 expectedDivestedValue = lastSharePrice2 * shares2 / 10 ** 6 + lastSharePrice * shares / 10 ** 6;
+        uint256 expectedDivestValuePol = lastSharePrice2 * shares2 / 10 ** 6;
+        uint256 expectedDivestValueOptimism = lastSharePrice * shares / 10 ** 6;
+
+        uint256 expectedDivestedValue = expectedDivestValuePol + expectedDivestValueOptimism;
+
+        divestReq.superformsData[0].outputAmount = expectedDivestValuePol; // EXACTLY
+        divestReq.superformsData[1].outputAmount = expectedDivestValueOptimism; // ALOE
 
         // //Execute divest
         vm.expectEmit(true, true, true, true);
@@ -814,10 +822,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
+        deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestValuePol);
         gateway.settleDivest(requestId, 0, false);
 
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestedValue);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOptimism);
         gateway.settleDivest(requestId2, 0, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 800_000_000);
@@ -1184,7 +1192,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         // Cross-chain invest
         uint256 investAmount = 600 * _1_USDCE;
-        SingleXChainSingleVaultStateReq memory investReq = 
+        SingleXChainSingleVaultStateReq memory investReq =
             _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
 
         uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
@@ -1195,16 +1203,19 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         // Emergency divest
         vm.startPrank(users.alice);
-        SingleXChainSingleVaultStateReq memory req = _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
-        vault.emergencyDivestSingleXChainSingleVault{ value: _getDivestSingleXChainSingleVaultValue(superformId, investAmount) }(req);
+        SingleXChainSingleVaultStateReq memory req =
+            _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
+        vault.emergencyDivestSingleXChainSingleVault{
+            value: _getDivestSingleXChainSingleVaultValue(superformId, investAmount)
+        }(req);
 
         // Get request ID and settle divest
         bytes32 requestId = gateway.getRequestsQueue()[0];
         gateway.settleDivest(requestId, investAmount, false);
 
         // Verify state after emergency divest
-        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
-        assertEq(vault.totalWithdrawableAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalAssets(), 994_060_602);
+        assertEq(vault.totalWithdrawableAssets(), 994_060_602);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 }
