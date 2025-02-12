@@ -18,7 +18,7 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, EmergencyAssetsManager } from "modules/Lib.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
@@ -67,6 +67,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
     AssetsManager manager;
+    EmergencyAssetsManager emergencyManager;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
 
@@ -87,12 +88,17 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes4[] memory managerSelectors = manager.selectors();
         vault.addFunctions(managerSelectors, address(manager), false);
 
+        emergencyManager = new EmergencyAssetsManager();
+        bytes4[] memory emergencySelectors = emergencyManager.selectors();
+        vault.addFunctions(emergencySelectors, address(emergencyManager), false);
+
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
         vault.grantRoles(users.alice, vault.ORACLE_ROLE());
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());
         vault.grantRoles(users.alice, vault.EMERGENCY_ADMIN_ROLE());
         USDCE_BASE.safeApprove(address(vault), type(uint256).max);
+        USDCE_BASE.safeApprove(address(gateway), type(uint256).max);
 
         console2.log("vault address : %s", address(vault));
         console2.log("recovery address : %s", gateway.recoveryAddress());
@@ -265,7 +271,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
         deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
-        gateway.settleDivest(requestId, false);
+        gateway.settleDivest(requestId, 0, false);
 
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 400 * _1_USDCE + expectedDivestedValue);
@@ -397,7 +403,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vm.startPrank(users.bob);
         vm.expectRevert(abi.encodeWithSignature("NotVault()"));
-        gateway.divestSingleXChainSingleVault(req);
+        gateway.divestSingleXChainSingleVault(req, false);
     }
 
     function test_MetaVault_divestSingleXChainSingleVault_failed() public {
@@ -569,7 +575,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId = gateway.getRequestsQueue()[0];
 
         deal(USDCE_BASE, gateway.getReceiver(requestId), 1220 * _1_USDCE);
-        gateway.settleDivest(requestId, false);
+        gateway.settleDivest(requestId, 0, false);
 
         assertEq(vault.totalAssets(), totalExpectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue);
@@ -635,7 +641,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         req.ambIds[0] = 1;
 
         vm.expectRevert(abi.encodeWithSignature("NotVault()"));
-        gateway.divestSingleXChainMultiVault(req);
+        gateway.divestSingleXChainMultiVault(req, false);
     }
 
     function test_MetaVault_divestSingleXChainMultiVault_revert_TotalAmountMismatch() public {
@@ -809,10 +815,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
         deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
-        gateway.settleDivest(requestId, false);
+        gateway.settleDivest(requestId, 0, false);
 
         deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestedValue);
-        gateway.settleDivest(requestId2, false);
+        gateway.settleDivest(requestId2, 0, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 800_000_000);
         assertEq(vault.totalWithdrawableAssets(), expectedDivestedValue + 800_000_000);
@@ -860,7 +866,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         req.superformsData[1].amount = 0;
 
         vm.expectRevert(abi.encodeWithSignature("NotVault()"));
-        gateway.divestMultiXChainSingleVault(req);
+        gateway.divestMultiXChainSingleVault(req, false);
     }
 
     function test_MetaVault_divestMultiXChainSingleVault_revert_Unauthorized() public {
@@ -899,7 +905,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         // Try to call from unauthorized address
         vm.startPrank(users.bob);
         vm.expectRevert(abi.encodeWithSignature("NotVault()"));
-        gateway.divestMultiXChainSingleVault(req);
+        gateway.divestMultiXChainSingleVault(req, false);
         vm.stopPrank();
     }
 
@@ -1051,10 +1057,10 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
 
         deal(USDCE_BASE, gateway.getReceiver(requestId), expectedOptimismValue);
-        gateway.settleDivest(requestId, false);
+        gateway.settleDivest(requestId, 0, false);
 
         deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedPolygonValue);
-        gateway.settleDivest(requestId2, false);
+        gateway.settleDivest(requestId2, 0, false);
 
         assertEq(vault.totalAssets(), expectedDivestedValue + 200 * _1_USDCE);
 
@@ -1105,7 +1111,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         req.superformsData[0].amounts[1] = 0;
 
         vm.expectRevert(abi.encodeWithSignature("NotVault()"));
-        gateway.divestMultiXChainMultiVault(req);
+        gateway.divestMultiXChainMultiVault(req, false);
     }
 
     function test_MetaVault_divestMultiXChainMultiVault_revert_Unauthorized() public {
@@ -1147,7 +1153,58 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         // Try to call from unauthorized address
         vm.startPrank(users.bob);
         vm.expectRevert(abi.encodeWithSignature("NotVault()"));
-        gateway.divestMultiXChainMultiVault(req);
+        gateway.divestMultiXChainMultiVault(req, false);
         vm.stopPrank();
+    }
+
+    function test_MetaVault_emergencyDivest_after_xchain_invest() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint32 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Initial deposit
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+
+        // Cross-chain invest
+        uint256 investAmount = 600 * _1_USDCE;
+        SingleXChainSingleVaultStateReq memory investReq = 
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            investReq
+        );
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
+
+        // Emergency divest
+        vm.startPrank(users.alice);
+        SingleXChainSingleVaultStateReq memory req = _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
+        vault.emergencyDivestSingleXChainSingleVault{ value: _getDivestSingleXChainSingleVaultValue(superformId, investAmount) }(req);
+
+        // Get request ID and settle divest
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        gateway.settleDivest(requestId, investAmount, false);
+
+        // Verify state after emergency divest
+        assertEq(vault.totalAssets(), 1000 * _1_USDCE);
+        assertEq(vault.totalWithdrawableAssets(), 1000 * _1_USDCE);
+        assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 }

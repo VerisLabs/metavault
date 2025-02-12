@@ -203,13 +203,18 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
 
-        ProcessRedeemRequestParams memory params = ProcessRedeemRequestParams(users.alice, shares, sXsV, sXmV, mXsV, mXmV);
+        ProcessRedeemRequestParams memory params =
+            ProcessRedeemRequestParams(users.alice, shares, sXsV, sXmV, mXsV, mXmV);
 
         uint256 deadline = block.timestamp + 1000;
         uint256 nonce = vault.nonces(users.alice);
 
         // Generate signature from relayer
-        bytes32 paramsHash = keccak256(abi.encode(params.controller, params.shares, params.sXsV, params.sXmV, params.mXsV, params.mXmV, deadline, nonce));
+        bytes32 paramsHash = keccak256(
+            abi.encode(
+                params.controller, params.shares, params.sXsV, params.sXmV, params.mXsV, params.mXmV, deadline, nonce
+            )
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(relayerKey, paramsHash);
 
         oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
@@ -227,7 +232,6 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         assertEq(vault.totalDebt(), 0);
         assertEq(vault.claimableRedeemRequest(users.alice), sharesBalance);
         assertEq(vault.pendingRedeemRequest(users.alice), 0);
-
 
         vm.expectEmit(true, true, true, true);
         emit Withdraw(users.alice, users.alice, users.alice, totalAssetsBeforeRedeem, sharesBalance);

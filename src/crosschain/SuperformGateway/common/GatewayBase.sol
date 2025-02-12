@@ -63,12 +63,14 @@ contract GatewayBase is OwnableRoles {
     /// @param requestedAssetsPerVault Array of requested assets per vault
     /// @param requestedAssets Total requested assets
     /// @param receiverAddress Address to receive assets
+    /// @param hasReceiver Flag to check if receiver is deployed
     struct RequestData {
         address controller;
         uint256[] superformIds;
         uint256[] requestedAssetsPerVault;
         uint256 requestedAssets;
         address receiverAddress;
+        bool hasReceiver;
     }
 
     /*//////////////////////////////////////////////////////////////

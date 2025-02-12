@@ -211,7 +211,6 @@ contract AssetsManager is ModuleBase {
         returns (uint256 assets)
     {
         if (!isVaultListed(vaultAddress)) revert VaultNotListed();
-        uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
         uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
 
         // Record the balance before deposit to calculate received assets
@@ -270,7 +269,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 sharesValue = gateway.divestSingleXChainSingleVault{ value: msg.value }(req);
+        uint256 sharesValue = gateway.divestSingleXChainSingleVault{ value: msg.value }(req, true);
         _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
         vaults[req.superformData.superformId].totalDebt =
             _sub0(vaults[req.superformData.superformId].totalDebt, sharesValue).toUint128();
@@ -287,7 +286,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req);
+        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req, true);
 
         for (uint256 i = 0; i < req.superformsData.superformIds.length;) {
             uint256 superformId = req.superformsData.superformIds[i];
@@ -314,7 +313,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req);
+        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req, true);
 
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
@@ -342,7 +341,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req);
+        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req, true);
 
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;

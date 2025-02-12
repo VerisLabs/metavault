@@ -235,6 +235,14 @@ interface IMetaVault {
 
     function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
 
+    function emergencyDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
+
+    function emergencyDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
+
+    function emergencyDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req) external payable;
+
+    function emergencyDivestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
+
     function setEmergencyShutdown(bool _emergencyShutdown) external;
 
     function setGateway(address) external;

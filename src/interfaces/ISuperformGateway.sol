@@ -55,22 +55,34 @@ interface ISuperformGateway {
         payable
         returns (uint256 totalAmount);
 
-    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+    function divestSingleXChainSingleVault(
+        SingleXChainSingleVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 sharesValue);
 
-    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+    function divestSingleXChainMultiVault(
+        SingleXChainMultiVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 totalAmount);
 
-    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+    function divestMultiXChainSingleVault(
+        MultiDstSingleVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 totalAmount);
 
-    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+    function divestMultiXChainMultiVault(
+        MultiDstMultiVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 totalAmount);
@@ -147,7 +159,7 @@ interface ISuperformGateway {
 
     function receivers(bytes32 key) external view returns (address receiverAddress);
 
-    function settleDivest(bytes32 key, bool force) external;
+    function settleDivest(bytes32 key, uint256 assets, bool force) external;
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
