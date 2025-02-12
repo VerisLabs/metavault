@@ -379,7 +379,7 @@ contract DivestSuperform is GatewayBase {
     /// whether it's a single vault (superformId) or multiple vaults (array of superformIds).
     /// For each Superform ID involved, notifies the vault of the settlement.
     /// @param key Identifier of the receiver contract
-    function settleDivest(bytes32 key, uint256 assets, bool force) external onlyRoles(RELAYER_ROLE | EMERGENCY_ROLE) {
+    function settleDivest(bytes32 key, uint256 assets, bool force) external onlyRoles(RELAYER_ROLE) {
         if (!_requestsQueue.contains(key)) revert();
         RequestData memory data = requests[key];
         _requestsQueue.remove(key);
