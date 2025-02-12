@@ -194,20 +194,22 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         skip(config.sharesLockTime);
 
-        vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
+        uint256 shares = vault.balanceOf(users.alice);
+
+        vault.requestRedeem(shares, users.alice, users.alice);
 
         SingleXChainSingleVaultWithdraw memory sXsV;
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
 
-        ProcessRedeemRequestParams memory params = ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV);
+        ProcessRedeemRequestParams memory params = ProcessRedeemRequestParams(users.alice, shares, sXsV, sXmV, mXsV, mXmV);
 
         uint256 deadline = block.timestamp + 1000;
         uint256 nonce = vault.nonces(users.alice);
 
         // Generate signature from relayer
-        bytes32 paramsHash = keccak256(abi.encode(params, deadline, nonce));
+        bytes32 paramsHash = keccak256(abi.encode(params.controller, params.shares, params.sXsV, params.sXmV, params.mXsV, params.mXmV, deadline, nonce));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(relayerKey, paramsHash);
 
         oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
@@ -217,7 +219,6 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         uint256 totalAssetsBeforeRedeem = vault.totalAssets();
         // Process request with signature
-        // vm.prank(users.alice);
         vault.processSignedRequest(params, deadline, v, r, s);
 
         assertEq(vault.totalSupply(), 0);
