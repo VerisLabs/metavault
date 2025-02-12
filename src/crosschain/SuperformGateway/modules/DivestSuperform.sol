@@ -400,9 +400,9 @@ contract DivestSuperform is GatewayBase {
         }
 
         uint256 requestedAssets = data.requestedAssets;
-        totalPendingXChainDivests = _sub0(totalPendingXChainDivests, settledAssets);
+        totalPendingXChainDivests = _sub0(totalPendingXChainDivests, requestedAssets);
         asset.safeTransfer(address(vault), settledAssets);
-        vault.settleXChainDivest(requestedAssets);
+        vault.settleXChainDivest(settledAssets);
     }
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
