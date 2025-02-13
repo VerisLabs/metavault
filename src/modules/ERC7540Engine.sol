@@ -393,10 +393,10 @@ contract ERC7540Engine is ModuleBase {
                 uint256 numberOfVaults = cache.lens[chainIndex];
                 if (numberOfVaults != 0) {
                     if (!cache.isSingleChain) {
+                        // First external chain encountered
                         cache.isSingleChain = true;
-                    }
-
-                    if (cache.isSingleChain && !cache.isMultiChain) {
+                    } else {
+                        // Second or subsequent external chain
                         cache.isMultiChain = true;
                     }
 

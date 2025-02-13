@@ -557,13 +557,17 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 expectedDivestedValue1 = lastSharePrice * shares_usdc / 10 ** 6;
         uint256 expectedDivestedValue2 = lastSharePrice2 * shares_usdcA / 10 ** 6;
 
+        console2.log("expectedDivestedValue1: " , expectedDivestedValue1);
+        console2.log("expectedDivestedValue2: " , expectedDivestedValue2);
+
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
+        console2.log("totalExpectedDivestedValue: " , totalExpectedDivestedValue);
 
         divestReq.superformsData.outputAmounts[0] = expectedDivestedValue1; // EXACTLY
         divestReq.superformsData.outputAmounts[1] = expectedDivestedValue2; // ALOE
 
         vm.expectEmit(true, true, true, true);
-        emit Divest(1_151_063_415);
+        emit Divest(totalExpectedDivestedValue);
 
         vm.startPrank(users.alice);
         uint256 nativeValue2 = multiVaultWithdrawValues[multiVaultKey];
@@ -571,16 +575,16 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         vault.divestSingleXChainMultiVault{ value: nativeValue2 }(divestReq);
 
         assertEq(vault.totalAssets(), totalExpectedDivestedValue);
-        assertEq(vault.totalWithdrawableAssets(), 48_935_776);
-        assertEq(gateway.totalPendingXChainDivests(), 1_151_063_415);
+        assertEq(vault.totalWithdrawableAssets(), 0);
+        assertEq(gateway.totalPendingXChainDivests(), totalExpectedDivestedValue);
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
 
         deal(USDCE_BASE, gateway.getReceiver(requestId), totalExpectedDivestedValue);
         gateway.settleDivest(requestId, 0, false);
 
-        assertEq(vault.totalAssets(), totalExpectedDivestedValue + 48_935_776);
-        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue + 48_935_776);
+        assertEq(vault.totalAssets(), totalExpectedDivestedValue);
+        assertEq(vault.totalWithdrawableAssets(), totalExpectedDivestedValue);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
@@ -1057,7 +1061,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vault.divestMultiXChainMultiVault{ value: nativeValueWithdraw }(divestReq);
 
-        assertEq(vault.totalAssets(), 1_999_998_993);
+        assertEq(vault.totalAssets(), expectedDivestedValue);
         assertEq(vault.totalWithdrawableAssets(), 200_000_000);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValue);
 
