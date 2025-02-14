@@ -151,33 +151,28 @@ contract ERC7540EngineBase is ModuleBase {
 
             // Cache whether withdrawal spans multiple chains
             if (vault.chainId != THIS_CHAIN_ID) {
-                uint256 numberOfVaults = cache.lens[chainIndex];
-                if (numberOfVaults != 0) {
-                    if (!cache.isSingleChain && !cache.isMultiChain) {
-                        // First external chain encountered
-                        cache.isSingleChain = true;
-                    } 
-                    if (cache.isSingleChain && !cache.isMultiChain) {
-                        // Check if this vault is from a different chain than the first one
-                        uint256 firstChainId;
-                        // Find the first external chain ID
-                        for (uint256 j = 0; j < N_CHAINS; j++) {
-                            if (cache.lens[j] > 0 && j != chainIndexes[THIS_CHAIN_ID]) {
-                                firstChainId = j;
-                                break;
-                            }
-                        }
-                        // If this vault is from a different chain than the first one, it's multi-chain
-                        if (chainIndex != firstChainId) {
-                            cache.isSingleChain = false;
-                            cache.isMultiChain = true;
+                if (!cache.isSingleChain && !cache.isMultiChain) {
+                    // First external chain encountered
+                    cache.isSingleChain = true;
+                } else if (cache.isSingleChain) {
+                    // Find the first external chain ID
+                    uint256 firstChainId;
+                    for (uint256 j = 0; j < N_CHAINS; j++) {
+                        if (cache.lens[j] > 0 && j != chainIndexes[THIS_CHAIN_ID]) {
+                            firstChainId = j;
+                            break;
                         }
                     }
+                    // If this vault is from a different chain than the first one, it's multi-chain
+                    if (chainIndex != firstChainId) {
+                        cache.isSingleChain = false;
+                        cache.isMultiChain = true;
+                    }
+                }
 
-                    // Check if there are multiple vaults in this chain
-                    if (numberOfVaults >= 1) {
-                        cache.isMultiVault = true;
-                    } 
+                // Check if there are multiple vaults in this chain
+                if (cache.lens[chainIndex] >= 1) {
+                    cache.isMultiVault = true;
                 }
             }
 

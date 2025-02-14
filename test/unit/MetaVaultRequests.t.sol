@@ -757,5 +757,103 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         assertFalse(cachedRoute.isSingleChain);
         assertTrue(cachedRoute.isMultiChain);
         assertFalse(cachedRoute.isMultiVault);
+
+        vm.revertTo(snapshotId);
+
+        /// MULTI XCHAIN MULTI VAULT
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc,
+            _getSharePrice(optimismChainId, vaultAddress_usdc),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc,
+            vault: vaultAddress_usdc,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_aloe_op,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_aloe_op,
+            vault: vaultAddress_usdc_aloe_op,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        oracle.setValues(
+            polygonChainId,
+            vaultAddress_usdc_pol,
+            _getSharePrice(polygonChainId, vaultAddress_usdc_pol),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: polygonChainId,
+            superformId: superformId_usdc_pol,
+            vault: vaultAddress_usdc_pol,
+            vaultDecimals: _getDecimals(polygonChainId, vaultAddress_usdc_pol),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(2000 * _1_USDCE, users.alice);
+
+        superformIds = new uint256[](3);
+        superformIds[0] = superformId_usdc;
+        superformIds[1] = superformId_usdc_pol;
+        superformIds[2] = superformId_usdc_aloe_op;
+
+        amounts = new uint256[](3);
+        amounts[0] = 600 * _1_USDCE;
+        amounts[1] = 600 * _1_USDCE;
+        amounts[2] = 600 * _1_USDCE;
+
+        MultiDstMultiVaultStateReq memory req3 = _buildInvestMultiXChainMultiVaultParams(superformIds, amounts);
+
+        req3.superformsData[0].amounts[0] = 600 * _1_USDCE;
+        req3.superformsData[0].amounts[1] = 600 * _1_USDCE;
+        req3.superformsData[1].amounts[0] = 600 * _1_USDCE;
+
+        shares = _previewDeposit(optimismChainId, vaultAddress_usdc, req3.superformsData[0].amounts[0]);
+        shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req3.superformsData[1].amounts[0]);
+        uint256 shares3 = _previewDeposit(optimismChainId, vaultAddress_usdc_aloe_op, req3.superformsData[0].amounts[1]);
+
+        multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
+        nativeValue = multiChainMultiVaultDepositValues[multiVaultKey];
+
+        vm.startPrank(users.alice);
+        vault.investMultiXChainMultiVault{ value: nativeValue }(req3);
+
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares3);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
+
+        vm.startPrank(users.alice);
+        vault.setSharesLockTime(0);
+        aliceBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(aliceBalance, users.alice, users.alice);
+
+        // Preview withdrawal route
+        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        assertFalse(cachedRoute.isSingleChain);
+        assertTrue(cachedRoute.isMultiChain);
+        assertTrue(cachedRoute.isMultiVault);
     }
 }
