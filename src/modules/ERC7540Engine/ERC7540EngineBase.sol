@@ -2,101 +2,16 @@
 pragma solidity ^0.8.19;
 
 import { ModuleBase } from "common/Lib.sol";
-
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
-import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
+import { VaultData, VaultLib } from "types/Lib.sol";
 
-import {
-    LiqRequest,
-    MultiDstMultiVaultStateReq,
-    MultiDstSingleVaultStateReq,
-    MultiVaultSFData,
-    MultiXChainMultiVaultWithdraw,
-    MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestParams,
-    SingleDirectMultiVaultStateReq,
-    SingleDirectSingleVaultStateReq,
-    SingleVaultSFData,
-    SingleXChainMultiVaultStateReq,
-    SingleXChainMultiVaultWithdraw,
-    SingleXChainSingleVaultStateReq,
-    SingleXChainSingleVaultWithdraw,
-    VaultData,
-    VaultLib
-} from "types/Lib.sol";
-
-/// @title ERC7540EngineReader
-/// @notice This module is used to read the state of the ERC7540Engine and to preview the withdrawal route
-contract ERC7540EngineReader is ModuleBase {
-    /// @notice Thrown when attempting to withdraw more assets than are currently available
-    error InsufficientAvailableAssets();
-
-    /// @dev Safe transfer operations for ERC20 tokens
-    using SafeTransferLib for address;
-
+/// @title ERC7540EngineBase
+/// @notice Base contract for ERC7540 engine that manages multi-vault deposits and withdrawals across chains
+/// @dev Extends ModuleBase to provide core functionality for processing redemption requests and managing vault state
+contract ERC7540EngineBase is ModuleBase {
     /// @dev Library for vault-related operations
     using VaultLib for VaultData;
-
-    /// @notice Simulates a withdrawal route to help relayers determine how to fulfill redemption requests
-    /// @dev This is an off-chain helper function that calculates the optimal route for processing
-    /// withdrawals across different chains and vaults. It computes:
-    /// 1. How much can be fulfilled directly from idle assets
-    /// 2. Which vaults need to be accessed for the remaining amount
-    /// 3. The distribution of withdrawals across different chains and vaults
-    /// The function follows the same withdrawal queue priority as actual withdrawals:
-    /// - First uses idle assets
-    /// - Then local chain vaults
-    /// - Finally cross-chain vaults
-    /// @param controller Address of shares owner
-    /// @return cachedRoute A struct containing:
-    ///         - The withdrawal route across different chains
-    ///         - The shares to be redeemed from each vault
-    ///         - The assets expected from each withdrawal
-    ///         - The amount that can be fulfilled immediately from idle assets
-    ///         - Various cached state values needed for processing
-    function previewWithdrawalRoute(
-        address controller,
-        uint256 shares
-    )
-        public
-        view
-        returns (ProcessRedeemRequestCache memory cachedRoute)
-    {
-        if (shares == 0) {
-            shares = pendingRedeemRequest(controller);
-        }
-        cachedRoute.assets = convertToAssets(shares);
-        cachedRoute.totalIdle = _totalIdle;
-        cachedRoute.totalDebt = _totalDebt;
-        cachedRoute.totalAssets = totalAssets();
-
-        // Cannot process more assets than the available
-        if (cachedRoute.assets > totalWithdrawableAssets()) {
-            revert InsufficientAvailableAssets();
-        }
-
-        // If totalIdle can covers the amount fulfill directly
-        if (cachedRoute.totalIdle >= cachedRoute.assets) {
-            cachedRoute.sharesFulfilled = shares;
-            cachedRoute.totalClaimableWithdraw = cachedRoute.assets;
-        }
-        // Otherwise perform Superform withdrawals
-        else {
-            // Cache amount to withdraw before reducing totalIdle
-            cachedRoute.amountToWithdraw = cachedRoute.assets - cachedRoute.totalIdle;
-            // Use totalIdle to fulfill the request
-            if (cachedRoute.totalIdle > 0) {
-                cachedRoute.totalClaimableWithdraw = cachedRoute.totalIdle;
-                cachedRoute.sharesFulfilled = _convertToShares(cachedRoute.totalIdle, cachedRoute.totalAssets);
-            }
-            ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
-            _prepareWithdrawalRoute(cachedRoute);
-        }
-        return cachedRoute;
-    }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       PRIVATE FUNCTIONS                    */
@@ -141,7 +56,7 @@ contract ERC7540EngineReader is ModuleBase {
     /// Note: First it will try to fulfill the request with idle assets, after that it will
     /// loop through the withdrawal queue and compute the destination chains and vaults on each
     /// destionation chain, plus the shaes to redeem on each vault
-    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) private view {
+    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) internal view {
         // Use the local vaults first
         _exhaustWithdrawalQueue(cache, localWithdrawalQueue, false);
         // Use the crosschain vaults after
@@ -180,7 +95,7 @@ contract ERC7540EngineReader is ModuleBase {
         uint256[WITHDRAWAL_QUEUE_SIZE] memory queue,
         bool resetValues
     )
-        private
+        internal
         view
     {
         // Cache how many chains we need and how many vaults in each chain
@@ -238,17 +153,31 @@ contract ERC7540EngineReader is ModuleBase {
             if (vault.chainId != THIS_CHAIN_ID) {
                 uint256 numberOfVaults = cache.lens[chainIndex];
                 if (numberOfVaults != 0) {
-                    if (!cache.isSingleChain) {
+                    if (!cache.isSingleChain && !cache.isMultiChain) {
+                        // First external chain encountered
                         cache.isSingleChain = true;
-                    }
-
+                    } 
                     if (cache.isSingleChain && !cache.isMultiChain) {
-                        cache.isMultiChain = true;
+                        // Check if this vault is from a different chain than the first one
+                        uint256 firstChainId;
+                        // Find the first external chain ID
+                        for (uint256 j = 0; j < N_CHAINS; j++) {
+                            if (cache.lens[j] > 0 && j != chainIndexes[THIS_CHAIN_ID]) {
+                                firstChainId = j;
+                                break;
+                            }
+                        }
+                        // If this vault is from a different chain than the first one, it's multi-chain
+                        if (chainIndex != firstChainId) {
+                            cache.isSingleChain = false;
+                            cache.isMultiChain = true;
+                        }
                     }
 
-                    if (numberOfVaults > 1) {
+                    // Check if there are multiple vaults in this chain
+                    if (numberOfVaults >= 1) {
                         cache.isMultiVault = true;
-                    }
+                    } 
                 }
             }
 
@@ -257,12 +186,5 @@ contract ERC7540EngineReader is ModuleBase {
                 cache.lens[chainIndex]++;
             }
         }
-    }
-
-    /// @dev Helper function to fetch module function selectors
-    function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](1);
-        s[1] = this.previewWithdrawalRoute.selector;
-        return s;
     }
 }

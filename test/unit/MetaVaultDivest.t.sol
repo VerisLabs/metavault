@@ -557,11 +557,11 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 expectedDivestedValue1 = lastSharePrice * shares_usdc / 10 ** 6;
         uint256 expectedDivestedValue2 = lastSharePrice2 * shares_usdcA / 10 ** 6;
 
-        console2.log("expectedDivestedValue1: " , expectedDivestedValue1);
-        console2.log("expectedDivestedValue2: " , expectedDivestedValue2);
+        console2.log("expectedDivestedValue1: ", expectedDivestedValue1);
+        console2.log("expectedDivestedValue2: ", expectedDivestedValue2);
 
         uint256 totalExpectedDivestedValue = expectedDivestedValue1 + expectedDivestedValue2;
-        console2.log("totalExpectedDivestedValue: " , totalExpectedDivestedValue);
+        console2.log("totalExpectedDivestedValue: ", totalExpectedDivestedValue);
 
         divestReq.superformsData.outputAmounts[0] = expectedDivestedValue1; // EXACTLY
         divestReq.superformsData.outputAmounts[1] = expectedDivestedValue2; // ALOE
@@ -812,7 +812,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         // //Execute divest
         vm.expectEmit(true, true, true, true);
-        emit Divest(1_199_999_284);
+        emit Divest(expectedDivestedValue);
         bytes32 multiVaultKeyWithdraw = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValueWithdraw = multiChainWithdrawValues[multiVaultKeyWithdraw];
 
