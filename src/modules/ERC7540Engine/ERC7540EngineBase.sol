@@ -41,6 +41,8 @@ contract ERC7540EngineBase is ModuleBase {
         uint256 totalDebt;
         // Convert shares to assets at current price
         uint256 assets;
+        // Useful cache value for multichain withdrawals
+        uint256 lastIndex;
         // Whether is a single or multivault withdrawal
         bool isSingleChain;
         bool isMultiChain;

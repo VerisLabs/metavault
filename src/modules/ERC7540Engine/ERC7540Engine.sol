@@ -382,23 +382,25 @@ contract ERC7540Engine is ERC7540EngineBase {
                     }
                     uint256[] memory totalDebtReductions = new uint256[](chainsLen);
                     for (uint256 i = 0; i < N_CHAINS; i++) {
-                        totalDebtReductions[i] = cache.assetsPerVault[i][0];
-                        singleVaultDatas[i] = SingleVaultSFData({
+                        if (cache.lens[i] == 0) continue;
+                        totalDebtReductions[cache.lastIndex] = cache.assetsPerVault[i][0];
+                        singleVaultDatas[cache.lastIndex] = SingleVaultSFData({
                             superformId: cache.dstVaults[i][0],
                             amount: cache.sharesPerVault[i][0],
-                            outputAmount: config.mXsV.outputAmounts[i],
-                            maxSlippage: config.mXsV.maxSlippages[i],
-                            liqRequest: config.mXsV.liqRequests[i],
+                            outputAmount: config.mXsV.outputAmounts[cache.lastIndex],
+                            maxSlippage: config.mXsV.maxSlippages[cache.lastIndex],
+                            liqRequest: config.mXsV.liqRequests[cache.lastIndex],
                             permit2data: "",
-                            hasDstSwap: config.mXsV.hasDstSwaps[i],
+                            hasDstSwap: config.mXsV.hasDstSwaps[cache.lastIndex],
                             retain4626: false,
                             receiverAddress: config.controller,
                             receiverAddressSP: address(0),
                             extraFormData: ""
                         });
-                        ambIds[i] = config.mXsV.ambIds[i];
+                        ambIds[cache.lastIndex] = config.mXsV.ambIds[cache.lastIndex];
                         vaults[cache.dstVaults[i][0]].totalDebt =
                             _sub0(vaults[cache.dstVaults[i][0]].totalDebt, cache.assetsPerVault[i][0]).toUint128();
+                        cache.lastIndex++;
                     }
                     _liquidateMultiDstSingleVault(
                         ambIds, dstChainIds, singleVaultDatas, config.mXsV.value, totalDebtReductions
@@ -427,6 +429,7 @@ contract ERC7540Engine is ERC7540EngineBase {
                     uint256[] memory totalDebtReductions = new uint256[](chainsLen);
                     uint256[][] memory debtReductionsPerVault = new uint256[][](chainsLen);
                     for (uint256 i = 0; i < N_CHAINS; i++) {
+                        if (cache.lens[i] == 0) continue;
                         bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
                         uint256[] memory superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
                         multiVaultDatas[i] = MultiVaultSFData({
@@ -581,9 +584,7 @@ contract ERC7540Engine is ERC7540EngineBase {
     )
         private
     {
-        gateway.liquidateMultiDstSingleVault{ value: value }(
-            ambIds, dstChainIds, singleVaultDatas, totalDebtReductions, totalDebtReductions
-        );
+        gateway.liquidateMultiDstSingleVault{ value: value }(ambIds, dstChainIds, singleVaultDatas, totalDebtReductions);
     }
 
     /// @dev Initiates withdrawals from multiple vaults on multiple different chains

@@ -114,8 +114,7 @@ interface ISuperformGateway {
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         SingleVaultSFData[] memory singleVaultDatas,
-        uint256[] memory totalRequestedAssets,
-        uint256[] memory requestedAssetsPerVault
+        uint256[] memory totalRequestedAssets
     )
         external
         payable;
