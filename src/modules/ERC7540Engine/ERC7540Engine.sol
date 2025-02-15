@@ -9,6 +9,7 @@ import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 
+import "forge-std/Test.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -432,29 +433,31 @@ contract ERC7540Engine is ERC7540EngineBase {
                         if (cache.lens[i] == 0) continue;
                         bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
                         uint256[] memory superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
-                        multiVaultDatas[i] = MultiVaultSFData({
+                        multiVaultDatas[cache.lastIndex] = MultiVaultSFData({
                             superformIds: superformIds,
                             amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
-                            outputAmounts: config.mXmV.outputAmounts[i],
-                            maxSlippages: config.mXmV.maxSlippages[i],
-                            liqRequests: config.mXmV.liqRequests[i],
+                            outputAmounts: config.mXmV.outputAmounts[cache.lastIndex],
+                            maxSlippages: config.mXmV.maxSlippages[cache.lastIndex],
+                            liqRequests: config.mXmV.liqRequests[cache.lastIndex],
                             permit2data: "",
-                            hasDstSwaps: config.mXmV.hasDstSwaps[i],
+                            hasDstSwaps: config.mXmV.hasDstSwaps[cache.lastIndex],
                             retain4626s: emptyBoolArray,
                             receiverAddress: config.controller,
                             receiverAddressSP: address(0),
                             extraFormData: ""
                         });
-                        ambIds[i] = config.mXmV.ambIds[i];
-                        debtReductionsPerVault[i] = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
+                        ambIds[cache.lastIndex] = config.mXmV.ambIds[cache.lastIndex];
+                        debtReductionsPerVault[cache.lastIndex] =
+                            _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
                         for (uint256 j = 0; j < superformIds.length;) {
                             vaults[superformIds[j]].totalDebt =
                                 _sub0(vaults[superformIds[j]].totalDebt, cache.assetsPerVault[i][j]).toUint128();
-                            totalDebtReductions[i] += cache.assetsPerVault[i][j];
+                            totalDebtReductions[cache.lastIndex] += cache.assetsPerVault[i][j];
                             unchecked {
                                 ++j;
                             }
                         }
+                        cache.lastIndex++;
                     }
                     // Withdraw from multiple vaults and chains asynchronously
                     _liquidateMultiDstMultiVault(
