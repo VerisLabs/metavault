@@ -851,6 +851,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amounts[0]);
         uint256 shares3 = _previewDeposit(optimismChainId, vaultAddress_usdc_aloe_op, req.superformsData[0].amounts[1]);
 
+        vm.expectEmit(true, true, true, true);
+        emit Invest(investAmount);
+
         bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValue = multiChainMultiVaultDepositValues[multiVaultKey];
 
@@ -910,8 +913,8 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             mXmV.hasDstSwaps[i] = req2.superformsData[i].hasDstSwaps;
         }
 
-        bytes32 multiVaultKeyWithdraw = _getMultiVaultPayloadKey(superformIds, amounts);
-        uint256 nativeValueWithdraw = multiChainMultiVaultWithdrawValues[multiVaultKeyWithdraw];
+        // bytes32 multiVaultKeyWithdraw = _getMultiVaultPayloadKey(superformIds, amounts);
+        uint256 nativeValueWithdraw = multiChainMultiVaultWithdrawValues[multiVaultKey];
         mXmV.value = nativeValueWithdraw;
 
         uint256 sharePriceBefore = vault.sharePrice();
