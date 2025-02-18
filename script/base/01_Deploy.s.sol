@@ -16,7 +16,7 @@ import {
     ISuperformFactory,
     ISuperformGateway
 } from "interfaces/Lib.sol";
-import { AssetsManager, ERC7540Engine, ERC7540EngineReader } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures } from "modules/Lib.sol";
 import { MetaVault } from "src/MetaVault.sol";
 import { VaultConfig } from "types/Lib.sol";
 
@@ -26,6 +26,7 @@ contract DeployScript is Script {
     ISuperformGateway public gateway;
     ERC7540Engine public engine;
     ERC7540EngineReader public engineReader;
+    ERC7540EngineSignatures public engineSignatures;
     AssetsManager public assetManager;
 
     uint256 deployerPrivateKey;
@@ -94,6 +95,10 @@ contract DeployScript is Script {
         bytes4[] memory engineReaderSelectors = engineReader.selectors();
         vault.addFunctions(engineReaderSelectors, address(engineReader), false);
 
+        engineSignatures = new ERC7540EngineSignatures();
+        bytes4[] memory engineSignaturesSelectors = engineSignatures.selectors();
+        vault.addFunctions(engineSignaturesSelectors, address(engineSignatures), false);
+
         assetManager = new AssetsManager();
         bytes4[] memory assetManagerSelectors = assetManager.selectors();
         vault.addFunctions(assetManagerSelectors, address(assetManager), false);
@@ -106,6 +111,8 @@ contract DeployScript is Script {
         console2.log("Vault deployed at: ", address(vault));
         console2.log("Gateway deployed at: ", address(gateway));
         console2.log("Engine deployed at: ", address(engine));
+        console2.log("EngineReader deployed at: ", address(engineReader));
+        console2.log("EngineSignatures deployed at: ", address(engineSignatures));
         console2.log("AssetManager deployed at: ", address(assetManager));
         console2.log("InvestSuperform deployed at: ", address(invest));
         console2.log("DivestSuperform deployed at: ", address(divest));

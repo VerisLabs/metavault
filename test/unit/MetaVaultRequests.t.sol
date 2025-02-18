@@ -21,7 +21,7 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { AssetsManager, ERC7540Engine, ERC7540EngineReader } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures } from "modules/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
@@ -68,6 +68,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
+    ERC7540EngineSignatures engineSignatures;
     AssetsManager manager;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
@@ -84,6 +85,10 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         engine = new ERC7540Engine();
         bytes4[] memory engineSelectors = engine.selectors();
         vault.addFunctions(engineSelectors, address(engine), false);
+
+        engineSignatures = new ERC7540EngineSignatures();
+        bytes4[] memory engineSignaturesSelectors = engineSignatures.selectors();
+        vault.addFunctions(engineSignaturesSelectors, address(engineSignatures), false);
 
         ERC7540EngineReader reader = new ERC7540EngineReader();
         bytes4[] memory readerSelectors = reader.selectors();
