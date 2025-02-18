@@ -22,7 +22,6 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
 import { AssetsManager, ERC7540Engine, ERC7540EngineReader } from "modules/Lib.sol";
-
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
@@ -766,8 +765,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
     function test_MetaVault_processRedeemRequest_MultiXChainMultiVault() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
 
         address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
@@ -882,10 +882,9 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         mXmV.hasDstSwaps = new bool[][](2);
 
         MultiDstMultiVaultStateReq memory req2 = _buildDivestMultiXChainMultiVaultParams(superformIds, amounts);
-
-        req2.superformsData[0].amounts[0] = shares;
-        req2.superformsData[1].amounts[0] = shares2;
-        req2.superformsData[0].amounts[1] = shares3;
+        req2.superformsData[0].amounts[0] = shares2;
+        req2.superformsData[1].amounts[0] = shares;
+        req2.superformsData[1].amounts[1] = shares3;
 
         VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress_usdc);
         uint256 lastSharePrice = report.sharePrice;
@@ -900,10 +899,10 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         uint256 expectedDivestValuePol = lastSharePrice2 * shares2 / 10 ** 6;
         uint256 totalExpectedDivestedValue = expectedDivestValueOptimism + expectedDivestValuePol;
 
-        req2.superformsData[0].outputAmounts[0] = expectedDivestValueOptimism / 2;
-        req2.superformsData[0].outputAmounts[1] = expectedDivestValueOptimism / 2;
-        req2.superformsData[1].outputAmounts[0] = expectedDivestValuePol;
-
+        req2.superformsData[0].outputAmounts[0] = expectedDivestValuePol;
+        req2.superformsData[1].outputAmounts[0] = expectedDivestValueOptimism / 2;
+        req2.superformsData[1].outputAmounts[1] = expectedDivestValueOptimism / 2;
+        
         // Copy data from MultiDstMultiVaultStateReq to MultiXChainMultiVaultWithdraw
         for (uint256 i = 0; i < 2; i++) {
             mXmV.ambIds[i] = req2.ambIds[i];
@@ -912,11 +911,8 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             mXmV.liqRequests[i] = req2.superformsData[i].liqRequests;
             mXmV.hasDstSwaps[i] = req2.superformsData[i].hasDstSwaps;
         }
-
-        // bytes32 multiVaultKeyWithdraw = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValueWithdraw = multiChainMultiVaultWithdrawValues[multiVaultKey];
         mXmV.value = nativeValueWithdraw;
-
         uint256 sharePriceBefore = vault.sharePrice();
 
         vm.startPrank(users.alice);
@@ -929,7 +925,6 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             totalExpectedDivestedValue,
             0x8316e3102cd2e60848d5c003759d83b110bc3bf1846101cd185cfa188aa15a53
         );
-
         vault.processRedeemRequest{ value: mXmV.value }(
             ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
         );
@@ -943,8 +938,10 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         bytes32 requestId1 = gateway.getRequestsQueue()[0];
         bytes32 requestId2 = gateway.getRequestsQueue()[1];
-        deal(USDCE_BASE, gateway.getReceiver(requestId1), expectedDivestValuePol);
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOptimism);
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId1), expectedDivestValuePol + 140 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOptimism + 140 * _1_USDCE);
+
         gateway.settleLiquidation(requestId1, false);
         gateway.settleLiquidation(requestId2, false);
 

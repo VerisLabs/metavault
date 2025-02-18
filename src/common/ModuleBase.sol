@@ -55,11 +55,11 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Minimum shares threshold
     uint256 public MINIMUM_SHARES_THRESHOLD = 10;
 
-    /// @dev Maximum fee that can be set (30% = 3000 basis points)
-    uint16 constant MAX_FEE = 3000;
+    /// @dev Maximum fee that can be set (100% = 10000 basis points)
+    uint16 constant MAX_FEE = 10000;
 
-    /// @dev Maximum time that can be set (24 hours)
-    uint256 public MAX_TIME = 86_400;
+    /// @dev Maximum time that can be set (48 hours)
+    uint256 public MAX_TIME = 172800;
 
     /// @notice Nonce slot seed
     uint256 internal constant _NONCES_SLOT_SEED = 0x38377508;

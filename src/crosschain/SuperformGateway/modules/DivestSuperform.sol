@@ -5,7 +5,6 @@ import { GatewayBase } from "../common/GatewayBase.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-
 import {
     MultiDstMultiVaultStateReq,
     MultiDstSingleVaultStateReq,
@@ -286,13 +285,13 @@ contract DivestSuperform is GatewayBase {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
             uint256 totalChainAmount;
-
+            
             uint256 totalExpectedAmount;
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
-
                 // Cant invest in a vault that is not in the portfolio
                 VaultData memory vaultObj = vault.getVault(superformId);
+
                 if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
                 uint256 amount = vaultObj.convertToAssets(amounts[j], asset, true);
