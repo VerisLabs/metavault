@@ -92,14 +92,27 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         }
 
         // Hash the parameters including deadline and nonce
-        bytes32 paramsHash = keccak256(
+        bytes32 paramsHash = computeHash(params, deadline, nonce);
+
+        // Verify signature using SignatureCheckerLib
+        return SignatureCheckerLib.isValidSignatureNow(signerRelayer, paramsHash, abi.encodePacked(r, s, v));
+    }
+
+    /// @notice Computes the hash of the request parameters
+    /// @param params The request parameters
+    /// @param deadline The timestamp after which the signature is no longer valid
+    /// @param nonce The user's current nonce
+    /// @return The computed hash
+    function computeHash(ProcessRedeemRequestParams calldata params, uint256 deadline, uint256 nonce)
+        public
+        pure
+        returns (bytes32)
+    {
+        return keccak256(
             abi.encode(
                 params.controller, params.shares, params.sXsV, params.sXmV, params.mXsV, params.mXmV, deadline, nonce
             )
         );
-
-        // Verify signature using SignatureCheckerLib
-        return SignatureCheckerLib.isValidSignatureNow(signerRelayer, paramsHash, abi.encodePacked(r, s, v));
     }
 
     /// @notice Process a request with a valid relayer signature
@@ -568,9 +581,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
     /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](2);
+        bytes4[] memory s = new bytes4[](3);
         s[0] = this.processSignedRequest.selector;
         s[1] = this.verifySignature.selector;
+        s[2] = this.computeHash.selector;
         return s;
     }
 }

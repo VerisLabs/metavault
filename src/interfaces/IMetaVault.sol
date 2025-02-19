@@ -286,4 +286,9 @@ interface IMetaVault {
         external
         view
         returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);
+
+    function computeHash(ProcessRedeemRequestParams calldata params, uint256 deadline, uint256 nonce)
+        external
+        pure
+        returns (bytes32);
 }
