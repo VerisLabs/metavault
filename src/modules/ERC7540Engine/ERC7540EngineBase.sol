@@ -110,12 +110,12 @@ contract ERC7540EngineBase is ModuleBase {
                 }
                 break;
             }
-            if (resetValues) {
-                // If its fulfilled stop
-                if (cache.amountToWithdraw == 0) {
-                    break;
-                }
+    
+            // If its fulfilled stop
+            if (cache.amountToWithdraw == 0) {
+                break;
             }
+
             // Cache next vault from the withdrawal queue
             VaultData memory vault = vaults[queue[i]];
             // Calcualate the maxWithdraw of the vault
