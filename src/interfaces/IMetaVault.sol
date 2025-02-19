@@ -291,4 +291,9 @@ interface IMetaVault {
     function setDustThreshold(uint256 dustThreshold) external;
     
     function getDustThreshold() external view returns (uint256);
+    
+    function computeHash(ProcessRedeemRequestParams calldata params, uint256 deadline, uint256 nonce)
+        external
+        pure
+        returns (bytes32);
 }
