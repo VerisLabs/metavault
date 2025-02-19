@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { ERC7540EngineBase } from "./ERC7540EngineBase.sol";
+import { ERC7540EngineBase } from "./common/ERC7540EngineBase.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
@@ -53,7 +53,8 @@ contract ERC7540EngineReader is ERC7540EngineBase {
     ///         - Various cached state values needed for processing
     function previewWithdrawalRoute(
         address controller,
-        uint256 shares
+        uint256 shares,
+        bool despiseDust
     )
         public
         view
@@ -62,6 +63,8 @@ contract ERC7540EngineReader is ERC7540EngineBase {
         if (shares == 0) {
             shares = pendingRedeemRequest(controller);
         }
+
+        cachedRoute.shares = shares;
         cachedRoute.assets = convertToAssets(shares);
         cachedRoute.totalIdle = _totalIdle;
         cachedRoute.totalDebt = _totalDebt;
@@ -87,7 +90,7 @@ contract ERC7540EngineReader is ERC7540EngineBase {
                 cachedRoute.sharesFulfilled = _convertToShares(cachedRoute.totalIdle, cachedRoute.totalAssets);
             }
             ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
-            _prepareWithdrawalRoute(cachedRoute);
+            _prepareWithdrawalRoute(cachedRoute, despiseDust);
         }
         return cachedRoute;
     }

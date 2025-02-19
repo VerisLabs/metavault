@@ -41,6 +41,8 @@ contract ERC7540EngineBase is ModuleBase {
         uint256 totalDebt;
         // Convert shares to assets at current price
         uint256 assets;
+        // Cache shares to redeem
+        uint256 shares;
         // Useful cache value for multichain withdrawals
         uint256 lastIndex;
         // Whether is a single or multivault withdrawal
@@ -58,11 +60,11 @@ contract ERC7540EngineBase is ModuleBase {
     /// Note: First it will try to fulfill the request with idle assets, after that it will
     /// loop through the withdrawal queue and compute the destination chains and vaults on each
     /// destionation chain, plus the shaes to redeem on each vault
-    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache) internal view {
+    function _prepareWithdrawalRoute(ProcessRedeemRequestCache memory cache, bool despiseDust) internal view {
         // Use the local vaults first
-        _exhaustWithdrawalQueue(cache, localWithdrawalQueue, false);
+        _exhaustWithdrawalQueue(cache, localWithdrawalQueue, false, false);
         // Use the crosschain vaults after
-        _exhaustWithdrawalQueue(cache, xChainWithdrawalQueue, true);
+        _exhaustWithdrawalQueue(cache, xChainWithdrawalQueue, true, despiseDust);
     }
 
     /// @notice Internal function to process a withdrawal queue and determine optimal withdrawal routes
@@ -95,7 +97,8 @@ contract ERC7540EngineBase is ModuleBase {
     function _exhaustWithdrawalQueue(
         ProcessRedeemRequestCache memory cache,
         uint256[WITHDRAWAL_QUEUE_SIZE] memory queue,
-        bool resetValues
+        bool resetValues,
+        bool despiseDust
     )
         internal
         view
@@ -110,7 +113,16 @@ contract ERC7540EngineBase is ModuleBase {
                 }
                 break;
             }
-    
+
+            // If its crosschain and the dust threshold is reached stop
+            if (resetValues && despiseDust && cache.amountToWithdraw < getDustThreshold()) {
+                uint256 amountToWithdraw = cache.amountToWithdraw;
+                cache.amountToWithdraw = 0;
+                cache.assets -= amountToWithdraw;
+                cache.shares -= convertToShares(amountToWithdraw);
+                break;
+            }
+
             // If its fulfilled stop
             if (cache.amountToWithdraw == 0) {
                 break;
@@ -183,5 +195,20 @@ contract ERC7540EngineBase is ModuleBase {
                 cache.lens[chainIndex]++;
             }
         }
+    }
+
+    function setDustThreshold(uint256 dustThreshold) external onlyRoles(ADMIN_ROLE) {
+        assembly {
+            // 0x12722c9c27a96bb30316c23f0f0d07cf14e557649edd724d6fa31e7a8fa6ec6c = keccak256("erc7540.dust.threshold")
+            sstore(0x12722c9c27a96bb30316c23f0f0d07cf14e557649edd724d6fa31e7a8fa6ec6c, dustThreshold)
+        }
+    }
+
+    function getDustThreshold() public view returns (uint256) {
+        uint256 dustThreshold;
+        assembly {
+            dustThreshold := sload(0x12722c9c27a96bb30316c23f0f0d07cf14e557649edd724d6fa31e7a8fa6ec6c)
+        }
+        return dustThreshold;
     }
 }

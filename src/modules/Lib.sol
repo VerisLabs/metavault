@@ -2,7 +2,5 @@
 pragma solidity ^0.8.19;
 
 import { AssetsManager } from "./AssetsManager.sol";
-import { ERC7540Engine } from "./ERC7540Engine/ERC7540Engine.sol";
-import { ERC7540EngineReader } from "./ERC7540Engine/ERC7540EngineReader.sol";
-import { ERC7540EngineSignatures } from "./ERC7540Engine/ERC7540EngineSignatures.sol";
+import { ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures } from "./ERC7540Engine/Lib.sol";
 import { EmergencyAssetsManager } from "./EmergencyAssetsManager.sol";

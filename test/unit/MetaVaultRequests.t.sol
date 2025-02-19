@@ -1032,7 +1032,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
         // Preview withdrawal route
-        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute = vault.previewWithdrawalRoute(users.alice, 0, false);
         assertTrue(cachedRoute.isSingleChain);
         assertFalse(cachedRoute.isMultiChain);
         assertTrue(cachedRoute.isMultiVault);
@@ -1114,7 +1114,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
         // Preview withdrawal route
-        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0, false);
         assertFalse(cachedRoute.isSingleChain);
         assertTrue(cachedRoute.isMultiChain);
         assertFalse(cachedRoute.isMultiVault);
@@ -1212,7 +1212,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
         // Preview withdrawal route
-        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0, false);
         assertFalse(cachedRoute.isSingleChain);
         assertTrue(cachedRoute.isMultiChain);
         assertTrue(cachedRoute.isMultiVault);

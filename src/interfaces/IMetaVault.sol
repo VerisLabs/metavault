@@ -281,9 +281,14 @@ interface IMetaVault {
 
     function previewWithdrawalRoute(
         address controller,
-        uint256 shares
+        uint256 shares,
+        bool despiseDust
     )
         external
         view
         returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);
+
+    function setDustThreshold(uint256 dustThreshold) external;
+    
+    function getDustThreshold() external view returns (uint256);
 }
