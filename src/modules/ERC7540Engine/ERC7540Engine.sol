@@ -93,7 +93,6 @@ contract ERC7540Engine is ERC7540EngineBase {
         // The user can later claim these assets using `redeem` or `withdraw`
     }
 
-
     /// @notice Fulfills a settled cross-chain redemption request
     /// @dev Called by the gateway contract when cross-chain assets have been received.
     /// Converts the requested assets to shares and fulfills the redemption request.

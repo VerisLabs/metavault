@@ -907,7 +907,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         req2.superformsData[0].outputAmounts[0] = expectedDivestValuePol;
         req2.superformsData[1].outputAmounts[0] = expectedDivestValueOptimism / 2;
         req2.superformsData[1].outputAmounts[1] = expectedDivestValueOptimism / 2;
-        
+
         // Copy data from MultiDstMultiVaultStateReq to MultiXChainMultiVaultWithdraw
         for (uint256 i = 0; i < 2; i++) {
             mXmV.ambIds[i] = req2.ambIds[i];

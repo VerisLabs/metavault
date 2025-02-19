@@ -285,7 +285,7 @@ contract DivestSuperform is GatewayBase {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
             uint256 totalChainAmount;
-            
+
             uint256 totalExpectedAmount;
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];

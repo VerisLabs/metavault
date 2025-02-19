@@ -365,7 +365,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_MetaVault_setSharesLockTime() public {
-        uint24 newLockTime = 152700; // 12 hours
+        uint24 newLockTime = 152_700; // 12 hours
 
         vm.expectEmit(true, true, true, true);
         emit SetSharesLockTime(newLockTime);
@@ -375,7 +375,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     }
 
     function test_revert_MetaVault_setSharesLockTime_exceedsMax() public {
-        uint24 invalidTime = 182700;
+        uint24 invalidTime = 182_700;
 
         vm.startPrank(users.alice);
 
@@ -404,7 +404,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_revert_MetaVault_setManagementFee_exceedsMax() public {
         vm.startPrank(users.alice);
 
-        uint16 tooHighFee = 10001; // 100.01%
+        uint16 tooHighFee = 10_001; // 100.01%
 
         vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
         vault.setManagementFee(tooHighFee);
@@ -975,7 +975,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_revert_MetaVault_setPerformanceFee_exceedsMax() public {
         vm.startPrank(users.alice);
 
-        uint16 tooHighFee = 10001; // MAX_FEE is 3000 (30%)
+        uint16 tooHighFee = 10_001; // MAX_FEE is 3000 (30%)
 
         vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
         vault.setPerformanceFee(tooHighFee);
@@ -988,7 +988,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     function test_revert_MetaVault_setOracleFee_exceedsMax() public {
         vm.startPrank(users.alice);
 
-        uint16 tooHighFee = 10001; // MAX_FEE is 3000 (30%)
+        uint16 tooHighFee = 10_001; // MAX_FEE is 3000 (30%)
 
         vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
         vault.setOracleFee(tooHighFee);

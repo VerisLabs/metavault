@@ -62,7 +62,6 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
     /// @dev Library for vault-related operations
     using VaultLib for VaultData;
 
-
     /// @notice Verifies that a signature is valid for the given request parameters
     /// @param params The request parameters to verify
     /// @param deadline The timestamp after which the signature is no longer valid
@@ -78,7 +77,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         bytes32 r,
         bytes32 s
     )
-        internal
+        public
         view
         returns (bool)
     {
@@ -148,20 +147,6 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
                 params.mXmV
             )
         );
-    }
-
-    /// @notice Fulfills a settled cross-chain redemption request
-    /// @dev Called by the gateway contract when cross-chain assets have been received.
-    /// Converts the requested assets to shares and fulfills the redemption request.
-    /// Only callable by the gateway contract.
-    /// @param controller The address that initiated the redemption request
-    /// @param requestedAssets The original amount of assets requested
-    /// @param fulfilledAssets The actual amount of assets received after bridging
-    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 fulfilledAssets) public {
-        if (msg.sender != address(gateway)) revert Unauthorized();
-        uint256 shares = convertToShares(requestedAssets);
-        _fulfillRedeemRequest(shares, fulfilledAssets, controller);
-        emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -583,8 +568,9 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
     /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](1);
+        bytes4[] memory s = new bytes4[](2);
         s[0] = this.processSignedRequest.selector;
+        s[1] = this.verifySignature.selector;
         return s;
     }
 }
