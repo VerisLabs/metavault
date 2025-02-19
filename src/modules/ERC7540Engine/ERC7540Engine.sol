@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { ERC7540EngineBase } from "./ERC7540EngineBase.sol";
+import { ERC7540EngineBase } from "./common/ERC7540EngineBase.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
@@ -153,7 +153,7 @@ contract ERC7540Engine is ERC7540EngineBase {
                 cache.sharesFulfilled = _convertToShares(cache.totalIdle, cache.totalAssets);
             }
             ///////////////////////////////// PREVIOUS CALCULATIONS ////////////////////////////////
-            _prepareWithdrawalRoute(cache);
+            _prepareWithdrawalRoute(cache, false);
             //////////////////////////////// WITHDRAW FROM THIS CHAIN ////////////////////////////////
             // Cache chain index
             uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
@@ -526,9 +526,11 @@ contract ERC7540Engine is ERC7540EngineBase {
 
     /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](2);
+        bytes4[] memory s = new bytes4[](4);
         s[0] = this.processRedeemRequest.selector;
         s[1] = this.fulfillSettledRequest.selector;
+        s[2] = this.setDustThreshold.selector;
+        s[3] = this.getDustThreshold.selector;
         return s;
     }
 }

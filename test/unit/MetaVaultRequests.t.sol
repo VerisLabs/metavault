@@ -1032,7 +1032,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
         // Preview withdrawal route
-        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute = vault.previewWithdrawalRoute(users.alice, 0, false);
         assertTrue(cachedRoute.isSingleChain);
         assertFalse(cachedRoute.isMultiChain);
         assertTrue(cachedRoute.isMultiVault);
@@ -1114,7 +1114,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
         // Preview withdrawal route
-        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0, false);
         assertFalse(cachedRoute.isSingleChain);
         assertTrue(cachedRoute.isMultiChain);
         assertFalse(cachedRoute.isMultiVault);
@@ -1212,9 +1212,79 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
         // Preview withdrawal route
-        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0);
+        cachedRoute = vault.previewWithdrawalRoute(users.alice, 0, false);
         assertFalse(cachedRoute.isSingleChain);
         assertTrue(cachedRoute.isMultiChain);
         assertTrue(cachedRoute.isMultiVault);
+    }
+
+    function test_previewWithdrawalRoute_despiseDust() public {
+          MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
+        vault.addVault({
+            chainId: baseChainId,
+            superformId: 1,
+            vault: address(yUsdce),
+            vaultDecimals: yUsdce.decimals(),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+        _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
+
+        vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
+
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint32 optimismChainId = 10;
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        uint256 investAmount = 600 * _1_USDCE;
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+
+        req.superformData.amount = investAmount; // the API sets the amount slightly higher
+
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, shares);
+
+        vm.startPrank(users.alice);
+
+        vault.setSharesLockTime(0);
+
+        uint256 dustThreshold = 10 * _1_USDCE;
+        uint256 dust = _1_USDCE;
+
+        vault.setDustThreshold(dustThreshold);
+
+        shares = vault.convertToShares(vault.totalLocalAssets() +  dust);
+
+        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute = vault.previewWithdrawalRoute(users.alice, shares, true);
+        assertFalse(cachedRoute.isSingleChain);
+        assertFalse(cachedRoute.isMultiChain);
+        assertFalse(cachedRoute.isMultiVault);
+
+        assertLt(cachedRoute.shares, shares);
+        assertLt(cachedRoute.assets, vault.totalLocalAssets() + dust);
     }
 }
