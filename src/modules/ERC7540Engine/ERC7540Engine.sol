@@ -47,11 +47,17 @@ contract ERC7540Engine is ERC7540EngineBase {
     /// @notice Thrown when there are not enough assets to fulfill a request
     error InsufficientAssets();
 
+    /// @notice Thrown when shares requested are greater than pending redeem request
+    error ExcessiveSharesRequested();
+
+    /// @notice Thrown when assets were not liquidated
+    error AssetsNotLiquidated();
+
     /// @dev Emitted when a redeem request is processed
     event ProcessRedeemRequest(address indexed controller, uint256 shares);
 
     /// @dev Emitted when a redeem request is fulfilled after being processed
-    event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
+    event FulfillSettledRequest(address indexed controller, uint256 shares, uint256 assets);
 
     /// @dev Safe casting operations for uint
     using SafeCastLib for uint256;
@@ -104,7 +110,7 @@ contract ERC7540Engine is ERC7540EngineBase {
         if (msg.sender != address(gateway)) revert Unauthorized();
         uint256 shares = convertToShares(requestedAssets);
         _fulfillRedeemRequest(shares, fulfilledAssets, controller);
-        emit FulfillRedeemRequest(controller, shares, fulfilledAssets);
+        emit FulfillSettledRequest(controller, shares, fulfilledAssets);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -130,6 +136,11 @@ contract ERC7540Engine is ERC7540EngineBase {
         cache.totalIdle = _totalIdle;
         cache.totalDebt = _totalDebt;
         config.shares = Math.min(balanceOf(address(this)), config.shares);
+
+        // Custom error check for shares greater than pending redeem request
+        uint256 pendingShares = pendingRedeemRequest(config.controller);
+        if (config.shares > pendingShares) revert ExcessiveSharesRequested();
+
         cache.assets = convertToAssets(config.shares);
         cache.totalAssets = totalAssets();
 
@@ -388,6 +399,9 @@ contract ERC7540Engine is ERC7540EngineBase {
         _totalIdle = cache.totalIdle.toUint128();
         _totalIdle -= cache.totalClaimableWithdraw.toUint128();
         _totalDebt = cache.totalDebt.toUint128();
+
+        // Check that totalAssets was actually reduced by the amount to withdraw
+        if (totalAssets() > cache.totalAssets - cache.amountToWithdraw) revert AssetsNotLiquidated();
 
         emit ProcessRedeemRequest(config.controller, config.shares);
         // Burn all shares from this contract(they already have been transferred)
