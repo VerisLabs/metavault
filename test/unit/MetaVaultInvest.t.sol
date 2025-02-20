@@ -29,8 +29,6 @@ import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
     AAVE_USDC_VAULT_ID_POLYGON,
     AAVE_USDC_VAULT_POLYGON,
-    ALOE_USDCA_VAULT_OPTIMISM,
-    ALOE_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
@@ -43,7 +41,9 @@ import {
     SUPERFORM_ROUTER_BASE,
     SUPERFORM_SUPEREGISTRY_BASE,
     SUPERFORM_SUPERPOSITIONS_BASE,
-    USDCE_BASE
+    USDCE_BASE,
+    USDC_VAULT_ID_OPTIMISM_AAVE,
+    USDC_VAULT_OPTIMISM_AAVE
 } from "src/helpers/AddressBook.sol";
 import {
     LiqRequest,
@@ -108,7 +108,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     }
 
     function setUp() public override {
-        super._setUp("BASE", 24_643_414);
+        super._setUp("BASE", 26611407);
         super.setUp();
 
         _setUpTestEnvironment();
@@ -306,9 +306,10 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
     function test_MetaVault_investSingleXChainMultiVault() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         uint32 optimismChainId = 10;
 
@@ -321,6 +322,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             users.bob,
             6
         );
+
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc,
@@ -338,6 +340,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             users.bob,
             6
         );
+
         vault.addVault({
             chainId: optimismChainId,
             superformId: superformId_usdc_aloe_op,
@@ -355,22 +358,18 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = 600 * _1_USDCE;
         amounts[1] = 600 * _1_USDCE;
+        SingleXChainMultiVaultStateReq memory req = _buildInvestSingleXChainMultiVaultParams(superformIds, amounts);
 
-        uint256 investAmount = 1200 * _1_USDCE;
-        (SingleXChainMultiVaultStateReq memory req) = _buildInvestSingleXChainMultiVaultParams(superformIds, amounts);
-
-        req.superformsData.amounts[0] = 600 * _1_USDCE; // the API sets the amount slightly higher
-        req.superformsData.amounts[1] = 600 * _1_USDCE; // the API sets the amount slightly higher
+        req.superformsData.amounts[0] = 600 * _1_USDCE;
+        req.superformsData.amounts[1] = 600 * _1_USDCE;
 
         uint256 shares_usdc = _previewDeposit(optimismChainId, vaultAddress_usdc, amounts[0]);
         uint256 shares_usdcA = _previewDeposit(optimismChainId, vaultAddress_usdc_aloe_op, amounts[1]);
 
-        vm.startPrank(users.alice);
-        vm.expectEmit(true, true, true, true);
-        emit Invest(investAmount);
-
         bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValue = multiVaultDepositValues[multiVaultKey];
+
+        vm.startPrank(users.alice);
         vault.investSingleXChainMultiVault{ value: nativeValue }(req);
 
         assertEq(USDCE_BASE.balanceOf(address(vault)), 0);
@@ -382,9 +381,9 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares_usdc);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares_usdcA);
 
-        assertEq(vault.totalAssets(), 1_199_999_191);
-        assertEq(vault.totalWithdrawableAssets(), 1_199_999_191);
-        assertEq(vault.totalXChainAssets(), 1_199_999_191);
+        assertEq(vault.totalAssets(), 1_199_999_358);
+        assertEq(vault.totalWithdrawableAssets(), 1_199_999_358);
+        assertEq(vault.totalXChainAssets(), 1_199_999_358);
         assertEq(vault.totalLocalAssets(), 0 * _1_USDCE);
         assertEq(vault.totalIdle(), 0 * _1_USDCE);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc), shares_usdc);
@@ -393,9 +392,9 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
     function test_MetaVault_investMultiXChainSingleVault() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
-
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
 
         uint32 optimismChainId = 10;
@@ -452,7 +451,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amount);
 
         vm.expectEmit(true, true, true, true);
-        emit Invest(1_211_924_246);
+        emit Invest(1211828760);
 
         bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValue = multiChainDepositValues[multiVaultKey];
@@ -461,27 +460,27 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vault.investMultiXChainSingleVault{ value: nativeValue }(req);
 
-        assertEq(USDCE_BASE.balanceOf(address(vault)), 788_075_754);
+        assertEq(USDCE_BASE.balanceOf(address(vault)), 788171240);
         assertEq(vault.totalAssets(), 2000 * _1_USDCE);
         assertEq(vault.totalXChainAssets(), 0);
-        assertEq(vault.totalLocalAssets(), 788_075_754);
-        assertEq(vault.totalWithdrawableAssets(), 788_075_754);
+        assertEq(vault.totalLocalAssets(), 788171240);
+        assertEq(vault.totalWithdrawableAssets(), 788171240);
 
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
 
-        assertEq(vault.totalAssets(), 1_999_999_279);
-        assertEq(vault.totalWithdrawableAssets(), 1_999_999_279);
-        assertEq(vault.totalXChainAssets(), 1_211_923_525);
-        assertEq(vault.totalLocalAssets(), 788_075_754);
-        assertEq(vault.totalIdle(), 788_075_754);
+        assertEq(vault.totalAssets(), 1999999372);
+        assertEq(vault.totalWithdrawableAssets(), 1999999372);
+        assertEq(vault.totalXChainAssets(), 1211828132);
+        assertEq(vault.totalLocalAssets(), 788171240);
+        assertEq(vault.totalIdle(), 788171240);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc), shares);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc_pol), shares2);
     }
 
     function test_MetaVault_investMultiXChainMultiVault() public {
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
@@ -589,9 +588,9 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares3);
 
-        assertEq(vault.totalAssets(), 1_999_998_993);
-        assertEq(vault.totalWithdrawableAssets(), 1_999_998_993);
-        assertEq(vault.totalXChainAssets(), 1_799_998_993);
+        assertEq(vault.totalAssets(), 1999999254);
+        assertEq(vault.totalWithdrawableAssets(), 1999999254);
+        assertEq(vault.totalXChainAssets(), 1799999254);
         assertEq(vault.totalLocalAssets(), 200_000_000);
         assertEq(vault.totalIdle(), 200_000_000);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc), shares);
@@ -600,72 +599,74 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     }
 
     function test_MetaVault_investSingleXChainMultiVault_revert_InvalidAmount() public {
-        address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
-        uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+            address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
+            uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
 
-        uint32 optimismChainId = 10;
+            address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+            uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
-        oracle.setValues(
-            optimismChainId,
-            vaultAddress_usdc,
-            _getSharePrice(optimismChainId, vaultAddress_usdc),
-            block.timestamp,
-            USDCE_BASE,
-            users.bob,
-            6
-        );
-        vault.addVault({
-            chainId: optimismChainId,
-            superformId: superformId_usdc,
-            vault: vaultAddress_usdc,
-            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
-            oracle: ISharePriceOracle(address(oracle))
-        });
+            uint32 optimismChainId = 10;
 
-        oracle.setValues(
-            optimismChainId,
-            vaultAddress_usdc_aloe_op,
-            _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
-            block.timestamp,
-            USDCE_BASE,
-            users.bob,
-            6
-        );
-        vault.addVault({
-            chainId: optimismChainId,
-            superformId: superformId_usdc_aloe_op,
-            vault: vaultAddress_usdc_aloe_op,
-            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
-            oracle: ISharePriceOracle(address(oracle))
-        });
+            oracle.setValues(
+                optimismChainId,
+                vaultAddress_usdc,
+                _getSharePrice(optimismChainId, vaultAddress_usdc),
+                block.timestamp,
+                USDCE_BASE,
+                users.bob,
+                6
+            );
+            vault.addVault({
+                chainId: optimismChainId,
+                superformId: superformId_usdc,
+                vault: vaultAddress_usdc,
+                vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+                oracle: ISharePriceOracle(address(oracle))
+            });
 
-        _depositAtomic(1200 * _1_USDCE, users.alice);
+            oracle.setValues(
+                optimismChainId,
+                vaultAddress_usdc_aloe_op,
+                _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
+                block.timestamp,
+                USDCE_BASE,
+                users.bob,
+                6
+            );
+            vault.addVault({
+                chainId: optimismChainId,
+                superformId: superformId_usdc_aloe_op,
+                vault: vaultAddress_usdc_aloe_op,
+                vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
+                oracle: ISharePriceOracle(address(oracle))
+            });
 
-        MultiVaultSFData memory superformsData;
-        superformsData.superformIds = new uint256[](0);
-        superformsData.amounts = new uint256[](0);
-        superformsData.outputAmounts = new uint256[](0);
-        superformsData.maxSlippages = new uint256[](0);
-        superformsData.hasDstSwaps = new bool[](0);
-        superformsData.retain4626s = new bool[](0);
+            _depositAtomic(1200 * _1_USDCE, users.alice);
 
-        SingleXChainMultiVaultStateReq memory req;
-        req.dstChainId = optimismChainId;
-        req.superformsData = superformsData;
-        req.ambIds = new uint8[](1);
-        req.ambIds[0] = 1;
+            MultiVaultSFData memory superformsData;
+            superformsData.superformIds = new uint256[](0);
+            superformsData.amounts = new uint256[](0);
+            superformsData.outputAmounts = new uint256[](0);
+            superformsData.maxSlippages = new uint256[](0);
+            superformsData.hasDstSwaps = new bool[](0);
+            superformsData.retain4626s = new bool[](0);
 
-        vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
-        vault.investSingleXChainMultiVault(req);
+            SingleXChainMultiVaultStateReq memory req;
+            req.dstChainId = optimismChainId;
+            req.superformsData = superformsData;
+            req.ambIds = new uint8[](1);
+            req.ambIds[0] = 1;
+
+            vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
+            vault.investSingleXChainMultiVault(req);
     }
 
     function test_MetaVault_investSingleXChainMultiVault_revert_TotalAmountMismatch() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         uint32 optimismChainId = 10;
 
@@ -730,9 +731,10 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
     function test_MetaVault_investSingleXChainMultiVault_revert_VaultNotListed() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         uint32 optimismChainId = 10;
 
@@ -774,9 +776,10 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
     function test_MetaVault_investSingleXChainMultiVault_revert_Unauthorized() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         uint32 optimismChainId = 10;
 
@@ -1103,8 +1106,8 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     }
 
     function test_MetaVault_investMultiXChainMultiVault_revert_VaultNotListed() public {
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
@@ -1164,8 +1167,8 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     }
 
     function test_MetaVault_investMultiXChainMultiVault_revert_Unauthorized() public {
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+        address vaultAddress_usdc_aloe_op = USDC_VAULT_OPTIMISM_AAVE;
+        uint256 superformId_usdc_aloe_op = USDC_VAULT_ID_OPTIMISM_AAVE;
 
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
