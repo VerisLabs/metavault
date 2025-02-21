@@ -26,4 +26,9 @@ interface IERC1155A {
         external;
 
     function allowance(address owner, address operator, uint256 id) external returns (uint256);
+
+    function mint(address to, uint256 id, uint256 value, bytes calldata data) external;
+
+    function mintSingle(address receiverAddressSP_, uint256 id_ , uint256 amount_) external;
+
 }

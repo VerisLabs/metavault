@@ -2,19 +2,29 @@
 pragma solidity ^0.8.19;
 
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
-
+import { IERC20 } from "@openzeppelin-contracts-5.1.0/token/ERC20/IERC20.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import {IERC1271} from "@openzeppelin-contracts-5.1.0/interfaces/IERC1271.sol";
+import {ECDSA} from "@openzeppelin-contracts-5.1.0/utils/cryptography/ECDSA.sol";
+
+import {console2} from "forge-std/console2.sol";
 
 /// @title SuperPositionsReceiver
 /// @notice A cross-chain recovery contract for failed SuperPosition investments
 /// @dev This contract must be deployed with identical addresses across all chains to handle failed cross-chain
 /// operations.
 ///      It serves as a safety mechanism in the Superform protocol to recover stuck assets from failed investments.
-contract SuperPositionsReceiver is OwnableRoles {
+contract SuperPositionsReceiver is OwnableRoles, IERC1271 {
     using SafeTransferLib for address;
+    using ECDSA for bytes32;
+
 
     error SourceChainRecoveryNotAllowed();
+
+    error ZeroAddress();
+
+    event TokenApproval(address indexed token, address indexed spender, uint256 amount);
 
     /// @notice Role identifier for admin privileges
     /// @dev Admins can manage contract configuration and roles
@@ -36,6 +46,11 @@ contract SuperPositionsReceiver is OwnableRoles {
     /// @dev Contract that manages the SuperPosition tokens
     address public superPositions;
 
+    address public backendSigner;
+    bytes4 public constant MAGIC_VALUE = 0x1626ba7e;
+    bytes4 public constant INVALID_SIGNATURE = 0xffffffff;
+
+
     /// @notice Initializes the receiver with source chain and contract addresses
     /// @dev Sets up the contract with necessary addresses and grants initial admin roles
     /// @param _sourceChain The chain ID where the original gateway is deployed
@@ -52,6 +67,12 @@ contract SuperPositionsReceiver is OwnableRoles {
 
     function setGateway(address _gateway) external onlyRoles(ADMIN_ROLE) {
         gateway = _gateway;
+    }
+
+    function setBackendSigner(address _backendSigner) external onlyOwner() {
+        if (_backendSigner == address(0)) revert ZeroAddress();
+        console2.log("### ~ setBackendSigner ~ _backendSigner:", _backendSigner);
+        backendSigner = _backendSigner;
     }
 
     /// @notice Recovers stuck tokens from failed cross-chain operations
@@ -127,5 +148,32 @@ contract SuperPositionsReceiver is OwnableRoles {
             onERC1155Received(address(0), from, superformIds[i], values[i], "");
         }
         return this.onERC1155BatchReceived.selector;
+    }
+
+
+    // ERC1271 signature verification
+    function isValidSignature(bytes32 hash, bytes memory signature)
+        external
+        view
+        override
+        returns (bytes4 magicValue)
+    {
+        // Recover signer from signature
+        address signer = hash.recover(signature);
+        
+        // Check if signer is authorized (in this case, the owner)
+        if (signer == backendSigner) {
+            // Return magic value for valid signature
+            return MAGIC_VALUE;
+        }
+        
+        return INVALID_SIGNATURE;
+    }
+
+    // Token approval function for ERC20 swaps
+    function approveToken(address token, address spender, uint256 amount) external onlyOwner{
+        if (token == address(0) || spender == address(0)) revert ZeroAddress();
+        IERC20(token).approve(spender, amount);
+        emit TokenApproval(token, spender, amount);
     }
 }
