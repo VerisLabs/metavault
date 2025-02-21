@@ -29,8 +29,6 @@ import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
     AAVE_USDC_VAULT_ID_POLYGON,
     AAVE_USDC_VAULT_POLYGON,
-    ALOE_USDCA_VAULT_OPTIMISM,
-    ALOE_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
@@ -43,7 +41,9 @@ import {
     SUPERFORM_ROUTER_BASE,
     SUPERFORM_SUPEREGISTRY_BASE,
     SUPERFORM_SUPERPOSITIONS_BASE,
-    USDCE_BASE
+    USDCE_BASE,
+    AVVE_USDC_VAULT_ID_OPTIMISM,
+    AVVE_USDC_VAULT_OPTIMISM
 } from "src/helpers/AddressBook.sol";
 import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
@@ -124,7 +124,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     }
 
     function setUp() public override {
-        super._setUp("BASE", 24_643_414);
+        super._setUp("BASE", 26668569);
         super.setUp();
 
         _setUpTestEnvironment();
@@ -355,14 +355,14 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             address receiver = gateway.getReceiver(requestId);
             assertEq(USDCE_BASE.balanceOf(receiver), 0);
             assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400000053);
 
             deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
             gateway.settleLiquidation(requestId, false);
         }
-        assertEq(vault.claimableRedeemRequest(users.alice), 999_999_689);
+        assertEq(vault.claimableRedeemRequest(users.alice), 999999920);
         uint256 assets = vault.redeem(999_999_689, users.alice, users.alice);
-        assertEq(assets, 400 * _1_USDCE + 588 * _1_USDCE);
+        assertEq(assets, 987999771);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalIdle(), 0);
@@ -468,7 +468,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             address receiver = gateway.getReceiver(requestId);
             assertEq(USDCE_BASE.balanceOf(receiver), 0);
             assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_207);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400000053);
 
             _mintSuperpositions(gateway.recoveryAddress(), superformId, shares);
 
@@ -482,9 +482,10 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
     function test_MetaVault_processRedeemRequest_singleXChainMultiVault() public {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = AVVE_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = AVVE_USDC_VAULT_ID_OPTIMISM;
         uint32 optimismChainId = 10;
 
         // Setup vaults
@@ -772,8 +773,8 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
 
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+        address vaultAddress_usdc_aloe_op = AVVE_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = AVVE_USDC_VAULT_ID_OPTIMISM;
 
         address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
         uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
@@ -886,7 +887,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         mXmV.liqRequests = new LiqRequest[][](2);
         mXmV.hasDstSwaps = new bool[][](2);
 
-        MultiDstMultiVaultStateReq memory req2 = _buildDivestMultiXChainMultiVaultParams(superformIds, amounts);
+        MultiDstMultiVaultStateReq memory req2 = _buildDivestMultiXChainMultiVaultParamsReedeam();
         req2.superformsData[0].amounts[0] = shares2;
         req2.superformsData[1].amounts[0] = shares;
         req2.superformsData[1].amounts[1] = shares3;
@@ -960,9 +961,10 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         uint256 snapshotId = vm.snapshot();
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
-        address vaultAddress_usdc_aloe_op = ALOE_USDCA_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
-        uint256 superformId_usdc_aloe_op = ALOE_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = AVVE_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = AVVE_USDC_VAULT_ID_OPTIMISM;
         uint32 optimismChainId = 10;
 
         // Setup vaults

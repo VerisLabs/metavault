@@ -44,7 +44,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     ERC7540Engine engine;
 
     function setUp() public {
-        super._setUp("POLYGON", 61_032_901);
+        super._setUp("POLYGON", 68186888);
         superPositions = ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON);
         vaultRouter = ISuperformRouter(SUPERFORM_ROUTER_POLYGON);
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
