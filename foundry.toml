@@ -6,6 +6,7 @@ gas_reports = ['*']
 evm_version =  "paris"
 via_ir = true
 solc_version = "0.8.26"
+optimizer = false
 
 [profile.fork]
 evm_version =  "shanghai" # we use shanghai because we are using multiple chains in our tests
