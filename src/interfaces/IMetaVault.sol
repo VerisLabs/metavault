@@ -1,28 +1,10 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { ISharePriceOracle } from "./ISharePriceOracle.sol";
+import {ISharePriceOracle} from "./ISharePriceOracle.sol";
 
-import { ERC7540Engine } from "modules/Lib.sol";
-import {
-    LiqRequest,
-    MultiDstMultiVaultStateReq,
-    MultiDstSingleVaultStateReq,
-    MultiVaultSFData,
-    MultiXChainMultiVaultWithdraw,
-    MultiXChainSingleVaultWithdraw,
-    ProcessRedeemRequestParams,
-    SingleDirectMultiVaultStateReq,
-    SingleDirectSingleVaultStateReq,
-    SingleVaultSFData,
-    SingleXChainMultiVaultStateReq,
-    SingleXChainMultiVaultWithdraw,
-    SingleXChainSingleVaultStateReq,
-    SingleXChainSingleVaultWithdraw,
-    VaultConfig,
-    VaultData,
-    VaultLib
-} from "types/Lib.sol";
+import {ERC7540Engine} from "modules/Lib.sol";
+import {LiqRequest, MultiDstMultiVaultStateReq, MultiDstSingleVaultStateReq, MultiVaultSFData, MultiXChainMultiVaultWithdraw, MultiXChainSingleVaultWithdraw, ProcessRedeemRequestParams, SingleDirectMultiVaultStateReq, SingleDirectSingleVaultStateReq, SingleVaultSFData, SingleXChainMultiVaultStateReq, SingleXChainMultiVaultWithdraw, SingleXChainSingleVaultStateReq, SingleXChainSingleVaultWithdraw, VaultConfig, VaultData, VaultLib} from "types/Lib.sol";
 
 interface IMetaVault {
     function WITHDRAWAL_QUEUE_SIZE() external view returns (uint256);
@@ -85,7 +67,10 @@ interface IMetaVault {
 
     function convertToShares(uint256) external view returns (uint256);
 
-    function convertToSuperPositions(uint256 superformId, uint256 assets) external view returns (uint256);
+    function convertToSuperPositions(
+        uint256 superformId,
+        uint256 assets
+    ) external view returns (uint256);
 
     function totalWithdrawableAssets() external view returns (uint256 assets);
 
@@ -119,40 +104,76 @@ interface IMetaVault {
         address vault,
         uint8 vaultDecimals,
         ISharePriceOracle oracle
-    )
-        external;
+    ) external;
 
     function removeVault(uint256 superformId) external;
 
-    function rearrangeWithdrawalQueue(uint8 queueType, uint256[30] calldata newOrder) external;
+    function rearrangeWithdrawalQueue(
+        uint8 queueType,
+        uint256[30] calldata newOrder
+    ) external;
 
-    function vaults(uint256) external view returns (uint32, uint256, ISharePriceOracle, uint8, uint128, address);
+    function vaults(
+        uint256
+    )
+        external
+        view
+        returns (uint32, uint256, ISharePriceOracle, uint8, uint128, address);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
 
     function isVaultListed(uint256 superformId) external view returns (bool);
 
-    function getVault(uint256 superformId) external view returns (VaultData memory vault);
+    function getVault(
+        uint256 superformId
+    ) external view returns (VaultData memory vault);
 
     function setOperator(address, bool) external;
 
     function isOperator(address, address) external view returns (bool);
 
-    function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256 requestId);
+    function requestDeposit(
+        uint256 assets,
+        address controller,
+        address owner
+    ) external returns (uint256 requestId);
 
-    function deposit(uint256 assets, address to) external returns (uint256 shares);
+    function deposit(
+        uint256 assets,
+        address to
+    ) external returns (uint256 shares);
 
-    function deposit(uint256 assets, address to, address controller) external returns (uint256 shares);
+    function deposit(
+        uint256 assets,
+        address to,
+        address controller
+    ) external returns (uint256 shares);
 
     function mint(uint256 shares, address to) external returns (uint256 assets);
 
-    function mint(uint256 shares, address to, address controller) external returns (uint256 assets);
+    function mint(
+        uint256 shares,
+        address to,
+        address controller
+    ) external returns (uint256 assets);
 
-    function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
+    function requestRedeem(
+        uint256 shares,
+        address controller,
+        address owner
+    ) external returns (uint256 requestId);
 
-    function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets);
+    function redeem(
+        uint256 shares,
+        address receiver,
+        address controller
+    ) external returns (uint256 assets);
 
-    function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares);
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address controller
+    ) external returns (uint256 shares);
 
     function pendingRedeemRequest(address) external view returns (uint256);
 
@@ -162,7 +183,9 @@ interface IMetaVault {
 
     function claimableDepositRequest(address) external view returns (uint256);
 
-    function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable;
+    function processRedeemRequest(
+        ProcessRedeemRequestParams calldata params
+    ) external payable;
 
     function processSignedRequest(
         ProcessRedeemRequestParams calldata params,
@@ -170,8 +193,7 @@ interface IMetaVault {
         uint8 v,
         bytes32 r,
         bytes32 s
-    )
-        external;
+    ) external;
 
     function nonces(address) external view returns (uint256);
 
@@ -179,69 +201,84 @@ interface IMetaVault {
         address vaultAddress,
         uint256 assets,
         uint256 minSharesOut
-    )
-        external
-        returns (uint256 shares);
+    ) external returns (uint256 shares);
 
     function investSingleDirectMultiVault(
         address[] calldata vaultAddresses,
         uint256[] calldata assets,
         uint256[] calldata minSharesOuts
-    )
-        external
-        returns (uint256[] memory shares);
+    ) external returns (uint256[] memory shares);
 
-    function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
+    function investSingleXChainSingleVault(
+        SingleXChainSingleVaultStateReq calldata req
+    ) external payable;
 
-    function investSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
+    function investSingleXChainMultiVault(
+        SingleXChainMultiVaultStateReq calldata req
+    ) external payable;
 
-    function investMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req) external payable;
+    function investMultiXChainSingleVault(
+        MultiDstSingleVaultStateReq calldata req
+    ) external payable;
 
-    function investMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
+    function investMultiXChainMultiVault(
+        MultiDstMultiVaultStateReq calldata req
+    ) external payable;
 
     function divestSingleDirectSingleVault(
         address vaultAddress,
         uint256 shares,
         uint256 minAssetsOut
-    )
-        external
-        returns (uint256 assets);
+    ) external returns (uint256 assets);
 
     function divestSingleDirectMultiVault(
         address[] calldata vaultAddresses,
         uint256[] calldata shares,
         uint256[] calldata minAssetsOuts
-    )
-        external
-        returns (uint256[] memory assets);
+    ) external returns (uint256[] memory assets);
 
     function setFeeExcemption(
         address controller,
         uint256 managementFeeExcemption,
         uint256 performanceFeeExcemption,
         uint256 oracleFeeExcemption
-    )
-        external;
+    ) external;
 
     function sharePriceWaterMark() external view returns (uint256);
 
     function lastRedeem(address) external view returns (uint256);
 
-    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
+    function divestSingleXChainSingleVault(
+        SingleXChainSingleVaultStateReq calldata req
+    ) external payable;
 
-    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
+    function divestSingleXChainMultiVault(
+        SingleXChainMultiVaultStateReq calldata req
+    ) external payable;
 
-    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req) external payable;
+    function divestMultiXChainSingleVault(
+        MultiDstSingleVaultStateReq calldata req
+    ) external payable;
 
-    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
+    function divestMultiXChainMultiVault(
+        MultiDstMultiVaultStateReq calldata req
+    ) external payable;
 
-    function emergencyDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
+    function emergencyDivestSingleXChainSingleVault(
+        SingleXChainSingleVaultStateReq calldata req
+    ) external payable;
 
-    function emergencyDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
+    function emergencyDivestSingleXChainMultiVault(
+        SingleXChainMultiVaultStateReq calldata req
+    ) external payable;
 
-    function emergencyDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req) external payable;
+    function emergencyDivestMultiXChainSingleVault(
+        MultiDstSingleVaultStateReq calldata req
+    ) external payable;
 
-    function emergencyDivestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
+    function emergencyDivestMultiXChainMultiVault(
+        MultiDstMultiVaultStateReq calldata req
+    ) external payable;
 
     function setEmergencyShutdown(bool _emergencyShutdown) external;
 
@@ -259,9 +296,16 @@ interface IMetaVault {
 
     function setRecoveryAddress(address _recoveryAddress) external;
 
-    function fulfillSettledRequest(address controller, uint256 requestedAssets, uint256 settledAssets) external;
+    function fulfillSettledRequest(
+        address controller,
+        uint256 requestedAssets,
+        uint256 settledAssets
+    ) external;
 
-    function settleXChainInvest(uint256 superformId, uint256 bridgedAssets) external;
+    function settleXChainInvest(
+        uint256 superformId,
+        uint256 bridgedAssets
+    ) external;
 
     function settleXChainDivest(uint256 withdrawn) external;
 
@@ -289,11 +333,21 @@ interface IMetaVault {
         returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);
 
     function setDustThreshold(uint256 dustThreshold) external;
-    
+
     function getDustThreshold() external view returns (uint256);
-    
-    function computeHash(ProcessRedeemRequestParams calldata params, uint256 deadline, uint256 nonce)
-        external
-        pure
-        returns (bytes32);
+
+    function computeHash(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint256 nonce
+    ) external pure returns (bytes32);
+
+    function verifySignature(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external view returns (bool);
 }
