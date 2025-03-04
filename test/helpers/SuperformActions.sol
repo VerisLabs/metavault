@@ -7,11 +7,11 @@ import { ERC4626 } from "solady/tokens/ERC4626.sol";
 
 import {
     AAVE_USDC_VAULT_ID_POLYGON,
+    AVVE_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     SUPERFORM_FACTORY_POLYGON,
     SUPERFORM_ROUTER_POLYGON,
-    SUPERFORM_SUPERPOSITIONS_POLYGON,
-    AVVE_USDC_VAULT_ID_OPTIMISM
+    SUPERFORM_SUPERPOSITIONS_POLYGON
 } from "src/helpers/AddressBook.sol";
 import {
     IBaseRouter as ISuperformRouter,
@@ -103,8 +103,8 @@ contract SuperformActions is Test {
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
 
         forks[DST_CHAINS[0]] = vm.createFork(vm.envString("RPC_MAINNET"), 20_819_300);
-        forks[DST_CHAINS[1]] = vm.createFork(vm.envString("RPC_POLYGON"), 68186888);
-        forks[DST_CHAINS[3]] = vm.createFork(vm.envString("RPC_OPTIMISM"), 132263339);
+        forks[DST_CHAINS[1]] = vm.createFork(vm.envString("RPC_POLYGON"), 68_186_888);
+        forks[DST_CHAINS[3]] = vm.createFork(vm.envString("RPC_OPTIMISM"), 132_263_339);
         forks[DST_CHAINS[4]] = vm.createFork(vm.envString("RPC_BASE"), 1);
         forks[DST_CHAINS[5]] = vm.createFork(vm.envString("RPC_ARBITRUM"), 1);
         forks[DST_CHAINS[6]] = vm.createFork(vm.envString("RPC_ARBITRUM"), 1);
@@ -115,7 +115,7 @@ contract SuperformActions is Test {
             EXACTLY_USDC_VAULT_OPTIMISM_600_USDCE_DEPOSIT_PAYLOAD;
         withdrawPayloads[EXACTLY_USDC_VAULT_ID_OPTIMISM][600 * _1_USDCE] =
             EXACTLY_USDC_VAULT_OPTIMISM_600_USDCE_WITHDRAW_PAYLOAD;
-        depositValues[EXACTLY_USDC_VAULT_ID_OPTIMISM][600 * _1_USDCE] = 128472007562734;
+        depositValues[EXACTLY_USDC_VAULT_ID_OPTIMISM][600 * _1_USDCE] = 128_472_007_562_734;
         withdrawValues[EXACTLY_USDC_VAULT_ID_OPTIMISM][600 * _1_USDCE] = 35_404_300_433_882;
     }
 
@@ -137,8 +137,8 @@ contract SuperformActions is Test {
         multiVaultWithdrawPayloads[multiVaultKey] = EXACTLY_USDC_CRAFT_VAULT_OPTIMISM_1200_USDCE_WITHDRAW_PAYLOAD;
 
         //singlechainmultiVault
-        multiVaultDepositValues[multiVaultKey] = 115262433677932;
-        multiVaultWithdrawValues[multiVaultKey] = 39486861225942;
+        multiVaultDepositValues[multiVaultKey] = 115_262_433_677_932;
+        multiVaultWithdrawValues[multiVaultKey] = 39_486_861_225_942;
     }
 
     function setupMultiVaultSingleChainVault() public {
@@ -156,8 +156,8 @@ contract SuperformActions is Test {
         multiChainWithdrawPayloads[multiVaultKey] = USDC_VAULTS_OPTIMISM_POLYGON_1200_USDCE_WITHDRAW_PAYLOAD;
 
         //multiChainsingleVault
-        multiChainDepositValues[multiVaultKey] = 330160575729854;
-        multiChainWithdrawValues[multiVaultKey] = 188577542437653;
+        multiChainDepositValues[multiVaultKey] = 330_160_575_729_854;
+        multiChainWithdrawValues[multiVaultKey] = 188_577_542_437_653;
     }
 
     function setupMultiXChaintMultiVault() public {
@@ -177,8 +177,8 @@ contract SuperformActions is Test {
         multiChainMultiVaultWithdrawPayloads[multiVaultKey] = EXACTLY_AAVE_ALOE_OPTIMISM_1800_USDCE_WITHDRAW_PAYLOAD;
 
         //multiChainmultiVault
-        multiChainMultiVaultDepositValues[multiVaultKey] = 1201064630786235;
-        multiChainMultiVaultWithdrawValues[multiVaultKey] = 393985811095915;
+        multiChainMultiVaultDepositValues[multiVaultKey] = 1_201_064_630_786_235;
+        multiChainMultiVaultWithdrawValues[multiVaultKey] = 393_985_811_095_915;
     }
 
     function _mintSuperpositions(address to, uint256 superformId, uint256 amount) internal {
@@ -331,9 +331,8 @@ contract SuperformActions is Test {
         bytes memory payload = multiChainMultiVaultWithdrawPayloads[key];
         return _decodeMultiXChainMultiVaultStateReq(payload);
     }
-    function _buildDivestMultiXChainMultiVaultParamsReedeam(
-    
-    )
+
+    function _buildDivestMultiXChainMultiVaultParamsReedeam()
         internal
         pure
         returns (MultiDstMultiVaultStateReq memory req)

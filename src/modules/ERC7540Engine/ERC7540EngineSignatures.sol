@@ -456,14 +456,19 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         _totalIdle -= cache.totalClaimableWithdraw.toUint128();
         _totalDebt = cache.totalDebt.toUint128();
 
-        // Check that totalAssets was actually reduced by the amount to withdraw
-        if (totalAssets() > _sub0(cache.totalAssets - cache.amountToWithdraw, 1)) revert AssetsNotLiquidated();
+        // // Check that totalAssets was actually reduced by the amount to withdraw
+        if (totalAssets() > cache.totalAssets - cache.amountToWithdraw) revert AssetsNotLiquidated();
 
         emit ProcessRedeemRequest(config.controller, config.shares);
+
+        if (pendingProcessedShares[config.controller] > config.shares) revert();
+
+        pendingProcessedShares[config.controller] += config.shares - cache.sharesFulfilled;
+
         // Burn all shares from this contract(they already have been transferred)
         _burn(address(this), config.shares);
         // Fulfill request with instant withdrawals only
-        _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, config.controller);
+        _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, config.controller, true);
     }
 
     /// @dev Withdraws assets from a single vault on the same chain

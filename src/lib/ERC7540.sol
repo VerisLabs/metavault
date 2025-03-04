@@ -416,12 +416,17 @@ abstract contract ERC7540 is ERC4626 {
     function _fulfillRedeemRequest(
         uint256 sharesFulfilled,
         uint256 assetsWithdrawn,
-        address controller
+        address controller,
+        bool strict
     )
         internal
         virtual
     {
-        _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub0(sharesFulfilled);
+        if (strict) {
+            _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
+        } else {
+            _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub0(sharesFulfilled);
+        }
         _claimableRedeemRequest[controller].assets += assetsWithdrawn;
         _claimableRedeemRequest[controller].shares += sharesFulfilled;
         emit FulfillRedeemRequest(controller, sharesFulfilled, assetsWithdrawn);

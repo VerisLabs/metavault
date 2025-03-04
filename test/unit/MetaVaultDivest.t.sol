@@ -27,6 +27,8 @@ import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
     AAVE_USDC_VAULT_ID_POLYGON,
     AAVE_USDC_VAULT_POLYGON,
+    AVVE_USDC_VAULT_ID_OPTIMISM,
+    AVVE_USDC_VAULT_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
@@ -39,9 +41,7 @@ import {
     SUPERFORM_ROUTER_BASE,
     SUPERFORM_SUPEREGISTRY_BASE,
     SUPERFORM_SUPERPOSITIONS_BASE,
-    USDCE_BASE,
-    AVVE_USDC_VAULT_ID_OPTIMISM,
-    AVVE_USDC_VAULT_OPTIMISM
+    USDCE_BASE
 } from "src/helpers/AddressBook.sol";
 import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
@@ -119,7 +119,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     }
 
     function setUp() public override {
-        super._setUp("BASE", 26668569);
+        super._setUp("BASE", 26_668_569);
         super.setUp();
 
         _setUpTestEnvironment();
@@ -263,7 +263,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         divestReq.superformData.outputAmount = expectedDivestedValue;
 
-        uint256 expectedDivestedValueT =61574985;
+        uint256 expectedDivestedValueT = 61_574_985;
 
         vm.expectEmit(true, true, true, true);
         emit Divest(expectedDivestedValueT);
@@ -272,15 +272,15 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         vault.divestSingleXChainSingleVault{ value: value }(divestReq);
 
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
-        assertEq(vault.totalWithdrawableAssets(), 938424882);
+        assertEq(vault.totalWithdrawableAssets(), 938_424_882);
         assertEq(gateway.totalPendingXChainDivests(), expectedDivestedValueT);
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
         deal(USDCE_BASE, gateway.getReceiver(requestId), expectedDivestedValue);
         gateway.settleDivest(requestId, 0, false);
 
-        assertEq(vault.totalAssets(), 1538424749);
-        assertEq(vault.totalWithdrawableAssets(), 1538424749);
+        assertEq(vault.totalAssets(), 1_538_424_749);
+        assertEq(vault.totalWithdrawableAssets(), 1_538_424_749);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
@@ -457,7 +457,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
         divestReq.superformData.outputAmount = expectedDivestedValue;
 
-        uint256 expected = 61574985;
+        uint256 expected = 61_574_985;
 
         vm.expectEmit(true, true, true, true);
         emit Divest(expected);
@@ -466,18 +466,18 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         vault.divestSingleXChainSingleVault{ value: value }(divestReq);
 
         assertEq(vault.totalAssets(), 400 * _1_USDCE + expectedDivestedValue);
-        assertEq(vault.totalWithdrawableAssets(), 938424882);
+        assertEq(vault.totalWithdrawableAssets(), 938_424_882);
         assertEq(gateway.totalPendingXChainDivests(), expected);
 
         bytes32 requestId = gateway.getRequestsQueue()[0];
         address receiver = gateway.getReceiver(requestId);
         _mintSuperpositions(receiver, superformId, shares);
 
-        assertEq(config.superPositions.balanceOf(address(vault), superformId), 1078517421);
+        assertEq(config.superPositions.balanceOf(address(vault), superformId), 1_078_517_421);
         (,,,, uint128 vaultDebt,) = vault.vaults(superformId);
-        assertEq(vaultDebt, 599999867);
+        assertEq(vaultDebt, 599_999_867);
         assertEq(vault.totalDebt(), vaultDebt);
-        assertEq(vault.totalXChainAssets(), 1138424749);
+        assertEq(vault.totalXChainAssets(), 1_138_424_749);
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 

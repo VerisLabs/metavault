@@ -150,6 +150,9 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Timestamp of last redemption per controller
     mapping(address controller => uint256) public lastRedeem;
 
+    /// @notice Number of shares that are pending to be settled;
+    mapping(address controller => uint256) public pendingProcessedShares;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/

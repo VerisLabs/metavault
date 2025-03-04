@@ -29,6 +29,8 @@ import { ERC20Receiver } from "crosschain/Lib.sol";
 import {
     AAVE_USDC_VAULT_ID_POLYGON,
     AAVE_USDC_VAULT_POLYGON,
+    AVVE_USDC_VAULT_ID_OPTIMISM,
+    AVVE_USDC_VAULT_OPTIMISM,
     EXACTLY_USDC_VAULT_ID_OPTIMISM,
     EXACTLY_USDC_VAULT_OPTIMISM,
     LAYERZERO_ULTRALIGHT_NODE_BASE,
@@ -41,9 +43,7 @@ import {
     SUPERFORM_ROUTER_BASE,
     SUPERFORM_SUPEREGISTRY_BASE,
     SUPERFORM_SUPERPOSITIONS_BASE,
-    USDCE_BASE,
-    AVVE_USDC_VAULT_ID_OPTIMISM,
-    AVVE_USDC_VAULT_OPTIMISM
+    USDCE_BASE
 } from "src/helpers/AddressBook.sol";
 import { ISharePriceOracle } from "src/interfaces/Lib.sol";
 import {
@@ -124,7 +124,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     }
 
     function setUp() public override {
-        super._setUp("BASE", 26668569);
+        super._setUp("BASE", 26_668_569);
         super.setUp();
 
         _setUpTestEnvironment();
@@ -355,14 +355,14 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             address receiver = gateway.getReceiver(requestId);
             assertEq(USDCE_BASE.balanceOf(receiver), 0);
             assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-            assertEq(vault.claimableRedeemRequest(users.alice), 400000053);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_053);
 
             deal(USDCE_BASE, address(receiver), 588 * _1_USDCE);
             gateway.settleLiquidation(requestId, false);
         }
-        assertEq(vault.claimableRedeemRequest(users.alice), 999999920);
+        assertEq(vault.claimableRedeemRequest(users.alice), 999_999_920);
         uint256 assets = vault.redeem(999_999_689, users.alice, users.alice);
-        assertEq(assets, 987999771);
+        assertEq(assets, 987_999_771);
         assertEq(vault.totalAssets(), 0);
         assertEq(vault.totalSupply(), 0);
         assertEq(vault.totalIdle(), 0);
@@ -468,7 +468,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             address receiver = gateway.getReceiver(requestId);
             assertEq(USDCE_BASE.balanceOf(receiver), 0);
             assertEq(USDCE_BASE.balanceOf(address(vault)), 400 * _1_USDCE);
-            assertEq(vault.claimableRedeemRequest(users.alice), 400000053);
+            assertEq(vault.claimableRedeemRequest(users.alice), 400_000_053);
 
             _mintSuperpositions(gateway.recoveryAddress(), superformId, shares);
 
@@ -770,6 +770,86 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     }
 
     function test_MetaVault_processRedeemRequest_MultiXChainMultiVault() public {
+        // Extract setup into a separate function to reduce local variables
+        (
+            uint256[] memory superformIds,
+            address[] memory vaultAddresses,
+            uint256[] memory amounts,
+            uint256 shares,
+            uint256 shares2,
+            uint256 shares3,
+            bytes32 multiVaultKey,
+            uint256 nativeValue,
+            uint256 aliceBalance
+        ) = _setupMultiXChainMultiVaultTest();
+
+        // Extract redeem params setup into a separate function
+        (
+            MultiXChainMultiVaultWithdraw memory mXmV,
+            MultiDstMultiVaultStateReq memory req2,
+            uint256 expectedDivestValueOptimism,
+            uint256 expectedDivestValuePol,
+            uint256 totalExpectedDivestedValue,
+            uint256 nativeValueWithdraw
+        ) = _setupRedeemParams(superformIds, vaultAddresses, shares, shares2, shares3, multiVaultKey);
+
+        uint256 sharePriceBefore = vault.sharePrice();
+
+        vm.startPrank(users.alice);
+
+        // Setup empty structures for other withdrawal types
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+
+        vm.expectEmit(true, true, true, true);
+        emit ProcessRedeemRequest(users.alice, aliceBalance);
+        emit LiquidateXChain(
+            users.alice,
+            superformIds,
+            totalExpectedDivestedValue,
+            0x8316e3102cd2e60848d5c003759d83b110bc3bf1846101cd185cfa188aa15a53
+        );
+        vault.processRedeemRequest{ value: mXmV.value }(
+            ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
+        );
+
+        uint256 sharePriceAfter = vault.sharePrice();
+        assertApproxEq(sharePriceBefore, sharePriceAfter, 1);
+
+        assertEq(vault.totalAssets(), 0);
+        assertEq(vault.totalWithdrawableAssets(), 0);
+        assertEq(gateway.getRequestsQueue().length, 2);
+
+        bytes32 requestId1 = gateway.getRequestsQueue()[0];
+        bytes32 requestId2 = gateway.getRequestsQueue()[1];
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId1), expectedDivestValuePol + 140 * _1_USDCE);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOptimism + 140 * _1_USDCE);
+
+        gateway.settleLiquidation(requestId1, false);
+        gateway.settleLiquidation(requestId2, false);
+
+        assertEq(vault.totalAssets(), 0);
+        assertEq(vault.totalWithdrawableAssets(), 0);
+        assertEq(gateway.getRequestsQueue().length, 0);
+    }
+
+    // Helper function to set up the test environment
+    function _setupMultiXChainMultiVaultTest()
+        internal
+        returns (
+            uint256[] memory superformIds,
+            address[] memory vaultAddresses,
+            uint256[] memory amounts,
+            uint256 shares,
+            uint256 shares2,
+            uint256 shares3,
+            bytes32 multiVaultKey,
+            uint256 nativeValue,
+            uint256 aliceBalance
+        )
+    {
         address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
 
@@ -836,12 +916,17 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         _depositAtomic(2000 * _1_USDCE, users.alice);
 
-        uint256[] memory superformIds = new uint256[](3);
+        superformIds = new uint256[](3);
         superformIds[0] = superformId_usdc;
         superformIds[1] = superformId_usdc_pol;
         superformIds[2] = superformId_usdc_aloe_op;
 
-        uint256[] memory amounts = new uint256[](3);
+        vaultAddresses = new address[](3);
+        vaultAddresses[0] = vaultAddress_usdc;
+        vaultAddresses[1] = vaultAddress_usdc_pol;
+        vaultAddresses[2] = vaultAddress_usdc_aloe_op;
+
+        amounts = new uint256[](3);
         amounts[0] = 600 * _1_USDCE;
         amounts[1] = 600 * _1_USDCE;
         amounts[2] = 600 * _1_USDCE;
@@ -853,57 +938,82 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         req.superformsData[0].amounts[1] = 600 * _1_USDCE;
         req.superformsData[1].amounts[0] = 600 * _1_USDCE;
 
-        uint256 shares = _previewDeposit(optimismChainId, vaultAddress_usdc, req.superformsData[0].amounts[0]);
-        uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amounts[0]);
-        uint256 shares3 = _previewDeposit(optimismChainId, vaultAddress_usdc_aloe_op, req.superformsData[0].amounts[1]);
+        shares = _previewDeposit(optimismChainId, vaultAddress_usdc, req.superformsData[0].amounts[0]);
+        shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amounts[0]);
+        shares3 = _previewDeposit(optimismChainId, vaultAddress_usdc_aloe_op, req.superformsData[0].amounts[1]);
 
         vm.expectEmit(true, true, true, true);
         emit Invest(investAmount);
 
-        bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
-        uint256 nativeValue = multiChainMultiVaultDepositValues[multiVaultKey];
+        multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
+        nativeValue = multiChainMultiVaultDepositValues[multiVaultKey];
 
         vm.startPrank(users.alice);
         vault.investMultiXChainMultiVault{ value: nativeValue }(req);
+        vm.stopPrank();
 
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares3);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
 
-        uint256 aliceBalance = vault.balanceOf(users.alice);
+        aliceBalance = vault.balanceOf(users.alice);
         vm.startPrank(users.alice);
         vault.setSharesLockTime(0);
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
+        vm.stopPrank();
 
-        // Setup redeem params
-        SingleXChainSingleVaultWithdraw memory sXsV;
-        SingleXChainMultiVaultWithdraw memory sXmV;
-        MultiXChainSingleVaultWithdraw memory mXsV;
-        MultiXChainMultiVaultWithdraw memory mXmV;
+        return
+            (superformIds, vaultAddresses, amounts, shares, shares2, shares3, multiVaultKey, nativeValue, aliceBalance);
+    }
 
+    // Helper function to set up redeem parameters
+    function _setupRedeemParams(
+        uint256[] memory superformIds,
+        address[] memory vaultAddresses,
+        uint256 shares,
+        uint256 shares2,
+        uint256 shares3,
+        bytes32 multiVaultKey
+    )
+        internal
+        returns (
+            MultiXChainMultiVaultWithdraw memory mXmV,
+            MultiDstMultiVaultStateReq memory req2,
+            uint256 expectedDivestValueOptimism,
+            uint256 expectedDivestValuePol,
+            uint256 totalExpectedDivestedValue,
+            uint256 nativeValueWithdraw
+        )
+    {
+        uint32 optimismChainId = 10;
+        uint32 polygonChainId = 137;
+
+        // Initialize mXmV structure
         mXmV.ambIds = new uint8[][](2);
         mXmV.outputAmounts = new uint256[][](2);
         mXmV.maxSlippages = new uint256[][](2);
         mXmV.liqRequests = new LiqRequest[][](2);
         mXmV.hasDstSwaps = new bool[][](2);
 
-        MultiDstMultiVaultStateReq memory req2 = _buildDivestMultiXChainMultiVaultParamsReedeam();
+        req2 = _buildDivestMultiXChainMultiVaultParamsReedeam();
         req2.superformsData[0].amounts[0] = shares2;
         req2.superformsData[1].amounts[0] = shares;
         req2.superformsData[1].amounts[1] = shares3;
 
-        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress_usdc);
+        // Get reports for each vault
+        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddresses[0]);
         uint256 lastSharePrice = report.sharePrice;
 
-        VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
+        VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddresses[1]);
         uint256 lastSharePrice2 = report2.sharePrice;
 
-        VaultReport memory report3 = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
+        VaultReport memory report3 = oracle.getReport(optimismChainId, vaultAddresses[2]);
         uint256 lastSharePrice3 = report3.sharePrice;
 
-        uint256 expectedDivestValueOptimism = lastSharePrice * shares / 10 ** 6 + lastSharePrice3 * shares3 / 10 ** 6;
-        uint256 expectedDivestValuePol = lastSharePrice2 * shares2 / 10 ** 6;
-        uint256 totalExpectedDivestedValue = expectedDivestValueOptimism + expectedDivestValuePol;
+        // Calculate expected values
+        expectedDivestValueOptimism = lastSharePrice * shares / 10 ** 6 + lastSharePrice3 * shares3 / 10 ** 6;
+        expectedDivestValuePol = lastSharePrice2 * shares2 / 10 ** 6;
+        totalExpectedDivestedValue = expectedDivestValueOptimism + expectedDivestValuePol;
 
         req2.superformsData[0].outputAmounts[0] = expectedDivestValuePol;
         req2.superformsData[1].outputAmounts[0] = expectedDivestValueOptimism / 2;
@@ -917,43 +1027,18 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             mXmV.liqRequests[i] = req2.superformsData[i].liqRequests;
             mXmV.hasDstSwaps[i] = req2.superformsData[i].hasDstSwaps;
         }
-        uint256 nativeValueWithdraw = multiChainMultiVaultWithdrawValues[multiVaultKey];
+
+        nativeValueWithdraw = multiChainMultiVaultWithdrawValues[multiVaultKey];
         mXmV.value = nativeValueWithdraw;
-        uint256 sharePriceBefore = vault.sharePrice();
 
-        vm.startPrank(users.alice);
-
-        vm.expectEmit(true, true, true, true);
-        emit ProcessRedeemRequest(users.alice, aliceBalance);
-        emit LiquidateXChain(
-            users.alice,
-            superformIds,
+        return (
+            mXmV,
+            req2,
+            expectedDivestValueOptimism,
+            expectedDivestValuePol,
             totalExpectedDivestedValue,
-            0x8316e3102cd2e60848d5c003759d83b110bc3bf1846101cd185cfa188aa15a53
+            nativeValueWithdraw
         );
-        vault.processRedeemRequest{ value: mXmV.value }(
-            ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
-        );
-
-        uint256 sharePriceAfter = vault.sharePrice();
-        assertApproxEq(sharePriceBefore, sharePriceAfter, 1);
-
-        assertEq(vault.totalAssets(), 0);
-        assertEq(vault.totalWithdrawableAssets(), 0);
-        assertEq(gateway.getRequestsQueue().length, 2);
-
-        bytes32 requestId1 = gateway.getRequestsQueue()[0];
-        bytes32 requestId2 = gateway.getRequestsQueue()[1];
-
-        deal(USDCE_BASE, gateway.getReceiver(requestId1), expectedDivestValuePol + 140 * _1_USDCE);
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOptimism + 140 * _1_USDCE);
-
-        gateway.settleLiquidation(requestId1, false);
-        gateway.settleLiquidation(requestId2, false);
-
-        assertEq(vault.totalAssets(), 0);
-        assertEq(vault.totalWithdrawableAssets(), 0);
-        assertEq(gateway.getRequestsQueue().length, 0);
     }
 
     function test_MetaVault_previewWithdrawalRoute() public {
@@ -1221,7 +1306,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     }
 
     function test_previewWithdrawalRoute_despiseDust() public {
-          MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
+        MockERC4626 yUsdce = new MockERC4626(USDCE_BASE, "Yearn USDCE", "yUSDCe", true, 0);
         oracle.setValues(baseChainId, address(yUsdce), _1_USDCE, block.timestamp, USDCE_BASE, users.bob, 6);
         vault.addVault({
             chainId: baseChainId,
@@ -1279,14 +1364,207 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         vault.setDustThreshold(dustThreshold);
 
-        shares = vault.convertToShares(vault.totalLocalAssets() +  dust);
+        shares = vault.convertToShares(vault.totalLocalAssets() + dust);
 
-        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute = vault.previewWithdrawalRoute(users.alice, shares, true);
+        ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute =
+            vault.previewWithdrawalRoute(users.alice, shares, true);
         assertFalse(cachedRoute.isSingleChain);
         assertFalse(cachedRoute.isMultiChain);
         assertFalse(cachedRoute.isMultiVault);
 
         assertLt(cachedRoute.shares, shares);
         assertLt(cachedRoute.assets, vault.totalLocalAssets() + dust);
+    }
+
+    function test_MetaVault_processRedeemRequest_revertWhenSharesAlreadyBeingProcessed() public {
+        // Setup direct test environment without using helper functions
+        address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
+        address vaultAddress_usdc_pol = AAVE_USDC_VAULT_POLYGON;
+
+        uint256 superformId_usdc_optimisim = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint256 superformId_usdc_pol = AAVE_USDC_VAULT_ID_POLYGON;
+
+        uint32 optimismChainId = 10;
+        uint32 polygonChainId = 137;
+
+        // Setup vaults on Optimism and Polygon
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_optimisim,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_optimisim),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_optimisim,
+            vault: vaultAddress_usdc_optimisim,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_optimisim),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        oracle.setValues(
+            polygonChainId,
+            vaultAddress_usdc_pol,
+            _getSharePrice(polygonChainId, vaultAddress_usdc_pol),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: polygonChainId,
+            superformId: superformId_usdc_pol,
+            vault: vaultAddress_usdc_pol,
+            vaultDecimals: _getDecimals(polygonChainId, vaultAddress_usdc_pol),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Deposit funds
+        _depositAtomic(2000 * _1_USDCE, users.alice);
+
+        // Setup superformIds and amounts for investment
+        uint256[] memory superformIds = new uint256[](2);
+        superformIds[0] = superformId_usdc_optimisim;
+        superformIds[1] = superformId_usdc_pol;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 600 * _1_USDCE;
+        amounts[1] = 600 * _1_USDCE;
+
+        // Build investment request
+        MultiDstSingleVaultStateReq memory req = _buildInvestMultiXChainSingleVaultParams(superformIds, amounts);
+
+        req.superformsData[0].amount = 600 * _1_USDCE;
+        req.superformsData[1].amount = 600 * _1_USDCE;
+
+        // Calculate shares
+        uint256 shares_op = _previewDeposit(optimismChainId, vaultAddress_usdc_optimisim, req.superformsData[0].amount);
+        uint256 shares_pol = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amount);
+
+        bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
+        uint256 nativeValue = multiChainDepositValues[multiVaultKey];
+
+        // Perform investment
+        vm.startPrank(users.alice);
+        vault.investMultiXChainSingleVault{ value: nativeValue }(req);
+        vm.stopPrank();
+
+        // Mint superpositions to simulate successful cross-chain investment
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_optimisim, shares_op);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares_pol);
+
+        // Get Alice's balance and request redemption
+        vm.startPrank(users.alice);
+        vault.setSharesLockTime(0);
+        uint256 aliceBalance = vault.balanceOf(users.alice);
+        vault.requestRedeem(aliceBalance, users.alice, users.alice);
+
+        // Calculate partial shares for first redemption
+        uint256 partialShares = aliceBalance / 2;
+
+        // Setup variables for first redemption process
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+
+        // Initialize mXsV for partial redemption
+        mXsV.ambIds = new uint8[][](2);
+        mXsV.outputAmounts = new uint256[](2);
+        mXsV.maxSlippages = new uint256[](2);
+        mXsV.liqRequests = new LiqRequest[](2);
+        mXsV.hasDstSwaps = new bool[](2);
+
+        // Calculate ratio for partial redemption
+        uint256 ratio = (partialShares * 1e18) / aliceBalance;
+        uint256 scaledShares_op = (shares_op * ratio) / 1e18;
+        uint256 scaledShares_pol = (shares_pol * ratio) / 1e18;
+
+        // Get reports for price calculation
+        VaultReport memory report_op = oracle.getReport(optimismChainId, vaultAddress_usdc_optimisim);
+        VaultReport memory report_pol = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
+
+        // Calculate expected divested values
+        uint256 expectedDivestValueOp = report_op.sharePrice * scaledShares_op / 10 ** 6;
+        uint256 expectedDivestValuePol = report_pol.sharePrice * scaledShares_pol / 10 ** 6;
+
+        // Build withdrawal request for partial redemption
+        MultiDstSingleVaultStateReq memory req2 =
+            _buildDivestMultiXChainSingleVaultParams(superformIds, new uint256[](2));
+
+        // Set proper output amounts
+        req2.superformsData[0].outputAmount = expectedDivestValuePol;
+        req2.superformsData[1].outputAmount = expectedDivestValueOp;
+
+        // Copy data to mXsV
+        for (uint256 i = 0; i < 2; i++) {
+            mXsV.ambIds[i] = req2.ambIds[i];
+            mXsV.outputAmounts[i] = req2.superformsData[i].outputAmount;
+            mXsV.maxSlippages[i] = req2.superformsData[i].maxSlippage;
+            mXsV.liqRequests[i] = req2.superformsData[i].liqRequest;
+            mXsV.hasDstSwaps[i] = req2.superformsData[i].hasDstSwap;
+        }
+
+        // Set value for withdrawal
+        uint256 nativeValueWithdraw = multiChainWithdrawValues[multiVaultKey];
+        mXsV.value = nativeValueWithdraw;
+
+        // Process first partial redemption - should succeed
+        vm.expectEmit(true, true, true, true);
+        emit ProcessRedeemRequest(users.alice, partialShares);
+
+        vault.processRedeemRequest{ value: mXsV.value }(
+            ProcessRedeemRequestParams(users.alice, partialShares, sXsV, sXmV, mXsV, mXmV)
+        );
+
+        // Verify that pendingProcessedShares has been updated
+        uint256 pendingProcessed = vault.pendingProcessedShares(users.alice);
+        assertGt(pendingProcessed, 0, "Should have pending processed shares");
+
+        // Try to process the same shares again - should revert because they're already being processed
+        vm.expectRevert();
+        vault.processRedeemRequest{ value: mXsV.value }(
+            ProcessRedeemRequestParams(users.alice, pendingProcessed, sXsV, sXmV, mXsV, mXmV)
+        );
+
+        // Verify remaining pending shares
+        uint256 remainingPendingShares = vault.pendingRedeemRequest(users.alice);
+        assertEq(remainingPendingShares, aliceBalance - partialShares, "Remaining pending shares should be correct");
+
+        // Try to process more than what's left - should also revert
+        vm.expectRevert();
+        vault.processRedeemRequest{ value: mXsV.value }(
+            ProcessRedeemRequestParams(users.alice, remainingPendingShares + 1, sXsV, sXmV, mXsV, mXmV)
+        );
+
+        // Simulate settlement of cross-chain requests
+        bytes32 requestId1 = gateway.getRequestsQueue()[0];
+        bytes32 requestId2 = gateway.getRequestsQueue()[1];
+
+        deal(USDCE_BASE, gateway.getReceiver(requestId1), expectedDivestValuePol);
+        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOp);
+        vm.stopPrank();
+        gateway.settleLiquidation(requestId1, false);
+        gateway.settleLiquidation(requestId2, false);
+        vm.startPrank(users.alice);
+
+        // Verify that pendingProcessedShares is reduced after settlement
+        uint256 pendingProcessedAfterSettlement = vault.pendingProcessedShares(users.alice);
+        assertLt(
+            pendingProcessedAfterSettlement,
+            pendingProcessed,
+            "Pending processed shares should decrease after settlement"
+        );
+
+        // Process remaining shares - should now succeed
+        vm.expectEmit(true, true, true, true);
+        emit ProcessRedeemRequest(users.alice, remainingPendingShares);
+
+        vault.processRedeemRequest{ value: mXsV.value }(
+            ProcessRedeemRequestParams(users.alice, remainingPendingShares, sXsV, sXmV, mXsV, mXmV)
+        );
     }
 }
