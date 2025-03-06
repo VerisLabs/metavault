@@ -137,7 +137,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
@@ -176,7 +176,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 amountPerVault = 400 * _1_USDCE;
 
         address[] memory vaultAddresses = new address[](2);
@@ -237,7 +237,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
             _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
@@ -297,7 +297,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             users.bob,
             6
         );
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         SingleVaultSFData memory superformData;
         superformData.superformId = 0;
@@ -330,7 +330,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             users.bob,
             6
         );
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         SingleXChainSingleVaultStateReq memory req =
             _buildDivestSingleXChainSingleVaultParams(superformId, 600 * _1_USDCE);
@@ -361,7 +361,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         SingleVaultSFData memory superformData;
         superformData.superformId = superformId;
@@ -402,7 +402,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         SingleXChainSingleVaultStateReq memory req =
             _buildDivestSingleXChainSingleVaultParams(superformId, 600 * _1_USDCE);
@@ -434,7 +434,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
             _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
@@ -523,7 +523,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         uint256[] memory superformIds = new uint256[](2);
         superformIds[0] = superformId_usdc;
@@ -635,7 +635,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1200 * _1_USDCE, users.alice);
+        _depositAtomic(1200 * _1_USDCE, users.alice, users.alice);
 
         MultiVaultSFData memory superformsData;
         superformsData.superformIds = new uint256[](0);
@@ -698,7 +698,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1200 * _1_USDCE, users.alice);
+        _depositAtomic(1200 * _1_USDCE, users.alice, users.alice);
 
         MultiVaultSFData memory superformsData;
         superformsData.superformIds = new uint256[](2);
@@ -766,7 +766,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         uint256[] memory superformIds = new uint256[](2);
         superformIds[0] = superformId_usdc_optimisim;
@@ -869,7 +869,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         // Create request with zero amount
         MultiDstSingleVaultStateReq memory req;
@@ -910,7 +910,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         MultiDstSingleVaultStateReq memory req;
         req.dstChainIds = new uint64[](1);
@@ -994,7 +994,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         uint256[] memory superformIds = new uint256[](3);
         superformIds[0] = superformId_usdc;
@@ -1113,7 +1113,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         // Create request with zero amounts
         MultiDstMultiVaultStateReq memory req;
@@ -1156,7 +1156,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         MultiDstMultiVaultStateReq memory req;
         req.dstChainIds = new uint64[](1);
@@ -1199,7 +1199,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =

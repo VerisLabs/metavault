@@ -132,7 +132,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     }
 
     function test_MetaVault_processRedeemRequest_from_idle() public {
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         skip(config.sharesLockTime);
         vault.requestRedeem(vault.balanceOf(users.alice), users.alice, users.alice);
         SingleXChainSingleVaultWithdraw memory sXsV;
@@ -164,7 +164,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             vaultDecimals: yUsdce.decimals(),
             oracle: ISharePriceOracle(address(oracle))
         });
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
         uint256 totalAssetsBeforeLock = vault.totalAssets();
@@ -206,7 +206,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice);
+        uint256 sharesBalance = _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
 
@@ -268,7 +268,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             vaultDecimals: yUsdce.decimals(),
             oracle: ISharePriceOracle(address(oracle))
         });
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
@@ -378,7 +378,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             vaultDecimals: yUsdce.decimals(),
             oracle: ISharePriceOracle(address(oracle))
         });
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
@@ -523,7 +523,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1200 * _1_USDCE, users.alice);
+        _depositAtomic(1200 * _1_USDCE, users.alice, users.alice);
 
         uint256[] memory superformIds = new uint256[](2);
         superformIds[0] = superformId_usdc;
@@ -655,7 +655,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         uint256[] memory superformIds = new uint256[](2);
         superformIds[0] = superformId_usdc_optimisim;
@@ -914,7 +914,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         superformIds = new uint256[](3);
         superformIds[0] = superformId_usdc;
@@ -1087,7 +1087,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1200 * _1_USDCE, users.alice);
+        _depositAtomic(1200 * _1_USDCE, users.alice, users.alice);
 
         uint256[] memory superformIds = new uint256[](2);
         superformIds[0] = superformId_usdc;
@@ -1171,7 +1171,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         superformIds[0] = superformId_usdc_optimisim;
         superformIds[1] = superformId_usdc_pol;
@@ -1261,7 +1261,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         superformIds = new uint256[](3);
         superformIds[0] = superformId_usdc;
@@ -1315,7 +1315,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             vaultDecimals: yUsdce.decimals(),
             oracle: ISharePriceOracle(address(oracle))
         });
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
 
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
@@ -1376,6 +1376,8 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         assertLt(cachedRoute.assets, vault.totalLocalAssets() + dust);
     }
 
+    /// NOTE: this test fixes a bug found in live testing, where the request of a user
+    /// could be processed multiple times if crosschain liquidations were involved.
     function test_MetaVault_processRedeemRequest_revertWhenSharesAlreadyBeingProcessed() public {
         // Setup direct test environment without using helper functions
         address vaultAddress_usdc_optimisim = EXACTLY_USDC_VAULT_OPTIMISM;
@@ -1423,7 +1425,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         });
 
         // Deposit funds
-        _depositAtomic(2000 * _1_USDCE, users.alice);
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
 
         // Setup superformIds and amounts for investment
         uint256[] memory superformIds = new uint256[](2);
@@ -1441,8 +1443,8 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         req.superformsData[1].amount = 600 * _1_USDCE;
 
         // Calculate shares
-        uint256 shares_op = _previewDeposit(optimismChainId, vaultAddress_usdc_optimisim, req.superformsData[0].amount);
-        uint256 shares_pol = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amount);
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress_usdc_optimisim, req.superformsData[0].amount);
+        uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amount);
 
         bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValue = multiChainDepositValues[multiVaultKey];
@@ -1452,9 +1454,8 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         vault.investMultiXChainSingleVault{ value: nativeValue }(req);
         vm.stopPrank();
 
-        // Mint superpositions to simulate successful cross-chain investment
-        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_optimisim, shares_op);
-        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares_pol);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_optimisim, shares);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
 
         // Get Alice's balance and request redemption
         vm.startPrank(users.alice);
@@ -1462,14 +1463,19 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         uint256 aliceBalance = vault.balanceOf(users.alice);
         vault.requestRedeem(aliceBalance, users.alice, users.alice);
 
-        // Calculate partial shares for first redemption
-        uint256 partialShares = aliceBalance / 2;
-
         // Setup variables for first redemption process
         SingleXChainSingleVaultWithdraw memory sXsV;
         SingleXChainMultiVaultWithdraw memory sXmV;
         MultiXChainSingleVaultWithdraw memory mXsV;
         MultiXChainMultiVaultWithdraw memory mXmV;
+
+        VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress_usdc_optimisim);
+        uint256 lastSharePrice = report.sharePrice;
+
+        VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
+        uint256 lastSharePrice2 = report2.sharePrice;
+
+        MultiDstSingleVaultStateReq memory req2 = _buildDivestMultiXChainSingleVaultParams(superformIds, amounts);
 
         // Initialize mXsV for partial redemption
         mXsV.ambIds = new uint8[][](2);
@@ -1478,28 +1484,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         mXsV.liqRequests = new LiqRequest[](2);
         mXsV.hasDstSwaps = new bool[](2);
 
-        // Calculate ratio for partial redemption
-        uint256 ratio = (partialShares * 1e18) / aliceBalance;
-        uint256 scaledShares_op = (shares_op * ratio) / 1e18;
-        uint256 scaledShares_pol = (shares_pol * ratio) / 1e18;
-
-        // Get reports for price calculation
-        VaultReport memory report_op = oracle.getReport(optimismChainId, vaultAddress_usdc_optimisim);
-        VaultReport memory report_pol = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
-
-        // Calculate expected divested values
-        uint256 expectedDivestValueOp = report_op.sharePrice * scaledShares_op / 10 ** 6;
-        uint256 expectedDivestValuePol = report_pol.sharePrice * scaledShares_pol / 10 ** 6;
-
-        // Build withdrawal request for partial redemption
-        MultiDstSingleVaultStateReq memory req2 =
-            _buildDivestMultiXChainSingleVaultParams(superformIds, new uint256[](2));
-
-        // Set proper output amounts
-        req2.superformsData[0].outputAmount = expectedDivestValuePol;
-        req2.superformsData[1].outputAmount = expectedDivestValueOp;
-
-        // Copy data to mXsV
+        // Copy data from MultiDstSingleVaultStateReq to MultiXChainSingleVaultWithdraw
         for (uint256 i = 0; i < 2; i++) {
             mXsV.ambIds[i] = req2.ambIds[i];
             mXsV.outputAmounts[i] = req2.superformsData[i].outputAmount;
@@ -1508,63 +1493,35 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             mXsV.hasDstSwaps[i] = req2.superformsData[i].hasDstSwap;
         }
 
-        // Set value for withdrawal
-        uint256 nativeValueWithdraw = multiChainWithdrawValues[multiVaultKey];
+        // Set native value for withdrawal
+        bytes32 multiVaultKeyWithdraw = _getMultiVaultPayloadKey(superformIds, amounts);
+        uint256 nativeValueWithdraw = multiChainWithdrawValues[multiVaultKeyWithdraw];
         mXsV.value = nativeValueWithdraw;
 
-        // Process first partial redemption - should succeed
-        vm.expectEmit(true, true, true, true);
-        emit ProcessRedeemRequest(users.alice, partialShares);
+        uint256 sharePriceBefore = vault.sharePrice();
 
         vault.processRedeemRequest{ value: mXsV.value }(
-            ProcessRedeemRequestParams(users.alice, partialShares, sXsV, sXmV, mXsV, mXmV)
+            ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
         );
 
-        // Verify that pendingProcessedShares has been updated
-        uint256 pendingProcessed = vault.pendingProcessedShares(users.alice);
-        assertGt(pendingProcessed, 0, "Should have pending processed shares");
+        assertEq(vault.pendingRedeemRequest(users.alice), 1_199_999_830);
+        assertEq(vault.pendingProcessedShares(users.alice), 1_199_999_830);
 
-        // Try to process the same shares again - should revert because they're already being processed
-        vm.expectRevert();
-        vault.processRedeemRequest{ value: mXsV.value }(
-            ProcessRedeemRequestParams(users.alice, pendingProcessed, sXsV, sXmV, mXsV, mXmV)
-        );
+        vm.startPrank(users.bob);
 
-        // Verify remaining pending shares
-        uint256 remainingPendingShares = vault.pendingRedeemRequest(users.alice);
-        assertEq(remainingPendingShares, aliceBalance - partialShares, "Remaining pending shares should be correct");
+        // Deposit funds as another user
+        USDCE_BASE.safeApprove(address(vault), type(uint256).max);
+        _depositAtomic(2000 * _1_USDCE, users.bob, users.bob);
 
-        // Try to process more than what's left - should also revert
-        vm.expectRevert();
-        vault.processRedeemRequest{ value: mXsV.value }(
-            ProcessRedeemRequestParams(users.alice, remainingPendingShares + 1, sXsV, sXmV, mXsV, mXmV)
-        );
-
-        // Simulate settlement of cross-chain requests
-        bytes32 requestId1 = gateway.getRequestsQueue()[0];
-        bytes32 requestId2 = gateway.getRequestsQueue()[1];
-
-        deal(USDCE_BASE, gateway.getReceiver(requestId1), expectedDivestValuePol);
-        deal(USDCE_BASE, gateway.getReceiver(requestId2), expectedDivestValueOp);
+        uint256 bobBalance = vault.balanceOf(users.bob);
+        vault.requestRedeem(bobBalance, users.bob, users.bob);
         vm.stopPrank();
-        gateway.settleLiquidation(requestId1, false);
-        gateway.settleLiquidation(requestId2, false);
+
+        // Now vault will try to use idle funds deposited by bob to fulfill the shares that are actually being processed
         vm.startPrank(users.alice);
-
-        // Verify that pendingProcessedShares is reduced after settlement
-        uint256 pendingProcessedAfterSettlement = vault.pendingProcessedShares(users.alice);
-        assertLt(
-            pendingProcessedAfterSettlement,
-            pendingProcessed,
-            "Pending processed shares should decrease after settlement"
-        );
-
-        // Process remaining shares - should now succeed
-        vm.expectEmit(true, true, true, true);
-        emit ProcessRedeemRequest(users.alice, remainingPendingShares);
-
+        vm.expectRevert(abi.encodeWithSignature("SharesInProcess()"));
         vault.processRedeemRequest{ value: mXsV.value }(
-            ProcessRedeemRequestParams(users.alice, remainingPendingShares, sXsV, sXmV, mXsV, mXmV)
+            ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
         );
     }
 }

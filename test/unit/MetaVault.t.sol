@@ -135,7 +135,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         emit DepositRequest(users.alice, users.alice, 0, users.alice, amount);
         vm.expectEmit(true, true, true, true);
         emit Deposit(users.alice, users.alice, amount, amount);
-        uint256 shares = _depositAtomic(amount, users.alice);
+        uint256 shares = _depositAtomic(amount, users.alice, users.alice);
         assertEq(shares, amount);
         assertEq(vault.totalAssets(), amount);
         assertEq(vault.balanceOf(users.alice), amount);
@@ -175,7 +175,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
 
         uint256 investAmount = 600 * _1_USDCE;
         (SingleXChainSingleVaultStateReq memory req) =
@@ -351,7 +351,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         });
 
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         uint256 investAmount = 500 * _1_USDCE;
         uint256 shares = yUsdce.previewDeposit(investAmount);
@@ -482,7 +482,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
             oracle: ISharePriceOracle(address(oracle))
         });
 
-        _depositAtomic(1000 * _1_USDCE, users.alice);
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
         uint256 investAmount = 600 * _1_USDCE;
         SingleXChainSingleVaultStateReq memory investReq =
             _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
@@ -511,7 +511,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
     function test_MetaVault_exitFees_withProfit() public {
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         uint256 profit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, profit);
@@ -574,7 +574,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setManagementFee(100);
         vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         skip(180 days);
 
@@ -649,7 +649,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setManagementFee(100);
         vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         uint256 depositPreview = yUsdce.previewDeposit(400 * _1_USDCE);
         vault.investSingleDirectSingleVault(address(yUsdce), 400 * _1_USDCE, depositPreview);
@@ -710,7 +710,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setManagementFee(100);
         vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         skip(180 days);
 
@@ -749,7 +749,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setManagementFee(100);
         vault.setOracleFee(50);
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         skip(180 days);
 
@@ -778,7 +778,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
     function test_MetaVault_exitFees_noExcessReturn() public {
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         vault.setOracleFee(0);
 
@@ -817,7 +817,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
     function test_MetaVault_exitFees_belowWatermark_noPerformanceFees() public {
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         uint256 initialProfit = 100 * _1_USDCE;
         deal(USDCE_BASE, users.bob, initialProfit);
@@ -888,7 +888,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setOracleFee(50);
         vault.setManagementFee(100);
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         vm.startPrank(users.bob);
         uint256 performanceFeeExemption = 1000; // 10%
@@ -1023,7 +1023,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         vault.setOracleFee(0);
 
         uint256 depositAmount = 1000 * _1_USDCE;
-        _depositAtomic(depositAmount, users.alice);
+        _depositAtomic(depositAmount, users.alice, users.alice);
 
         skip(180 days);
 

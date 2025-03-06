@@ -50,6 +50,9 @@ contract ERC7540Engine is ERC7540EngineBase {
     /// @notice Thrown when shares requested are greater than pending redeem request
     error ExcessiveSharesRequested();
 
+    /// @notice Thrown when shares are already being processed crosschain
+    error SharesInProcess();
+
     /// @notice Thrown when assets were not liquidated
     error AssetsNotLiquidated();
 
@@ -141,6 +144,7 @@ contract ERC7540Engine is ERC7540EngineBase {
         // Custom error check for shares greater than pending redeem request
         uint256 pendingShares = pendingRedeemRequest(config.controller);
         if (config.shares > pendingShares) revert ExcessiveSharesRequested();
+        if (config.shares > pendingShares - pendingProcessedShares[config.controller]) revert SharesInProcess();
 
         cache.assets = convertToAssets(config.shares);
         cache.totalAssets = totalAssets();
@@ -405,8 +409,6 @@ contract ERC7540Engine is ERC7540EngineBase {
         if (totalAssets() > cache.totalAssets - cache.amountToWithdraw) revert AssetsNotLiquidated();
 
         emit ProcessRedeemRequest(config.controller, config.shares);
-
-        if (pendingProcessedShares[config.controller] > config.shares) revert();
 
         pendingProcessedShares[config.controller] += config.shares - cache.sharesFulfilled;
 
