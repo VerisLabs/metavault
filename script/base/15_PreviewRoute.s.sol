@@ -20,43 +20,37 @@ contract PreviewRouteScript is Script {
         relayerPrivateKey = vm.envUint("RELAYER_PRIVATE_KEY");
         metavault = IMetaVault(vm.envAddress("METAVAULT_ADDRESS"));
         vm.startBroadcast(relayerPrivateKey);
-        
+
         address user = 0x88190A6F759CF1115e0c6BCF4Eea1Fef0994e873;
         uint256 amount;
         uint256 totalLocal = metavault.totalLocalAssets();
-        uint256 userRequested = metavault.pendingRedeemRequest(
-           user 
-        );
+        uint256 userRequested = metavault.pendingRedeemRequest(user);
 
         if (totalLocal < userRequested) {
             amount = totalLocal;
         }
 
-        metavault.previewWithdrawalRoute(
-            user,
-            amount,
-            true
-        );
-        
+        metavault.previewWithdrawalRoute(user, amount, true);
+
         console2.log("Previewed withdrawal route");
         console2.log("Amount: ", amount);
 
-//        SingleXChainSingleVaultWithdraw memory sXsV;
-//        SingleXChainMultiVaultWithdraw memory sXmV;        
-//        MultiXChainSingleVaultWithdraw memory mXsV;        
-//        MultiXChainMultiVaultWithdraw memory mXmV;
-//
-//        // Call processRedeemRequest
-//        metavault.processRedeemRequest{ value: 0 }(
-//            ProcessRedeemRequestParams({
-//                controller: 0x88190A6F759CF1115e0c6BCF4Eea1Fef0994e873,
-//                shares: 4000000,
-//                sXsV: sXsV,
-//                sXmV: sXmV,
-//                mXsV: mXsV,
-//                mXmV: mXmV
-//            })
-//        );
+        //        SingleXChainSingleVaultWithdraw memory sXsV;
+        //        SingleXChainMultiVaultWithdraw memory sXmV;
+        //        MultiXChainSingleVaultWithdraw memory mXsV;
+        //        MultiXChainMultiVaultWithdraw memory mXmV;
+        //
+        //        // Call processRedeemRequest
+        //        metavault.processRedeemRequest{ value: 0 }(
+        //            ProcessRedeemRequestParams({
+        //                controller: 0x88190A6F759CF1115e0c6BCF4Eea1Fef0994e873,
+        //                shares: 4000000,
+        //                sXsV: sXsV,
+        //                sXmV: sXmV,
+        //                mXsV: mXsV,
+        //                mXmV: mXmV
+        //            })
+        //        );
 
         vm.stopBroadcast();
     }

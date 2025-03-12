@@ -1,15 +1,32 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import {ERC7540EngineBase} from "./common/ERC7540EngineBase.sol";
+import { ERC7540EngineBase } from "./common/ERC7540EngineBase.sol";
 
-import {ERC4626} from "solady/tokens/ERC4626.sol";
-import {FixedPointMathLib as Math} from "solady/utils/FixedPointMathLib.sol";
-import {SafeCastLib} from "solady/utils/SafeCastLib.sol";
-import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
-import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
+import { ERC4626 } from "solady/tokens/ERC4626.sol";
+import { FixedPointMathLib as Math } from "solady/utils/FixedPointMathLib.sol";
+import { SafeCastLib } from "solady/utils/SafeCastLib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { SignatureCheckerLib } from "solady/utils/SignatureCheckerLib.sol";
 
-import {LiqRequest, MultiDstMultiVaultStateReq, MultiDstSingleVaultStateReq, MultiVaultSFData, MultiXChainMultiVaultWithdraw, MultiXChainSingleVaultWithdraw, ProcessRedeemRequestParams, SingleDirectMultiVaultStateReq, SingleDirectSingleVaultStateReq, SingleVaultSFData, SingleXChainMultiVaultStateReq, SingleXChainMultiVaultWithdraw, SingleXChainSingleVaultStateReq, SingleXChainSingleVaultWithdraw, VaultData, VaultLib} from "types/Lib.sol";
+import {
+    LiqRequest,
+    MultiDstMultiVaultStateReq,
+    MultiDstSingleVaultStateReq,
+    MultiVaultSFData,
+    MultiXChainMultiVaultWithdraw,
+    MultiXChainSingleVaultWithdraw,
+    ProcessRedeemRequestParams,
+    SingleDirectMultiVaultStateReq,
+    SingleDirectSingleVaultStateReq,
+    SingleVaultSFData,
+    SingleXChainMultiVaultStateReq,
+    SingleXChainMultiVaultWithdraw,
+    SingleXChainSingleVaultStateReq,
+    SingleXChainSingleVaultWithdraw,
+    VaultData,
+    VaultLib
+} from "types/Lib.sol";
 
 /// @title ERC7540EngineSignatures
 /// @notice Implementation of a ERC4626 multi-vault deposit liquidity engine with cross-chain functionalities
@@ -65,7 +82,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) public view returns (bool) {
+    )
+        public
+        view
+        returns (bool)
+    {
         // Check deadline
         if (block.timestamp > deadline) {
             revert SignatureExpired();
@@ -80,12 +101,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         bytes32 paramsHash = computeHash(params, deadline, nonce);
 
         // Verify signature using SignatureCheckerLib
-        return
-            SignatureCheckerLib.isValidSignatureNow(
-                signerRelayer,
-                paramsHash,
-                abi.encodePacked(r, s, v)
-            );
+        return SignatureCheckerLib.isValidSignatureNow(signerRelayer, paramsHash, abi.encodePacked(r, s, v));
     }
 
     /// @notice Computes the hash of the request parameters
@@ -97,20 +113,16 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         ProcessRedeemRequestParams calldata params,
         uint256 deadline,
         uint256 nonce
-    ) public pure returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    params.controller,
-                    params.shares,
-                    params.sXsV,
-                    params.sXmV,
-                    params.mXsV,
-                    params.mXmV,
-                    deadline,
-                    nonce
-                )
-            );
+    )
+        public
+        pure
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encode(
+                params.controller, params.shares, params.sXsV, params.sXmV, params.mXsV, params.mXmV, deadline, nonce
+            )
+        );
     }
 
     /// @notice Process a request with a valid relayer signature
@@ -125,7 +137,9 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external {
+    )
+        external
+    {
         address controller = params.controller;
         // Get and increment nonce
         uint256 nonce = nonces(controller);
@@ -148,9 +162,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         // Process the request
         _processRedeemRequest(
             ProcessRedeemRequestConfig(
-                params.shares == 0
-                    ? pendingRedeemRequest(params.controller)
-                    : params.shares,
+                params.shares == 0 ? pendingRedeemRequest(params.controller) : params.shares,
                 params.controller,
                 params.sXsV,
                 params.sXmV,
@@ -178,9 +190,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
     /// @notice Executes the redeem request for a controller
     // Original function - modified to call helper functions
-    function _processRedeemRequest(
-        ProcessRedeemRequestConfig memory config
-    ) private {
+    function _processRedeemRequest(ProcessRedeemRequestConfig memory config) private {
         // Use struct to avoid stack too deep
         ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
@@ -190,10 +200,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         // Custom error check for shares greater than pending redeem request
         uint256 pendingShares = pendingRedeemRequest(config.controller);
         if (config.shares > pendingShares) revert ExcessiveSharesRequested();
-        if (
-            config.shares >
-            pendingShares - pendingProcessedShares[config.controller]
-        ) revert SharesInProcess();
+        if (config.shares > pendingShares - pendingProcessedShares[config.controller]) revert SharesInProcess();
 
         cache.assets = convertToAssets(config.shares);
         cache.totalAssets = totalAssets();
@@ -215,10 +222,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             // Use totalIdle to fulfill the request
             if (cache.totalIdle > 0) {
                 cache.totalClaimableWithdraw = cache.totalIdle;
-                cache.sharesFulfilled = _convertToShares(
-                    cache.totalIdle,
-                    cache.totalAssets
-                );
+                cache.sharesFulfilled = _convertToShares(cache.totalIdle, cache.totalAssets);
             }
 
             _prepareWithdrawalRoute(cache, false);
@@ -246,31 +250,27 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         _totalDebt = cache.totalDebt.toUint128();
 
         // Check that totalAssets was actually reduced by the amount to withdraw
-        if (totalAssets() > cache.totalAssets - cache.amountToWithdraw)
+        if (totalAssets() > cache.totalAssets - cache.amountToWithdraw) {
             revert AssetsNotLiquidated();
+        }
 
         emit ProcessRedeemRequest(config.controller, config.shares);
 
-        pendingProcessedShares[config.controller] +=
-            config.shares -
-            cache.sharesFulfilled;
+        pendingProcessedShares[config.controller] += config.shares - cache.sharesFulfilled;
 
         // Burn all shares from this contract(they already have been transferred)
         _burn(address(this), config.shares);
         // Fulfill request with instant withdrawals only
-        _fulfillRedeemRequest(
-            cache.sharesFulfilled,
-            cache.totalClaimableWithdraw,
-            config.controller,
-            true
-        );
+        _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, config.controller, true);
     }
 
     // New helper function for this chain withdrawals
     function _processThisChainWithdrawals(
         ProcessRedeemRequestConfig memory config,
         ProcessRedeemRequestCache memory cache
-    ) private {
+    )
+        private
+    {
         uint256 chainIndex = chainIndexes[THIS_CHAIN_ID];
         if (cache.lens[chainIndex] == 0) return;
 
@@ -280,17 +280,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             uint256 assetsAmount = cache.assetsPerVault[chainIndex][0];
             uint256 superformId = cache.dstVaults[chainIndex][0];
 
-            uint256 withdrawn = _liquidateSingleDirectSingleVault(
-                vaults[superformId].vaultAddress,
-                sharesAmount,
-                0,
-                address(this)
-            );
+            uint256 withdrawn =
+                _liquidateSingleDirectSingleVault(vaults[superformId].vaultAddress, sharesAmount, 0, address(this));
 
-            cache.sharesFulfilled += _convertToShares(
-                assetsAmount,
-                cache.totalAssets
-            );
+            cache.sharesFulfilled += _convertToShares(assetsAmount, cache.totalAssets);
             _reduceVaultDebt(superformId, assetsAmount);
             cache.totalClaimableWithdraw += withdrawn;
             cache.totalIdle += withdrawn;
@@ -301,33 +294,23 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             uint256[] memory amounts = new uint256[](len);
             uint256 requestedAssets;
 
-            for (uint256 i = 0; i < len; ) {
-                vaultAddresses[i] = vaults[cache.dstVaults[chainIndex][i]]
-                    .vaultAddress;
+            for (uint256 i = 0; i < len;) {
+                vaultAddresses[i] = vaults[cache.dstVaults[chainIndex][i]].vaultAddress;
                 amounts[i] = cache.sharesPerVault[chainIndex][i];
                 uint256 superformId = cache.dstVaults[chainIndex][i];
                 requestedAssets += cache.assetsPerVault[chainIndex][i];
-                _reduceVaultDebt(
-                    superformId,
-                    cache.assetsPerVault[chainIndex][i]
-                );
+                _reduceVaultDebt(superformId, cache.assetsPerVault[chainIndex][i]);
                 unchecked {
                     ++i;
                 }
             }
 
             uint256 withdrawn = _liquidateSingleDirectMultiVault(
-                vaultAddresses,
-                amounts,
-                _getEmptyuintArray(amounts.length),
-                address(this)
+                vaultAddresses, amounts, _getEmptyuintArray(amounts.length), address(this)
             );
 
             cache.totalClaimableWithdraw += withdrawn;
-            cache.sharesFulfilled += _convertToShares(
-                requestedAssets,
-                cache.totalAssets
-            );
+            cache.sharesFulfilled += _convertToShares(requestedAssets, cache.totalAssets);
             cache.totalIdle += withdrawn;
         }
     }
@@ -336,14 +319,16 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
     function _processSingleChainWithdrawals(
         ProcessRedeemRequestConfig memory config,
         ProcessRedeemRequestCache memory cache
-    ) private {
+    )
+        private
+    {
         if (!cache.isMultiVault) {
             // Single chain, single vault
             uint256 superformId;
             uint256 amount;
             uint64 chainId;
 
-            for (uint256 i = 0; i < N_CHAINS; ) {
+            for (uint256 i = 0; i < N_CHAINS;) {
                 if (DST_CHAINS[i] == THIS_CHAIN_ID) {
                     unchecked {
                         ++i;
@@ -358,18 +343,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
                     amount = cache.sharesPerVault[i][0];
 
                     _liquidateSingleXChainSingleVault(
-                        chainId,
-                        superformId,
-                        amount,
-                        config.controller,
-                        config.sXsV,
-                        cache.assetsPerVault[i][0]
+                        chainId, superformId, amount, config.controller, config.sXsV, cache.assetsPerVault[i][0]
                     );
 
-                    _reduceVaultDebt(
-                        superformId,
-                        cache.assetsPerVault[chainIndex][0]
-                    );
+                    _reduceVaultDebt(superformId, cache.assetsPerVault[chainIndex][0]);
                     break;
                 }
                 unchecked {
@@ -382,7 +359,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             uint256[] memory amounts;
             uint64 chainId;
 
-            for (uint256 i = 0; i < N_CHAINS; ) {
+            for (uint256 i = 0; i < N_CHAINS;) {
                 if (DST_CHAINS[i] == THIS_CHAIN_ID) {
                     unchecked {
                         ++i;
@@ -392,21 +369,12 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
                 if (cache.lens[i] > 0) {
                     chainId = DST_CHAINS[i];
-                    superformIds = _toDynamicUint256Array(
-                        cache.dstVaults[i],
-                        cache.lens[i]
-                    );
-                    amounts = _toDynamicUint256Array(
-                        cache.sharesPerVault[i],
-                        cache.lens[i]
-                    );
+                    superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
+                    amounts = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
                     uint256 totalDebtReduction;
 
-                    for (uint256 j = 0; j < superformIds.length; ) {
-                        _reduceVaultDebt(
-                            superformIds[j],
-                            cache.assetsPerVault[i][j]
-                        );
+                    for (uint256 j = 0; j < superformIds.length;) {
+                        _reduceVaultDebt(superformIds[j], cache.assetsPerVault[i][j]);
                         totalDebtReduction += cache.assetsPerVault[i][j];
                         unchecked {
                             ++j;
@@ -420,10 +388,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
                         config.controller,
                         config.sXmV,
                         totalDebtReduction,
-                        _toDynamicUint256Array(
-                            cache.assetsPerVault[i],
-                            cache.lens[i]
-                        )
+                        _toDynamicUint256Array(cache.assetsPerVault[i], cache.lens[i])
                     );
                     break;
                 }
@@ -438,7 +403,9 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
     function _processMultiChainWithdrawals(
         ProcessRedeemRequestConfig memory config,
         ProcessRedeemRequestCache memory cache
-    ) private {
+    )
+        private
+    {
         if (!cache.isMultiVault) {
             _processMultiChainSingleVault(config, cache);
         } else {
@@ -450,9 +417,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
     function _processMultiChainSingleVault(
         ProcessRedeemRequestConfig memory config,
         ProcessRedeemRequestCache memory cache
-    ) private {
+    )
+        private
+    {
         uint256 chainsLen;
-        for (uint256 i = 0; i < cache.lens.length; ) {
+        for (uint256 i = 0; i < cache.lens.length;) {
             if (cache.lens[i] > 0) chainsLen++;
             unchecked {
                 ++i;
@@ -461,12 +430,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
         uint8[][] memory ambIds = new uint8[][](chainsLen);
         uint64[] memory dstChainIds = new uint64[](chainsLen);
-        SingleVaultSFData[] memory singleVaultDatas = new SingleVaultSFData[](
-            chainsLen
-        );
+        SingleVaultSFData[] memory singleVaultDatas = new SingleVaultSFData[](chainsLen);
         uint256 lastChainsIndex;
 
-        for (uint256 i = 0; i < N_CHAINS; ) {
+        for (uint256 i = 0; i < N_CHAINS;) {
             if (cache.lens[i] > 0) {
                 dstChainIds[lastChainsIndex] = DST_CHAINS[i];
                 ++lastChainsIndex;
@@ -478,7 +445,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
         uint256[] memory totalDebtReductions = new uint256[](chainsLen);
 
-        for (uint256 i = 0; i < N_CHAINS; ) {
+        for (uint256 i = 0; i < N_CHAINS;) {
             if (cache.lens[i] == 0) {
                 unchecked {
                     ++i;
@@ -509,22 +476,13 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             }
         }
 
-        _liquidateMultiDstSingleVault(
-            ambIds,
-            dstChainIds,
-            singleVaultDatas,
-            config.mXsV.value,
-            totalDebtReductions
-        );
+        _liquidateMultiDstSingleVault(ambIds, dstChainIds, singleVaultDatas, config.mXsV.value, totalDebtReductions);
     }
 
     function _reduceVaultDebt(uint256 superformId, uint256 amount) private {
         unchecked {
-            vaults[superformId].totalDebt = (
-                amount >= vaults[superformId].totalDebt
-                    ? 0
-                    : vaults[superformId].totalDebt - amount
-            ).toUint128();
+            vaults[superformId].totalDebt =
+                (amount >= vaults[superformId].totalDebt ? 0 : vaults[superformId].totalDebt - amount).toUint128();
         }
     }
 
@@ -532,9 +490,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
     function _processMultiChainMultiVault(
         ProcessRedeemRequestConfig memory config,
         ProcessRedeemRequestCache memory cache
-    ) private {
+    )
+        private
+    {
         uint256 chainsLen;
-        for (uint256 i = 0; i < cache.lens.length; ) {
+        for (uint256 i = 0; i < cache.lens.length;) {
             if (cache.lens[i] > 0) chainsLen++;
             unchecked {
                 ++i;
@@ -543,12 +503,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
 
         uint8[][] memory ambIds = new uint8[][](chainsLen);
         uint64[] memory dstChainIds = new uint64[](chainsLen);
-        MultiVaultSFData[] memory multiVaultDatas = new MultiVaultSFData[](
-            chainsLen
-        );
+        MultiVaultSFData[] memory multiVaultDatas = new MultiVaultSFData[](chainsLen);
         uint256 lastChainsIndex;
 
-        for (uint256 i = 0; i < N_CHAINS; ) {
+        for (uint256 i = 0; i < N_CHAINS;) {
             if (cache.lens[i] > 0) {
                 dstChainIds[lastChainsIndex] = DST_CHAINS[i];
                 ++lastChainsIndex;
@@ -561,7 +519,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         uint256[] memory totalDebtReductions = new uint256[](chainsLen);
         uint256[][] memory debtReductionsPerVault = new uint256[][](chainsLen);
 
-        for (uint256 i = 0; i < N_CHAINS; ) {
+        for (uint256 i = 0; i < N_CHAINS;) {
             if (cache.lens[i] == 0) {
                 unchecked {
                     ++i;
@@ -570,17 +528,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             }
 
             bool[] memory emptyBoolArray = _getEmptyBoolArray(cache.lens[i]);
-            uint256[] memory superformIds = _toDynamicUint256Array(
-                cache.dstVaults[i],
-                cache.lens[i]
-            );
+            uint256[] memory superformIds = _toDynamicUint256Array(cache.dstVaults[i], cache.lens[i]);
 
             multiVaultDatas[cache.lastIndex] = MultiVaultSFData({
                 superformIds: superformIds,
-                amounts: _toDynamicUint256Array(
-                    cache.sharesPerVault[i],
-                    cache.lens[i]
-                ),
+                amounts: _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]),
                 outputAmounts: config.mXmV.outputAmounts[cache.lastIndex],
                 maxSlippages: config.mXmV.maxSlippages[cache.lastIndex],
                 liqRequests: config.mXmV.liqRequests[cache.lastIndex],
@@ -593,16 +545,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
             });
 
             ambIds[cache.lastIndex] = config.mXmV.ambIds[cache.lastIndex];
-            debtReductionsPerVault[cache.lastIndex] = _toDynamicUint256Array(
-                cache.sharesPerVault[i],
-                cache.lens[i]
-            );
+            debtReductionsPerVault[cache.lastIndex] = _toDynamicUint256Array(cache.sharesPerVault[i], cache.lens[i]);
 
-            for (uint256 j = 0; j < superformIds.length; ) {
+            for (uint256 j = 0; j < superformIds.length;) {
                 _reduceVaultDebt(superformIds[j], cache.assetsPerVault[i][j]);
-                totalDebtReductions[cache.lastIndex] += cache.assetsPerVault[i][
-                    j
-                ];
+                totalDebtReductions[cache.lastIndex] += cache.assetsPerVault[i][j];
                 unchecked {
                     ++j;
                 }
@@ -615,12 +562,7 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         }
 
         _liquidateMultiDstMultiVault(
-            ambIds,
-            dstChainIds,
-            multiVaultDatas,
-            config.mXmV.value,
-            totalDebtReductions,
-            debtReductionsPerVault
+            ambIds, dstChainIds, multiVaultDatas, config.mXmV.value, totalDebtReductions, debtReductionsPerVault
         );
     }
 
@@ -635,7 +577,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         uint256 amount,
         uint256 minAmountOut,
         address receiver
-    ) private returns (uint256 withdrawn) {
+    )
+        private
+        returns (uint256 withdrawn)
+    {
         uint256 balanceBefore = asset().balanceOf(address(this));
         ERC4626(vault).redeem(amount, address(this), receiver);
         withdrawn = asset().balanceOf(address(this)) - balanceBefore;
@@ -655,14 +600,12 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         uint256[] memory amounts,
         uint256[] memory minAmountsOut,
         address receiver
-    ) private returns (uint256 withdrawn) {
-        for (uint256 i = 0; i < vaults_.length; ) {
-            withdrawn += _liquidateSingleDirectSingleVault(
-                vaults_[i],
-                amounts[i],
-                minAmountsOut[i],
-                receiver
-            );
+    )
+        private
+        returns (uint256 withdrawn)
+    {
+        for (uint256 i = 0; i < vaults_.length;) {
+            withdrawn += _liquidateSingleDirectSingleVault(vaults_[i], amounts[i], minAmountsOut[i], receiver);
 
             unchecked {
                 ++i;
@@ -684,14 +627,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         address receiver,
         SingleXChainSingleVaultWithdraw memory config,
         uint256 totalDebtReduction
-    ) private {
-        gateway.liquidateSingleXChainSingleVault{value: config.value}(
-            chainId,
-            superformId,
-            amount,
-            receiver,
-            config,
-            totalDebtReduction
+    )
+        private
+    {
+        gateway.liquidateSingleXChainSingleVault{ value: config.value }(
+            chainId, superformId, amount, receiver, config, totalDebtReduction
         );
     }
 
@@ -710,15 +650,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         SingleXChainMultiVaultWithdraw memory config,
         uint256 totalDebtReduction,
         uint256[] memory debtReductionPerVault
-    ) private {
-        gateway.liquidateSingleXChainMultiVault{value: config.value}(
-            chainId,
-            superformIds,
-            amounts,
-            receiver,
-            config,
-            totalDebtReduction,
-            debtReductionPerVault
+    )
+        private
+    {
+        gateway.liquidateSingleXChainMultiVault{ value: config.value }(
+            chainId, superformIds, amounts, receiver, config, totalDebtReduction, debtReductionPerVault
         );
     }
 
@@ -734,13 +670,10 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         SingleVaultSFData[] memory singleVaultDatas,
         uint256 value,
         uint256[] memory totalDebtReductions
-    ) private {
-        gateway.liquidateMultiDstSingleVault{value: value}(
-            ambIds,
-            dstChainIds,
-            singleVaultDatas,
-            totalDebtReductions
-        );
+    )
+        private
+    {
+        gateway.liquidateMultiDstSingleVault{ value: value }(ambIds, dstChainIds, singleVaultDatas, totalDebtReductions);
     }
 
     /// @dev Initiates withdrawals from multiple vaults on multiple different chains
@@ -757,13 +690,11 @@ contract ERC7540EngineSignatures is ERC7540EngineBase {
         uint256 value,
         uint256[] memory totalDebtReduction,
         uint256[][] memory debtReductionsPerVault
-    ) private {
-        gateway.liquidateMultiDstMultiVault{value: value}(
-            ambIds,
-            dstChainIds,
-            multiVaultDatas,
-            totalDebtReduction,
-            debtReductionsPerVault
+    )
+        private
+    {
+        gateway.liquidateMultiDstMultiVault{ value: value }(
+            ambIds, dstChainIds, multiVaultDatas, totalDebtReduction, debtReductionsPerVault
         );
     }
 
