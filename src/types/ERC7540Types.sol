@@ -74,6 +74,10 @@ library ERC7540Lib {
         return ERC7540_Request.wrap(ERC7540_Request.unwrap(self) - x);
     }
 
+    function sub0(ERC7540_Request self, uint256 x) internal pure returns (ERC7540_Request) {
+        return ERC7540_Request.wrap(x > ERC7540_Request.unwrap(self) ? 0 : ERC7540_Request.unwrap(self) - x);
+    }
+
     /// @notice Unwraps an ERC7540_Request to retrieve the underlying uint256 value
     /// @dev Retrieves the raw uint256 value wrapped by the ERC7540_Request
     /// @param self The ERC7540_Request to unwrap

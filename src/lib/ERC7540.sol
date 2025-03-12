@@ -22,11 +22,16 @@ abstract contract ERC7540 is ERC4626 {
     event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
     );
-
     /// @dev Emitted when `shares` vault shares are redeemed
     event RedeemRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 shares
     );
+
+    /// @dev Emitted when a deposit request is fulfilled after being processed
+    event FulfillDepositRequest(address indexed controller, uint256 assets, uint256 shares);
+
+    /// @dev Emitted when a redeem request is fulfilled after being processed
+    event FulfillRedeemRequest(address indexed controller, uint256 shares, uint256 assets);
 
     /// @dev Emitted when `controller` gives allowance to `operator`
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
@@ -403,6 +408,7 @@ abstract contract ERC7540 is ERC4626 {
         _pendingDepositRequest[controller] = _pendingDepositRequest[controller].sub(assetsFulfilled);
         _claimableDepositRequest[controller].assets += assetsFulfilled;
         _claimableDepositRequest[controller].shares += sharesMinted;
+        emit FulfillDepositRequest(controller, assetsFulfilled, sharesMinted);
     }
 
     /// @dev Hook that is called when processing a redeem request and make it claimable.
@@ -410,13 +416,19 @@ abstract contract ERC7540 is ERC4626 {
     function _fulfillRedeemRequest(
         uint256 sharesFulfilled,
         uint256 assetsWithdrawn,
-        address controller
+        address controller,
+        bool strict
     )
         internal
         virtual
     {
-        _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
+        if (strict) {
+            _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub(sharesFulfilled);
+        } else {
+            _pendingRedeemRequest[controller] = _pendingRedeemRequest[controller].sub0(sharesFulfilled);
+        }
         _claimableRedeemRequest[controller].assets += assetsWithdrawn;
         _claimableRedeemRequest[controller].shares += sharesFulfilled;
+        emit FulfillRedeemRequest(controller, sharesFulfilled, assetsWithdrawn);
     }
 }

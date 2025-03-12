@@ -6,7 +6,7 @@ import {
 } from "crosschain/SuperformGateway/Lib.sol";
 import { Script, console2 } from "forge-std/Script.sol";
 
-import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE } from "helpers/AddressBook.sol";
+import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, WETH_BASE } from "helpers/AddressBook.sol";
 import {
     IBaseRouter,
     IHurdleRateOracle,
@@ -16,7 +16,7 @@ import {
     ISuperformFactory,
     ISuperformGateway
 } from "interfaces/Lib.sol";
-import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures } from "modules/Lib.sol";
 import { MetaVault } from "src/MetaVault.sol";
 import { VaultConfig } from "types/Lib.sol";
 
@@ -25,10 +25,11 @@ contract DeployScript is Script {
     IMetaVault public vault;
     ISuperformGateway public gateway;
     ERC7540Engine public engine;
+    ERC7540EngineReader public engineReader;
+    ERC7540EngineSignatures public engineSignatures;
     AssetsManager public assetManager;
 
     uint256 deployerPrivateKey;
-    address superPositionsReceiverAddress;
     address hurdleRateOracleAddress;
 
     address adminAndOwnerRole;
@@ -38,7 +39,6 @@ contract DeployScript is Script {
 
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        //superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
 
         adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
@@ -49,8 +49,8 @@ contract DeployScript is Script {
 
         config = VaultConfig({
             asset: USDCE_BASE,
-            name: "MetaUsdceVault",
-            symbol: "metaUSDCe",
+            name: "MaxUSD Vault",
+            symbol: "maxUSD",
             managementFee: 100,
             performanceFee: 2000,
             oracleFee: 50,
@@ -82,7 +82,6 @@ contract DeployScript is Script {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         gateway = ISuperformGateway(address(_gateway));
-        //gateway.setRecoveryAddress(superPositionsReceiverAddress);
 
         // Set gatway
         vault.setGateway(address(gateway));
@@ -91,6 +90,14 @@ contract DeployScript is Script {
         engine = new ERC7540Engine();
         bytes4[] memory engineSelectors = engine.selectors();
         vault.addFunctions(engineSelectors, address(engine), false);
+
+        engineReader = new ERC7540EngineReader();
+        bytes4[] memory engineReaderSelectors = engineReader.selectors();
+        vault.addFunctions(engineReaderSelectors, address(engineReader), false);
+
+        engineSignatures = new ERC7540EngineSignatures();
+        bytes4[] memory engineSignaturesSelectors = engineSignatures.selectors();
+        vault.addFunctions(engineSignaturesSelectors, address(engineSignatures), false);
 
         assetManager = new AssetsManager();
         bytes4[] memory assetManagerSelectors = assetManager.selectors();
@@ -103,6 +110,13 @@ contract DeployScript is Script {
 
         console2.log("Vault deployed at: ", address(vault));
         console2.log("Gateway deployed at: ", address(gateway));
+        console2.log("Engine deployed at: ", address(engine));
+        console2.log("EngineReader deployed at: ", address(engineReader));
+        console2.log("EngineSignatures deployed at: ", address(engineSignatures));
+        console2.log("AssetManager deployed at: ", address(assetManager));
+        console2.log("InvestSuperform deployed at: ", address(invest));
+        console2.log("DivestSuperform deployed at: ", address(divest));
+        console2.log("LiquidateSuperform deployed at: ", address(liquidate));
 
         vm.stopBroadcast();
     }

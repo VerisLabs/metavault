@@ -14,7 +14,7 @@ contract ERC20Receiver {
     address immutable _deployer;
 
     /// @dev The ERC20 token address this receiver manages
-    address immutable _asset;
+    address public immutable _asset;
 
     /// @dev The SuperPositions contract address
     address immutable _superPositions;

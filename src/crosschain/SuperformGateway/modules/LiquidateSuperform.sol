@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import { GatewayBase } from "../common/GatewayBase.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
-
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import {
@@ -19,6 +18,8 @@ import {
     SingleXChainSingleVaultWithdraw
 } from "types/Lib.sol";
 
+/// @title LiquidateSuperform module contract to process metavault crosschain liquidations for users withdrawals
+/// @author Unlockd
 contract LiquidateSuperform is GatewayBase {
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
     using SafeTransferLib for address;
@@ -38,6 +39,7 @@ contract LiquidateSuperform is GatewayBase {
     event LiquidateXChain(
         address indexed controller, uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes32 key
     );
+
     /// @notice Emitted when a request is settled
     event RequestSettled(bytes32 indexed key, address indexed controller, uint256 settledAmount);
 
@@ -81,7 +83,7 @@ contract LiquidateSuperform is GatewayBase {
                 hasDstSwap: config.hasDstSwap,
                 retain4626: false,
                 receiverAddress: assetReceiver,
-                receiverAddressSP: address(0),
+                receiverAddressSP: assetReceiver,
                 extraFormData: ""
             })
         });
@@ -145,7 +147,7 @@ contract LiquidateSuperform is GatewayBase {
                 hasDstSwaps: config.hasDstSwaps,
                 retain4626s: _getEmptyBoolArray(len),
                 receiverAddress: assetReceiver,
-                receiverAddressSP: address(0),
+                receiverAddressSP: assetReceiver,
                 extraFormData: ""
             })
         });
@@ -193,6 +195,7 @@ contract LiquidateSuperform is GatewayBase {
             address assetReceiver = getReceiver(key);
             ERC20Receiver(assetReceiver).setMinExpectedBalance(singleVaultDatas[i].outputAmount);
             singleVaultDatas[i].receiverAddress = assetReceiver;
+            singleVaultDatas[i].receiverAddressSP = assetReceiver;
             RequestData storage data = requests[key];
             data.requestedAssets = totalRequestedAssets[i];
             data.controller = controller;
@@ -241,6 +244,7 @@ contract LiquidateSuperform is GatewayBase {
             }
             ERC20Receiver(assetReceiver).setMinExpectedBalance(totalMinExpectedBalance);
             multiVaultDatas[i].receiverAddress = assetReceiver;
+            multiVaultDatas[i].receiverAddressSP = assetReceiver;
             RequestData storage data = requests[key];
             data.requestedAssets = totalRequestedAssets[i];
             data.controller = controller;
@@ -302,7 +306,7 @@ contract LiquidateSuperform is GatewayBase {
         returns (bytes32[] memory requestIds)
     {
         requestIds = new bytes32[](1);
-        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver] + 1, superformId));
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver], superformId));
         requestIds[0] = key;
         return requestIds;
     }
@@ -321,7 +325,7 @@ contract LiquidateSuperform is GatewayBase {
         returns (bytes32[] memory requestIds)
     {
         requestIds = new bytes32[](1);
-        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver] + 1, superformIds));
+        bytes32 key = keccak256(abi.encode(receiver, nonces[receiver], superformIds));
         requestIds[0] = key;
         return requestIds;
     }
@@ -341,9 +345,7 @@ contract LiquidateSuperform is GatewayBase {
             uint256 superformId = singleVaultDatas[i].superformId;
             bytes32 key = keccak256(
                 abi.encode(
-                    singleVaultDatas[i].receiverAddress,
-                    nonces[singleVaultDatas[i].receiverAddress] + i + 1,
-                    superformId
+                    singleVaultDatas[i].receiverAddress, nonces[singleVaultDatas[i].receiverAddress] + i, superformId
                 )
             );
             requestIds[i] = key;
@@ -370,7 +372,7 @@ contract LiquidateSuperform is GatewayBase {
             uint256[] memory superformIds = multiVaultDatas[i].superformIds;
             bytes32 key = keccak256(
                 abi.encode(
-                    multiVaultDatas[i].receiverAddress, nonces[multiVaultDatas[i].receiverAddress] + i + 1, superformIds
+                    multiVaultDatas[i].receiverAddress, nonces[multiVaultDatas[i].receiverAddress] + i, superformIds
                 )
             );
             requestIds[i] = key;
@@ -381,19 +383,20 @@ contract LiquidateSuperform is GatewayBase {
         return requestIds;
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](8);
+        bytes4[] memory s = new bytes4[](9);
         s[0] = this.liquidateSingleXChainSingleVault.selector;
         s[1] = this.liquidateSingleXChainMultiVault.selector;
         s[2] = this.liquidateMultiDstSingleVault.selector;
         s[3] = this.liquidateMultiDstMultiVault.selector;
 
-        s[3] = this.settleLiquidation.selector;
+        s[4] = this.settleLiquidation.selector;
 
-        s[4] = this.previewLiquidateSingleXChainSingleVault.selector;
-        s[5] = this.previewLiquidateSingleXChainMultiVault.selector;
-        s[6] = this.previewLiquidateMultiDstSingleVault.selector;
-        s[7] = this.previewLiquidateMultiDstMultiVault.selector;
+        s[5] = this.previewLiquidateSingleXChainSingleVault.selector;
+        s[6] = this.previewLiquidateSingleXChainMultiVault.selector;
+        s[7] = this.previewLiquidateMultiDstSingleVault.selector;
+        s[8] = this.previewLiquidateMultiDstMultiVault.selector;
         return s;
     }
 

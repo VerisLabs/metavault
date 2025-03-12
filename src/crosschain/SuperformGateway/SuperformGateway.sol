@@ -9,6 +9,10 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
+/// @title SuperformGateway gateway contract for all crosschain operations involving Superform protofol
+/// @author Unlockd
+/// @notice Uses a modular proxy pattern similar to diamond pattern to easily upgrade functionality
+/// @dev Inherits from GatewayBase
 contract SuperformGateway is GatewayBase, MultiFacetProxy {
     using VaultLib for VaultData;
     using EnumerableSetLib for EnumerableSetLib.Bytes32Set;
@@ -45,15 +49,21 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
     }
 
     function setVault(IMetaVault _vault) external onlyRoles(ADMIN_ROLE) {
+        asset.safeApprove(address(vault), 0);
         vault = _vault;
+        asset.safeApprove(address(vault), type(uint256).max);
     }
 
     function setRouter(IBaseRouter _superformRouter) external onlyRoles(ADMIN_ROLE) {
+        asset.safeApprove(address(superformRouter), 0);
         superformRouter = _superformRouter;
+        asset.safeApprove(address(superformRouter), type(uint256).max);
     }
 
     function setSuperPositions(ISuperPositions _superPositions) external onlyRoles(ADMIN_ROLE) {
+        superPositions.setApprovalForAll(address(superformRouter), false);
         superPositions = _superPositions;
+        superPositions.setApprovalForAll(address(superformRouter), true);
     }
 
     /// @notice Gets the current queue of pending request IDs
@@ -110,7 +120,7 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         VaultData memory vaultObj = vault.getVault(superformId);
         uint256 investedAssets = pendingXChainInvests[superformId];
         delete pendingXChainInvests[superformId];
-        uint256 bridgedAssets = vaultObj.convertToAssets(value, false);
+        uint256 bridgedAssets = vaultObj.convertToAssets(value, asset, false);
         totalpendingXChainInvests -= investedAssets;
         superPositions.safeTransferFrom(address(this), address(vault), superformId, value, "");
         vault.settleXChainInvest(superformId, bridgedAssets);

@@ -210,15 +210,8 @@ contract AssetsManager is ModuleBase {
         onlyRoles(MANAGER_ROLE)
         returns (uint256 assets)
     {
-        uint256 sharesBalance = ERC4626(vaultAddress).balanceOf(address(this));
-        uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
-        bool removeDebt;
-        if (shares == sharesBalance) {
-            removeDebt = true;
-        }
-
-        // Ensure the target vault is in the approved list
         if (!isVaultListed(vaultAddress)) revert VaultNotListed();
+        uint256 sharesValue = ERC4626(vaultAddress).convertToAssets(shares).toUint128();
 
         // Record the balance before deposit to calculate received assets
         uint256 balanceBefore = asset().balanceOf(address(this));
@@ -236,10 +229,10 @@ contract AssetsManager is ModuleBase {
 
         // Update the vault's internal accounting
         _totalIdle += assets.toUint128();
-        uint128 amountUint128 =
-            removeDebt ? vaults[_vaultToSuperformId[vaultAddress]].totalDebt : sharesValue.toUint128();
-        _totalDebt -= amountUint128;
-        vaults[_vaultToSuperformId[vaultAddress]].totalDebt -= amountUint128;
+        _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
+
+        vaults[_vaultToSuperformId[vaultAddress]].totalDebt =
+            _sub0(vaults[_vaultToSuperformId[vaultAddress]].totalDebt, sharesValue).toUint128();
 
         emit Divest(sharesValue);
         return assets;
@@ -258,7 +251,6 @@ contract AssetsManager is ModuleBase {
         uint256[] calldata minAssetsOuts
     )
         external
-        payable
         returns (uint256[] memory assets)
     {
         assets = new uint256[](vaultAddresses.length);
@@ -277,7 +269,7 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        uint256 sharesValue = gateway.divestSingleXChainSingleVault{ value: msg.value }(req);
+        uint256 sharesValue = gateway.divestSingleXChainSingleVault{ value: msg.value }(req, true);
         _totalDebt = _sub0(_totalDebt, sharesValue).toUint128();
         vaults[req.superformData.superformId].totalDebt =
             _sub0(vaults[req.superformData.superformId].totalDebt, sharesValue).toUint128();
@@ -294,18 +286,19 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req, true);
+
         for (uint256 i = 0; i < req.superformsData.superformIds.length;) {
             uint256 superformId = req.superformsData.superformIds[i];
             VaultData memory vault = vaults[superformId];
             uint256 sharesBalance = _sharesBalance(vault);
-            uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+            uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
             vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
             vaults[superformId] = vault;
             unchecked {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.divestSingleXChainMultiVault{ value: msg.value }(req);
         _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
         emit Divest(totalAmount);
     }
@@ -320,18 +313,20 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req, true);
+
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
             VaultData memory vault = vaults[superformId];
-            uint256 sharesBalance = _sharesBalance(vault);
-            uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
-            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+
+            // Only reduce debt by the actual amount being divested
+            uint256 divestAmount = vault.convertToAssets(req.superformsData[i].amount, asset(), true);
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, divestAmount).toUint128();
             vaults[superformId] = vault;
             unchecked {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.divestMultiXChainSingleVault{ value: msg.value }(req);
         _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
         emit Divest(totalAmount);
     }
@@ -346,13 +341,15 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
+        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req, true);
+
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             for (uint256 j = 0; j < superformIds.length;) {
                 uint256 superformId = superformIds[j];
                 VaultData memory vault = vaults[superformId];
                 uint256 sharesBalance = _sharesBalance(vault);
-                uint256 sharesValue = vault.convertToAssets(sharesBalance, true);
+                uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
                 vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
                 vaults[superformId] = vault;
                 unchecked {
@@ -363,7 +360,6 @@ contract AssetsManager is ModuleBase {
                 ++i;
             }
         }
-        uint256 totalAmount = gateway.divestMultiXChainMultiVault{ value: msg.value }(req);
         _totalDebt = _sub0(_totalDebt, totalAmount).toUint128();
 
         emit Divest(totalAmount);
@@ -393,6 +389,7 @@ contract AssetsManager is ModuleBase {
         emit SettleXChainDivest(withdrawnAssets);
     }
 
+    /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](14);
         s[0] = this.investSingleDirectSingleVault.selector;

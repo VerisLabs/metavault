@@ -41,13 +41,13 @@ contract SuperPositionsReceiver is OwnableRoles {
     /// @param _sourceChain The chain ID where the original gateway is deployed
     /// @param _gateway Address of the SuperformGateway contract
     /// @param _superPositions Address of the SuperPositions contract
-    constructor(uint64 _sourceChain, address _gateway, address _superPositions) {
+    constructor(uint64 _sourceChain, address _gateway, address _superPositions, address _owner) {
         sourceChain = _sourceChain;
         gateway = _gateway;
         superPositions = _superPositions;
         // Initialize ownership and grant admin role
-        _initializeOwner(msg.sender);
-        _grantRoles(msg.sender, ADMIN_ROLE);
+        _initializeOwner(_owner);
+        _grantRoles(_owner, ADMIN_ROLE);
     }
 
     function setGateway(address _gateway) external onlyRoles(ADMIN_ROLE) {

@@ -8,6 +8,11 @@ import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
 import { LibClone } from "solady/utils/LibClone.sol";
 
+/// @title GatewayBase Contract for SuperformGateway Modules
+/// @author Unlockd
+/// @notice Base storage contract containing all shared state variables and helper functions for SuperformGateway
+/// modules
+/// @dev Implements role-based access control and core vault functionality
 contract GatewayBase is OwnableRoles {
     /// @notice Emitted when a new receiver contract is deployed
     event ReceiverDeployed(bytes32 indexed key, address indexed receiver);
@@ -58,12 +63,14 @@ contract GatewayBase is OwnableRoles {
     /// @param requestedAssetsPerVault Array of requested assets per vault
     /// @param requestedAssets Total requested assets
     /// @param receiverAddress Address to receive assets
+    /// @param hasReceiver Flag to check if receiver is deployed
     struct RequestData {
         address controller;
         uint256[] superformIds;
         uint256[] requestedAssetsPerVault;
         uint256 requestedAssets;
         address receiverAddress;
+        bool hasReceiver;
     }
 
     /*//////////////////////////////////////////////////////////////

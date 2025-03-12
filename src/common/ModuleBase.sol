@@ -52,6 +52,18 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
+    /// @notice Minimum shares threshold
+    uint256 public MINIMUM_SHARES_THRESHOLD = 10;
+
+    /// @dev Maximum fee that can be set (100% = 10000 basis points)
+    uint16 constant MAX_FEE = 10_000;
+
+    /// @dev Maximum time that can be set (48 hours)
+    uint256 public MAX_TIME = 172_800;
+
+    /// @notice Nonce slot seed
+    uint256 internal constant _NONCES_SLOT_SEED = 0x38377508;
+
     /// @notice mapping from address to the average share price of their deposits
     mapping(address => uint256 averageEntryPrice) public positions;
 
@@ -137,6 +149,9 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
 
     /// @notice Timestamp of last redemption per controller
     mapping(address controller => uint256) public lastRedeem;
+
+    /// @notice Number of shares that are pending to be settled;
+    mapping(address controller => uint256) public pendingProcessedShares;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */
@@ -285,7 +300,7 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
             VaultData memory vault = vaults[localWithdrawalQueue[i]];
             if (vault.vaultAddress == address(0)) break;
-            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            assets += vault.convertToAssets(_sharesBalance(vault), asset(), false);
             ++i;
         }
         return assets;
@@ -297,7 +312,7 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
         for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE;) {
             VaultData memory vault = vaults[xChainWithdrawalQueue[i]];
             if (vault.vaultAddress == address(0)) break;
-            assets += vault.convertToAssets(_sharesBalance(vault), false);
+            assets += vault.convertToAssets(_sharesBalance(vault), asset(), false);
             ++i;
         }
         return assets;

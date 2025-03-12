@@ -89,7 +89,7 @@ contract BaseVaultTest is BaseTest {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         ISuperformGateway(address(gateway)).setRecoveryAddress(
-            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
+            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE, users.alice))
         );
         return ISuperformGateway(address(gateway));
     }
@@ -111,14 +111,14 @@ contract BaseVaultTest is BaseTest {
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         ISuperformGateway(address(gateway)).setRecoveryAddress(
-            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE))
+            address(new SuperPositionsReceiver(8453, address(gateway), SUPERFORM_SUPERPOSITIONS_BASE, users.alice))
         );
         return ISuperformGateway(address(gateway));
     }
 
-    function _depositAtomic(uint256 assets, address receiver) internal returns (uint256 _shares) {
+    function _depositAtomic(uint256 assets, address receiver, address operator) internal returns (uint256 _shares) {
         bytes[] memory callDatas = new bytes[](2);
-        callDatas[0] = abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, users.alice);
+        callDatas[0] = abi.encodeWithSelector(MetaVault.requestDeposit.selector, assets, receiver, operator);
         callDatas[1] = abi.encodeWithSignature("deposit(uint256,address)", assets, receiver);
         bytes[] memory returnData = vault.multicall(callDatas);
         return abi.decode(returnData[1], (uint256));
