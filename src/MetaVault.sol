@@ -525,15 +525,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         return (totalAssetsAfterFee, shares);
     }
 
-    /// @notice Returns the base hurdle rate for performance fee calculations
-    /// @dev The hurdle rate differs by asset:
-    /// - For stablecoins (USDC): Typically set to T-Bills yield (e.g., 5.5% APY)
-    /// - For ETH: Typically set to base staking return like Lido (e.g., 3.5% APY)
-    /// @return uint256 The current base hurdle rate in basis points
-    function hurdleRate() public view returns (uint256) {
-        return _hurdleRateOracle.getRate(asset());
-    }
-
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       VAULT MANAGEMENT                     */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
