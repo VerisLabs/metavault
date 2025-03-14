@@ -30,7 +30,7 @@ contract PreviewRouteScript is Script {
             amount = totalLocal;
         }
 
-        metavault.previewWithdrawalRoute(user, amount, true);
+        metavault.previewWithdrawalRoute(user, 0, true);
 
         console2.log("Previewed withdrawal route");
         console2.log("Amount: ", amount);

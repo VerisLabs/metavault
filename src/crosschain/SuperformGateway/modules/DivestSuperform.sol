@@ -362,7 +362,7 @@ contract DivestSuperform is GatewayBase {
             totalPendingXChainDivests -= vaultRequestedAssets;
         }
         requests[key].requestedAssets -= vaultRequestedAssets;
-        _requestsQueue.remove(key);
+        _requestsQueue.remove(key); // We can only remove the request if it's a single vault otherwise we need to confirm both succeeded
         ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
         superPositions.safeTransferFrom(msg.sender, address(this), superformId, value, "");
         superPositions.safeTransferFrom(

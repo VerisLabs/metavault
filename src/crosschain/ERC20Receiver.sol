@@ -126,7 +126,7 @@ contract ERC20Receiver {
         values;
         data;
         for (uint256 i = 0; i < superformIds.length; ++i) {
-            onERC1155Received(address(0), address(0), superformIds[i], 0, "");
+            onERC1155Received(operator, from, superformIds[i], values[i], "");
         }
         return this.onERC1155BatchReceived.selector;
     }
