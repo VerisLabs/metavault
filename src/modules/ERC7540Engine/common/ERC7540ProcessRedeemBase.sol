@@ -134,7 +134,7 @@ abstract contract ERC7540ProcessRedeemBase is ERC7540EngineBase {
         // Fulfill request with instant withdrawals only
         _fulfillRedeemRequest(cache.sharesFulfilled, cache.totalClaimableWithdraw, config.controller, true);
     }
-    
+
     /// @dev Process withdrawals from vaults on the current chain
     /// @param config The configuration for the redemption request
     /// @param cache The cache structure for storing intermediate calculation results
@@ -187,8 +187,8 @@ abstract contract ERC7540ProcessRedeemBase is ERC7540EngineBase {
             cache.totalIdle += withdrawn;
         }
     }
-    
-     /// @dev Process withdrawals from vaults on a single external chain
+
+    /// @dev Process withdrawals from vaults on a single external chain
     /// @param config The configuration for the redemption request
     /// @param cache The cache structure for storing intermediate calculation results
     function _processSingleChainWithdrawals(
@@ -273,7 +273,7 @@ abstract contract ERC7540ProcessRedeemBase is ERC7540EngineBase {
             }
         }
     }
-    
+
     /// @dev Process withdrawals from a single vault on multiple external chains
     /// @param config The configuration for the redemption request
     /// @param cache The cache structure for storing intermediate calculation results

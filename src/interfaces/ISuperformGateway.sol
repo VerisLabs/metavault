@@ -30,6 +30,8 @@ interface ISuperformGateway {
 
     function notifyRefund(uint256 superformId, uint256 amount) external;
 
+    function notifyBatchRefund(uint256[] calldata superformIds, uint256[] calldata values) external;
+
     function totalpendingXChainInvests() external view returns (uint256);
 
     function totalPendingXChainWithdraws() external view returns (uint256);

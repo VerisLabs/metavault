@@ -125,9 +125,9 @@ contract ERC20Receiver {
         from;
         values;
         data;
-        for (uint256 i = 0; i < superformIds.length; ++i) {
-            onERC1155Received(operator, from, superformIds[i], values[i], "");
-        }
+        if (msg.sender != address(_superPositions)) revert();
+        if (from != address(0)) revert();
+        ISuperformGateway(_deployer).notifyBatchRefund(superformIds, values);
         return this.onERC1155BatchReceived.selector;
     }
 }

@@ -338,6 +338,25 @@ contract DivestSuperform is GatewayBase {
         return totalAmount;
     }
 
+    /// @notice Internal function to handle refund of SuperPositions
+    /// @param key The key of the request
+    /// @param superformId The ID of the Superform position being refunded
+    /// @param value The amount of SuperPositions being refunded
+    /// @param vaultRequestedAssets The amount of assets requested for this vault
+    function _handleRefund(bytes32 key, uint256 superformId, uint256 value, uint256 vaultRequestedAssets) internal {
+        if (requests[key].controller == address(vault)) {
+            totalPendingXChainDivests -= vaultRequestedAssets;
+        }
+        requests[key].requestedAssets -= vaultRequestedAssets;
+
+        superPositions.safeTransferFrom(msg.sender, address(this), superformId, value, "");
+        superPositions.safeTransferFrom(
+            address(this), address(vault), superformId, value, abi.encode(vaultRequestedAssets)
+        );
+
+        emit DivestRefunded(superformId, value, key);
+    }
+
     /// @notice Handles refunds of SuperPositions when a cross-chain divestment fails
     /// @dev This function is called by the ERC20Receiver contract when a divestment fails and SuperPositions need to be
     /// returned
@@ -350,6 +369,7 @@ contract DivestSuperform is GatewayBase {
         if (requests[key].receiverAddress != msg.sender) revert();
         RequestData memory req = requests[key];
         uint256 currentExpectedBalance = ERC20Receiver(msg.sender).minExpectedBalance();
+
         uint256 vaultIndex;
         for (uint256 i = 0; i < req.superformIds.length; ++i) {
             if (req.superformIds[i] == superformId) {
@@ -358,18 +378,45 @@ contract DivestSuperform is GatewayBase {
             }
         }
         uint256 vaultRequestedAssets = req.requestedAssetsPerVault[vaultIndex];
-        if (req.controller == address(vault)) {
-            totalPendingXChainDivests -= vaultRequestedAssets;
-        }
-        requests[key].requestedAssets -= vaultRequestedAssets;
-        _requestsQueue.remove(key); // We can only remove the request if it's a single vault otherwise we need to confirm both succeeded
-        ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
-        superPositions.safeTransferFrom(msg.sender, address(this), superformId, value, "");
-        superPositions.safeTransferFrom(
-            address(this), address(vault), superformId, value, abi.encode(vaultRequestedAssets)
-        );
 
-        emit DivestRefunded(superformId, value, key);
+        _handleRefund(key, superformId, value, vaultRequestedAssets);
+
+        _requestsQueue.remove(key); // We can only remove the request if it's a single vault otherwise we need to
+            // confirm both succeeded
+        ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
+    }
+
+    /// @notice Handles batch refunds of SuperPositions when a cross-chain divestment fails
+    /// @dev This function is called by the ERC20Receiver contract when multiple divestments fail and SuperPositions
+    /// need to be
+    /// returned
+    ///      The function verifies the caller is a valid receiver, updates pending divest amounts, and transfers the
+    /// SuperPositions back to the vault
+    /// @param superformIds Array of Superform position IDs being refunded
+    /// @param values Array of SuperPosition amounts being refunded
+    function notifyBatchRefund(uint256[] calldata superformIds, uint256[] calldata values) external {
+        bytes32 key = ERC20Receiver(msg.sender).key();
+        if (requests[key].receiverAddress != msg.sender) revert();
+        RequestData memory req = requests[key];
+        uint256 currentExpectedBalance = ERC20Receiver(msg.sender).minExpectedBalance();
+        uint256 totalVaultRequestedAssets;
+
+        for (uint256 j = 0; j < superformIds.length; ++j) {
+            uint256 vaultIndex;
+            for (uint256 i = 0; i < req.superformIds.length; ++i) {
+                if (req.superformIds[i] == superformIds[j]) {
+                    vaultIndex = i;
+                    break;
+                }
+            }
+            uint256 vaultRequestedAssets = req.requestedAssetsPerVault[vaultIndex];
+            totalVaultRequestedAssets += vaultRequestedAssets;
+
+            _handleRefund(key, superformIds[j], values[j], vaultRequestedAssets);
+        }
+
+        _requestsQueue.remove(key);
+        ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, totalVaultRequestedAssets));
     }
 
     /// @notice Settles a cross-chain divestment by processing received assets
