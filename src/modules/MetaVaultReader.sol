@@ -140,7 +140,6 @@ contract MetaVaultReader is ModuleBase {
         _selectors[1] = this.getAllVaultsDetailedData.selector;
         _selectors[2] = this.getLastEpochVaultReturns.selector;
         _selectors[3] = this.totalReturnsPerShare.selector;
-        _selectors[4] = this.selectors.selector;
         return _selectors;
     }
 }
