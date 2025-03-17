@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import { ModuleBase } from "common/Lib.sol";
 
-import { ISharePriceOracle } from "interfaces/Lib.sol";
+import { ISharePriceOracle } from "interfaces/ISharePriceOracle.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
 
@@ -136,10 +136,11 @@ contract MetaVaultReader is ModuleBase {
     /// @return selectors Array of function selectors
     function selectors() external pure returns (bytes4[] memory) {
         bytes4[] memory _selectors = new bytes4[](4);
-        _selectors[0] = this.getVaultData.selector;
-        _selectors[1] = this.getLastEpochVaultReturns.selector;
-        _selectors[2] = this.totalReturnsPerShare.selector;
-        _selectors[3] = this.selectors.selector;
+        _selectors[0] = this.getVaultDetailedData.selector;
+        _selectors[1] = this.getAllVaultsDetailedData.selector;
+        _selectors[2] = this.getLastEpochVaultReturns.selector;
+        _selectors[3] = this.totalReturnsPerShare.selector;
+        _selectors[4] = this.selectors.selector;
         return _selectors;
     }
 }
