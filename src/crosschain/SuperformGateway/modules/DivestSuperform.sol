@@ -366,7 +366,7 @@ contract DivestSuperform is GatewayBase {
     /// @param value The amount of SuperPositions being refunded
     function notifyRefund(uint256 superformId, uint256 value) external {
         // Prevent bugs from superform
-        if(value == 0) return;
+        if (value == 0) return;
         bytes32 key = ERC20Receiver(msg.sender).key();
         if (requests[key].receiverAddress != msg.sender) revert();
         RequestData memory req = requests[key];

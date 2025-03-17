@@ -1470,10 +1470,10 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         MultiXChainMultiVaultWithdraw memory mXmV;
 
         VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress_usdc_optimisim);
-        uint256 lastSharePrice = report.sharePrice;
+        report.sharePrice;
 
         VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
-        uint256 lastSharePrice2 = report2.sharePrice;
+        report2.sharePrice;
 
         MultiDstSingleVaultStateReq memory req2 = _buildDivestMultiXChainSingleVaultParams(superformIds, amounts);
 
@@ -1498,7 +1498,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
         uint256 nativeValueWithdraw = multiChainWithdrawValues[multiVaultKeyWithdraw];
         mXsV.value = nativeValueWithdraw;
 
-        uint256 sharePriceBefore = vault.sharePrice();
+        vault.sharePrice();
 
         vault.processRedeemRequest{ value: mXsV.value }(
             ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
