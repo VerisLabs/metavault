@@ -489,7 +489,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         investReq.superformData.amount = investAmount;
 
-        uint256 shares = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        _previewDeposit(optimismChainId, vaultAddress, investAmount);
         vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
             investReq
         );

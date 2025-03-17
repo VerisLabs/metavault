@@ -21,7 +21,7 @@ contract SetTresholdDust is Script {
         console.log("Actual treshold is set to: ", dust);
 
         if (dust == 0) {
-            metavault.setDustThreshold(5_000_000);
+            metavault.setDustThreshold(3_000_000);
             dust = metavault.getDustThreshold();
         }
 
