@@ -763,18 +763,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             if (!found) revert MissingVaultFromCurrentQueue();
         }
 
-        // Verify all new vaults were in current queue
-        for (uint256 i = 0; i < newCount; i++) {
-            bool found = false;
-            for (uint256 j = 0; j < currentCount; j++) {
-                if (newVaults[i] == currentVaults[j]) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) revert NewVaultNotInCurrentQueue();
-        }
-
         // Update queue with new order
         for (uint256 i = 0; i < WITHDRAWAL_QUEUE_SIZE; i++) {
             queue[i] = newOrder[i];
