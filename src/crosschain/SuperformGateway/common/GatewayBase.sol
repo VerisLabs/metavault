@@ -71,6 +71,7 @@ contract GatewayBase is OwnableRoles {
         uint256 requestedAssets;
         address receiverAddress;
         bool hasReceiver;
+        uint256 totalProcessedIds;
     }
 
     /*//////////////////////////////////////////////////////////////

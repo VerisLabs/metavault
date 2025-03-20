@@ -1,20 +1,13 @@
 /// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { GatewayBase } from "../common/GatewayBase.sol";
-import { ERC20Receiver } from "crosschain/Lib.sol";
+import {GatewayBase} from "../common/GatewayBase.sol";
+import {ERC20Receiver} from "crosschain/Lib.sol";
 
-import { console2 } from "forge-std/console2.sol";
-import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
-import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
-import {
-    MultiDstMultiVaultStateReq,
-    MultiDstSingleVaultStateReq,
-    SingleXChainMultiVaultStateReq,
-    SingleXChainSingleVaultStateReq,
-    VaultData,
-    VaultLib
-} from "types/Lib.sol";
+import {console2} from "forge-std/console2.sol";
+import {EnumerableSetLib} from "solady/utils/EnumerableSetLib.sol";
+import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
+import {MultiDstMultiVaultStateReq, MultiDstSingleVaultStateReq, SingleXChainMultiVaultStateReq, SingleXChainSingleVaultStateReq, VaultData, VaultLib} from "types/Lib.sol";
 
 /// @title DivestSuperform module contract to divest from crosschain ERC4626 vaults using Superform
 /// @author Unlockd
@@ -46,16 +39,28 @@ contract DivestSuperform is GatewayBase {
     /// @param superformIds Array of Superform IDs being divested
     /// @param requestedAssets Total amount of assets requested
     /// @param key Unique identifier for the divest assets receiver contract
-    event DivestXChain(uint256[] indexed superformIds, uint256 indexed requestedAssets, bytes32 key);
+    event DivestXChain(
+        uint256[] indexed superformIds,
+        uint256 indexed requestedAssets,
+        bytes32 key
+    );
 
     /// @notice Emitted when a divestment fails and SuperPositions are refunded
     /// @param superformId The ID of the Superform being refunded
     /// @param value The amount of SuperPositions being refunded
     /// @param key The unique identifier for the divest request
-    event DivestRefunded(uint256 indexed superformId, uint256 indexed value, bytes32 indexed key);
+    event DivestRefunded(
+        uint256 indexed superformId,
+        uint256 indexed value,
+        bytes32 indexed key
+    );
 
     /// @notice Emitted when a new request is created
-    event RequestCreated(bytes32 indexed key, address indexed controller, uint256[] superformIds);
+    event RequestCreated(
+        bytes32 indexed key,
+        address indexed controller,
+        uint256[] superformIds
+    );
 
     /// @notice Divests assets from a single vault on a different chain
     /// @dev Transfers Superform NFTs from vault to this contract and initiates withdrawal
@@ -64,30 +69,29 @@ contract DivestSuperform is GatewayBase {
     function divestSingleXChainSingleVault(
         SingleXChainSingleVaultStateReq memory req,
         bool useReceivers
-    )
-        external
-        payable
-        onlyVault
-        refundGas
-        returns (uint256 sharesValue)
-    {
+    ) external payable onlyVault refundGas returns (uint256 sharesValue) {
         uint256 superformId = req.superformData.superformId;
         if (superformId == 0) revert InvalidSuperformId();
 
-        bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformId));
+        bytes32 key = keccak256(
+            abi.encode(address(vault), nonces[address(vault)]++, superformId)
+        );
         _requestsQueue.add(key);
 
         address receiver;
         if (useReceivers) {
             receiver = getReceiver(key);
             if (receiver == address(0)) revert InvalidReceiver();
-            ERC20Receiver(receiver).setMinExpectedBalance(req.superformData.outputAmount);
+            ERC20Receiver(receiver).setMinExpectedBalance(
+                req.superformData.outputAmount
+            );
         } else {
             receiver = req.superformData.receiverAddress;
         }
 
         VaultData memory vaultObj = vault.getVault(superformId);
-        if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
+        if (!vault.isVaultListed(vaultObj.vaultAddress))
+            revert VaultNotListed();
 
         if (useReceivers) {
             req.superformData.receiverAddress = receiver;
@@ -95,7 +99,11 @@ contract DivestSuperform is GatewayBase {
         }
 
         // Update the vault's internal accounting
-        sharesValue = vaultObj.convertToAssets(req.superformData.amount, asset, true);
+        sharesValue = vaultObj.convertToAssets(
+            req.superformData.amount,
+            asset,
+            true
+        );
 
         if (sharesValue == 0) revert InvalidAmount();
 
@@ -103,9 +111,15 @@ contract DivestSuperform is GatewayBase {
         totalPendingXChainDivests += sharesValue;
         emit PendingDivestUpdated(oldAmount, totalPendingXChainDivests);
 
-        superPositions.safeTransferFrom(address(vault), address(this), superformId, req.superformData.amount, "");
+        superPositions.safeTransferFrom(
+            address(vault),
+            address(this),
+            superformId,
+            req.superformData.amount,
+            ""
+        );
 
-        superformRouter.singleXChainSingleVaultWithdraw{ value: msg.value }(req);
+        superformRouter.singleXChainSingleVaultWithdraw{value: msg.value}(req);
 
         uint256[] memory superformIds = new uint256[](1);
         superformIds[0] = superformId;
@@ -132,15 +146,12 @@ contract DivestSuperform is GatewayBase {
     function divestSingleXChainMultiVault(
         SingleXChainMultiVaultStateReq memory req,
         bool useReceivers
-    )
-        external
-        payable
-        onlyVault
-        refundGas
-        returns (uint256 totalAmount)
-    {
+    ) external payable onlyVault refundGas returns (uint256 totalAmount) {
         if (req.superformsData.superformIds.length == 0) revert InvalidAmount();
-        if (req.superformsData.superformIds.length != req.superformsData.amounts.length) revert TotalAmountMismatch();
+        if (
+            req.superformsData.superformIds.length !=
+            req.superformsData.amounts.length
+        ) revert TotalAmountMismatch();
 
         uint256 totalExpectedAmount;
         for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
@@ -149,9 +160,14 @@ contract DivestSuperform is GatewayBase {
 
             // Cant invest in a vault that is not in the portfolio
             VaultData memory vaultObj = vault.getVault(superformId);
-            if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
+            if (!vault.isVaultListed(vaultObj.vaultAddress))
+                revert VaultNotListed();
 
-            uint256 amount = vaultObj.convertToAssets(req.superformsData.amounts[i], asset, true);
+            uint256 amount = vaultObj.convertToAssets(
+                req.superformsData.amounts[i],
+                asset,
+                true
+            );
             if (amount == 0) revert InvalidAmount();
 
             totalExpectedAmount += req.superformsData.outputAmounts[i];
@@ -159,7 +175,13 @@ contract DivestSuperform is GatewayBase {
             totalAmount += amount;
         }
 
-        bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, req.superformsData.superformIds));
+        bytes32 key = keccak256(
+            abi.encode(
+                address(vault),
+                nonces[address(vault)]++,
+                req.superformsData.superformIds
+            )
+        );
         _requestsQueue.add(key);
 
         address receiver;
@@ -184,15 +206,23 @@ contract DivestSuperform is GatewayBase {
         }
 
         superPositions.safeBatchTransferFrom(
-            address(vault), address(this), req.superformsData.superformIds, req.superformsData.amounts, ""
+            address(vault),
+            address(this),
+            req.superformsData.superformIds,
+            req.superformsData.amounts,
+            ""
         );
 
-        superformRouter.singleXChainMultiVaultWithdraw{ value: msg.value }(req);
+        superformRouter.singleXChainMultiVaultWithdraw{value: msg.value}(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
 
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
-        emit RequestCreated(key, address(vault), req.superformsData.superformIds);
+        emit RequestCreated(
+            key,
+            address(vault),
+            req.superformsData.superformIds
+        );
         emit DivestXChain(req.superformsData.superformIds, totalAmount, key);
     }
 
@@ -204,27 +234,29 @@ contract DivestSuperform is GatewayBase {
     function divestMultiXChainSingleVault(
         MultiDstSingleVaultStateReq memory req,
         bool useReceivers
-    )
-        external
-        payable
-        onlyVault
-        refundGas
-        returns (uint256 totalAmount)
-    {
-        for (uint256 i = 0; i < req.superformsData.length;) {
+    ) external payable onlyVault refundGas returns (uint256 totalAmount) {
+        for (uint256 i = 0; i < req.superformsData.length; ) {
             uint256 superformId = req.superformsData[i].superformId;
 
             uint256[] memory superformIds = new uint256[](1);
             superformIds[0] = superformId;
 
-            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformId));
+            bytes32 key = keccak256(
+                abi.encode(
+                    address(vault),
+                    nonces[address(vault)]++,
+                    superformId
+                )
+            );
             _requestsQueue.add(key);
 
             address receiver;
             if (useReceivers) {
                 receiver = getReceiver(key);
                 if (receiver == address(0)) revert InvalidReceiver();
-                ERC20Receiver(receiver).setMinExpectedBalance(req.superformsData[i].outputAmount);
+                ERC20Receiver(receiver).setMinExpectedBalance(
+                    req.superformsData[i].outputAmount
+                );
             } else {
                 receiver = req.superformsData[i].receiverAddress;
             }
@@ -232,8 +264,13 @@ contract DivestSuperform is GatewayBase {
             // Retrieve the vault data for the target vault
             VaultData memory vaultObj = vault.getVault(superformId);
             // Cant invest in a vault that is not in the portfolio
-            if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
-            uint256 amount = vaultObj.convertToAssets(req.superformsData[i].amount, asset, true);
+            if (!vault.isVaultListed(vaultObj.vaultAddress))
+                revert VaultNotListed();
+            uint256 amount = vaultObj.convertToAssets(
+                req.superformsData[i].amount,
+                asset,
+                true
+            );
 
             totalAmount += amount;
 
@@ -250,7 +287,11 @@ contract DivestSuperform is GatewayBase {
             }
 
             superPositions.safeTransferFrom(
-                address(vault), address(this), superformId, req.superformsData[i].amount, ""
+                address(vault),
+                address(this),
+                superformId,
+                req.superformsData[i].amount,
+                ""
             );
 
             emit RequestCreated(key, address(vault), superformIds);
@@ -261,7 +302,7 @@ contract DivestSuperform is GatewayBase {
             }
         }
 
-        superformRouter.multiDstSingleVaultWithdraw{ value: msg.value }(req);
+        superformRouter.multiDstSingleVaultWithdraw{value: msg.value}(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
         emit PendingDivestUpdated(oldPendingDivests, totalPendingXChainDivests);
@@ -276,13 +317,7 @@ contract DivestSuperform is GatewayBase {
     function divestMultiXChainMultiVault(
         MultiDstMultiVaultStateReq memory req,
         bool useReceivers
-    )
-        external
-        payable
-        onlyVault
-        refundGas
-        returns (uint256 totalAmount)
-    {
+    ) external payable onlyVault refundGas returns (uint256 totalAmount) {
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
             uint256[] memory amounts = req.superformsData[i].amounts;
@@ -294,22 +329,35 @@ contract DivestSuperform is GatewayBase {
                 // Cant invest in a vault that is not in the portfolio
                 VaultData memory vaultObj = vault.getVault(superformId);
 
-                if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
+                if (!vault.isVaultListed(vaultObj.vaultAddress))
+                    revert VaultNotListed();
 
-                uint256 amount = vaultObj.convertToAssets(amounts[j], asset, true);
+                uint256 amount = vaultObj.convertToAssets(
+                    amounts[j],
+                    asset,
+                    true
+                );
                 totalExpectedAmount += req.superformsData[i].outputAmounts[j];
                 totalAmount += amount;
                 totalChainAmount += amount;
             }
 
-            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformIds));
+            bytes32 key = keccak256(
+                abi.encode(
+                    address(vault),
+                    nonces[address(vault)]++,
+                    superformIds
+                )
+            );
             _requestsQueue.add(key);
 
             address receiver;
             if (useReceivers) {
                 receiver = getReceiver(key);
                 if (receiver == address(0)) revert InvalidReceiver();
-                ERC20Receiver(receiver).setMinExpectedBalance(totalExpectedAmount);
+                ERC20Receiver(receiver).setMinExpectedBalance(
+                    totalExpectedAmount
+                );
             } else {
                 receiver = req.superformsData[i].receiverAddress;
             }
@@ -326,13 +374,19 @@ contract DivestSuperform is GatewayBase {
                 req.superformsData[i].receiverAddressSP = receiver;
             }
 
-            superPositions.safeBatchTransferFrom(address(vault), address(this), superformIds, amounts, "");
+            superPositions.safeBatchTransferFrom(
+                address(vault),
+                address(this),
+                superformIds,
+                amounts,
+                ""
+            );
 
             emit RequestCreated(key, address(vault), superformIds);
             emit DivestXChain(superformIds, totalChainAmount, key);
         }
 
-        superformRouter.multiDstMultiVaultWithdraw{ value: msg.value }(req);
+        superformRouter.multiDstMultiVaultWithdraw{value: msg.value}(req);
         uint256 oldPendingDivests = totalPendingXChainDivests;
         totalPendingXChainDivests += totalAmount;
 
@@ -345,15 +399,30 @@ contract DivestSuperform is GatewayBase {
     /// @param superformId The ID of the Superform position being refunded
     /// @param value The amount of SuperPositions being refunded
     /// @param vaultRequestedAssets The amount of assets requested for this vault
-    function _handleRefund(bytes32 key, uint256 superformId, uint256 value, uint256 vaultRequestedAssets) internal {
+    function _handleRefund(
+        bytes32 key,
+        uint256 superformId,
+        uint256 value,
+        uint256 vaultRequestedAssets
+    ) internal {
         if (requests[key].controller == address(vault)) {
             totalPendingXChainDivests -= vaultRequestedAssets;
         }
         requests[key].requestedAssets -= vaultRequestedAssets;
 
-        superPositions.safeTransferFrom(msg.sender, address(this), superformId, value, "");
         superPositions.safeTransferFrom(
-            address(this), address(vault), superformId, value, abi.encode(vaultRequestedAssets)
+            msg.sender,
+            address(this),
+            superformId,
+            value,
+            ""
+        );
+        superPositions.safeTransferFrom(
+            address(this),
+            address(vault),
+            superformId,
+            value,
+            abi.encode(vaultRequestedAssets)
         );
 
         emit DivestRefunded(superformId, value, key);
@@ -373,7 +442,8 @@ contract DivestSuperform is GatewayBase {
         if (requests[key].receiverAddress != msg.sender) revert();
 
         RequestData memory req = requests[key];
-        uint256 currentExpectedBalance = ERC20Receiver(msg.sender).minExpectedBalance();
+        uint256 currentExpectedBalance = ERC20Receiver(msg.sender)
+            .minExpectedBalance();
 
         uint256 vaultIndex;
         for (uint256 i = 0; i < req.superformIds.length; ++i) {
@@ -386,9 +456,15 @@ contract DivestSuperform is GatewayBase {
 
         _handleRefund(key, superformId, value, vaultRequestedAssets);
 
-        _requestsQueue.remove(key); // We can only remove the request if it's a single vault otherwise we need to
-            // confirm both succeeded
-        ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
+        req.totalProcessedIds++;
+
+        if (req.totalProcessedIds >= req.superformIds.length) {
+            _requestsQueue.remove(key); // We can only remove the request if it's a single vault otherwise we need to confirm both succeeded
+        }
+
+        ERC20Receiver(msg.sender).setMinExpectedBalance(
+            _sub0(currentExpectedBalance, vaultRequestedAssets)
+        );
     }
 
     /// @notice Handles batch refunds of SuperPositions when a cross-chain divestment fails
@@ -399,13 +475,18 @@ contract DivestSuperform is GatewayBase {
     /// SuperPositions back to the vault
     /// @param superformIds Array of Superform position IDs being refunded
     /// @param values Array of SuperPosition amounts being refunded
-    function notifyBatchRefund(uint256[] calldata superformIds, uint256[] calldata values) external {
+    function notifyBatchRefund(
+        uint256[] calldata superformIds,
+        uint256[] calldata values
+    ) external {
         bytes32 key = ERC20Receiver(msg.sender).key();
         if (requests[key].receiverAddress != msg.sender) revert();
         RequestData memory req = requests[key];
-        uint256 currentExpectedBalance = ERC20Receiver(msg.sender).minExpectedBalance();
+        uint256 currentExpectedBalance = ERC20Receiver(msg.sender)
+            .minExpectedBalance();
         uint256 totalVaultRequestedAssets;
 
+        uint256 processedInBatch = 0;
         for (uint256 j = 0; j < superformIds.length; ++j) {
             if (values[j] == 0) continue;
             uint256 vaultIndex;
@@ -417,13 +498,33 @@ contract DivestSuperform is GatewayBase {
                     break;
                 }
             }
-            uint256 vaultRequestedAssets = req.requestedAssetsPerVault[vaultIndex];
+            uint256 vaultRequestedAssets = req.requestedAssetsPerVault[
+                vaultIndex
+            ];
             totalVaultRequestedAssets += vaultRequestedAssets;
-            _handleRefund(key, superformIds[j], values[j], vaultRequestedAssets);
+            _handleRefund(
+                key,
+                superformIds[j],
+                values[j],
+                vaultRequestedAssets
+            );
+
+            // Count processed items in this batch
+            processedInBatch++;
         }
 
-        _requestsQueue.remove(key);
-        ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, totalVaultRequestedAssets));
+        if (processedInBatch > 0) {
+            req.totalProcessedIds += processedInBatch;
+
+            // Only remove from queue if we've processed all superformIds
+            if (req.totalProcessedIds >= req.superformIds.length) {
+                _requestsQueue.remove(key);
+            }
+
+            ERC20Receiver(msg.sender).setMinExpectedBalance(
+                _sub0(currentExpectedBalance, totalVaultRequestedAssets)
+            );
+        }
     }
 
     /// @notice Settles a cross-chain divestment by processing received assets
@@ -432,7 +533,11 @@ contract DivestSuperform is GatewayBase {
     /// whether it's a single vault (superformId) or multiple vaults (array of superformIds).
     /// For each Superform ID involved, notifies the vault of the settlement.
     /// @param key Identifier of the receiver contract
-    function settleDivest(bytes32 key, uint256 assets, bool force) external onlyRoles(RELAYER_ROLE) {
+    function settleDivest(
+        bytes32 key,
+        uint256 assets,
+        bool force
+    ) external onlyRoles(RELAYER_ROLE) {
         if (!_requestsQueue.contains(key)) revert();
         RequestData memory data = requests[key];
         _requestsQueue.remove(key);
@@ -443,7 +548,10 @@ contract DivestSuperform is GatewayBase {
         if (data.hasReceiver) {
             ERC20Receiver receiverContract = ERC20Receiver(getReceiver(key));
             if (!force) {
-                if (receiverContract.balance() < receiverContract.minExpectedBalance()) revert();
+                if (
+                    receiverContract.balance() <
+                    receiverContract.minExpectedBalance()
+                ) revert();
             }
             settledAssets = receiverContract.balance();
             receiverContract.pull(settledAssets);
@@ -453,53 +561,68 @@ contract DivestSuperform is GatewayBase {
         }
 
         uint256 requestedAssets = data.requestedAssets;
-        totalPendingXChainDivests = _sub0(totalPendingXChainDivests, requestedAssets);
+        totalPendingXChainDivests = _sub0(
+            totalPendingXChainDivests,
+            requestedAssets
+        );
         asset.safeTransfer(address(vault), settledAssets);
         vault.settleXChainDivest(settledAssets);
     }
 
-    function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
-        external
-        view
-        returns (bytes32[] memory requestIds)
-    {
+    function previewIdDivestSingleXChainSingleVault(
+        SingleXChainSingleVaultStateReq memory req
+    ) external view returns (bytes32[] memory requestIds) {
         requestIds = new bytes32[](1);
         uint256 superformId = req.superformData.superformId;
-        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)], superformId));
+        requestIds[0] = keccak256(
+            abi.encode(address(vault), nonces[address(vault)], superformId)
+        );
         return requestIds;
     }
 
-    function previewIdDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq memory req)
-        external
-        view
-        returns (bytes32[] memory requestIds)
-    {
+    function previewIdDivestSingleXChainMultiVault(
+        SingleXChainMultiVaultStateReq memory req
+    ) external view returns (bytes32[] memory requestIds) {
         requestIds = new bytes32[](1);
-        requestIds[0] = keccak256(abi.encode(address(vault), nonces[address(vault)], req.superformsData.superformIds));
+        requestIds[0] = keccak256(
+            abi.encode(
+                address(vault),
+                nonces[address(vault)],
+                req.superformsData.superformIds
+            )
+        );
         return requestIds;
     }
 
-    function previewIdDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq memory req)
-        external
-        view
-        returns (bytes32[] memory requestIds)
-    {
+    function previewIdDivestMultiXChainSingleVault(
+        MultiDstSingleVaultStateReq memory req
+    ) external view returns (bytes32[] memory requestIds) {
         requestIds = new bytes32[](req.superformsData.length);
-        for (uint256 i = 0; i < req.superformsData.length;) {
+        for (uint256 i = 0; i < req.superformsData.length; ) {
             uint256 superformId = req.superformsData[i].superformId;
-            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i, superformId));
+            requestIds[i] = keccak256(
+                abi.encode(
+                    address(vault),
+                    nonces[address(vault)] + i,
+                    superformId
+                )
+            );
         }
     }
 
-    function previewIdDivestMultiXChainMultiVault(MultiDstMultiVaultStateReq memory req)
-        external
-        view
-        returns (bytes32[] memory requestIds)
-    {
+    function previewIdDivestMultiXChainMultiVault(
+        MultiDstMultiVaultStateReq memory req
+    ) external view returns (bytes32[] memory requestIds) {
         requestIds = new bytes32[](req.superformsData.length);
         for (uint256 i = 0; i < req.superformsData.length; i++) {
             uint256[] memory superformIds = req.superformsData[i].superformIds;
-            requestIds[i] = keccak256(abi.encode(address(vault), nonces[address(vault)] + i, superformIds));
+            requestIds[i] = keccak256(
+                abi.encode(
+                    address(vault),
+                    nonces[address(vault)] + i,
+                    superformIds
+                )
+            );
         }
     }
 
