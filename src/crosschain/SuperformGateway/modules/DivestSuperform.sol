@@ -3,6 +3,8 @@ pragma solidity ^0.8.19;
 
 import { GatewayBase } from "../common/GatewayBase.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
+
+import { console2 } from "forge-std/console2.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import {
@@ -369,6 +371,7 @@ contract DivestSuperform is GatewayBase {
         if (value == 0) return;
         bytes32 key = ERC20Receiver(msg.sender).key();
         if (requests[key].receiverAddress != msg.sender) revert();
+
         RequestData memory req = requests[key];
         uint256 currentExpectedBalance = ERC20Receiver(msg.sender).minExpectedBalance();
 
@@ -404,16 +407,18 @@ contract DivestSuperform is GatewayBase {
         uint256 totalVaultRequestedAssets;
 
         for (uint256 j = 0; j < superformIds.length; ++j) {
+            if (values[j] == 0) continue;
             uint256 vaultIndex;
+
             for (uint256 i = 0; i < req.superformIds.length; ++i) {
                 if (req.superformIds[i] == superformIds[j]) {
                     vaultIndex = i;
+
                     break;
                 }
             }
             uint256 vaultRequestedAssets = req.requestedAssetsPerVault[vaultIndex];
             totalVaultRequestedAssets += vaultRequestedAssets;
-
             _handleRefund(key, superformIds[j], values[j], vaultRequestedAssets);
         }
 
@@ -507,19 +512,20 @@ contract DivestSuperform is GatewayBase {
 
     /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](10);
+        bytes4[] memory s = new bytes4[](11);
         s[0] = this.divestSingleXChainSingleVault.selector;
         s[1] = this.divestSingleXChainMultiVault.selector;
         s[2] = this.divestMultiXChainSingleVault.selector;
         s[3] = this.divestMultiXChainMultiVault.selector;
 
         s[4] = this.notifyRefund.selector;
-        s[5] = this.settleDivest.selector;
+        s[5] = this.notifyBatchRefund.selector;
+        s[6] = this.settleDivest.selector;
 
-        s[6] = this.previewIdDivestSingleXChainSingleVault.selector;
-        s[7] = this.previewIdDivestMultiXChainSingleVault.selector;
-        s[8] = this.previewIdDivestSingleXChainMultiVault.selector;
-        s[9] = this.previewIdDivestMultiXChainMultiVault.selector;
+        s[7] = this.previewIdDivestSingleXChainSingleVault.selector;
+        s[8] = this.previewIdDivestMultiXChainSingleVault.selector;
+        s[9] = this.previewIdDivestSingleXChainMultiVault.selector;
+        s[10] = this.previewIdDivestMultiXChainMultiVault.selector;
         return s;
     }
 }
