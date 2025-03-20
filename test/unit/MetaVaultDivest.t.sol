@@ -57,6 +57,7 @@ import {
 
 interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
+
     function transfer(address recipient, uint256 amount) external returns (bool);
 }
 
@@ -257,7 +258,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
-        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
+        uint256 expectedDivestedValue = (lastSharePrice * shares) / 10 ** 6;
 
         divestReq.superformData.outputAmount = expectedDivestedValue;
 
@@ -452,7 +453,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress);
         uint256 lastSharePrice = report.sharePrice;
-        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6;
+        uint256 expectedDivestedValue = (lastSharePrice * shares) / 10 ** 6;
         divestReq.superformData.outputAmount = expectedDivestedValue;
 
         uint256 expected = 61_574_985;
@@ -562,8 +563,8 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report_usdc = oracle.getReport(optimismChainId, vaultAddress_usdc);
         VaultReport memory report_aloe = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
 
-        uint256 expectedValue_usdc = report_usdc.sharePrice * shares_usdc / 10 ** 6;
-        uint256 expectedValue_aloe = report_aloe.sharePrice * shares_aloe / 10 ** 6;
+        uint256 expectedValue_usdc = (report_usdc.sharePrice * shares_usdc) / 10 ** 6;
+        uint256 expectedValue_aloe = (report_aloe.sharePrice * shares_aloe) / 10 ** 6;
         uint256 totalExpectedValue = expectedValue_usdc + expectedValue_aloe;
 
         divestReq.superformsData.outputAmounts[0] = expectedValue_usdc;
@@ -806,8 +807,8 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report2 = oracle.getReport(polygonChainId, vaultAddress_usdc_pol);
         uint256 lastSharePrice2 = report2.sharePrice;
 
-        uint256 expectedDivestValuePol = lastSharePrice2 * shares2 / 10 ** 6;
-        uint256 expectedDivestValueOptimism = lastSharePrice * shares / 10 ** 6;
+        uint256 expectedDivestValuePol = (lastSharePrice2 * shares2) / 10 ** 6;
+        uint256 expectedDivestValueOptimism = (lastSharePrice * shares) / 10 ** 6;
 
         uint256 expectedDivestedValue = expectedDivestValuePol + expectedDivestValueOptimism;
 
@@ -1005,7 +1006,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         amounts[2] = 600 * _1_USDCE;
 
         uint256 investAmount = 1800 * _1_USDCE;
-        (MultiDstMultiVaultStateReq memory req) = _buildInvestMultiXChainMultiVaultParams(superformIds, amounts);
+        MultiDstMultiVaultStateReq memory req = _buildInvestMultiXChainMultiVaultParams(superformIds, amounts);
 
         req.superformsData[0].amounts[0] = 600 * _1_USDCE;
         req.superformsData[0].amounts[1] = 600 * _1_USDCE;
@@ -1043,13 +1044,13 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report3 = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
         uint256 lastSharePrice3 = report3.sharePrice;
 
-        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice2 * shares2 / 10 ** 6
-            + lastSharePrice3 * shares3 / 10 ** 6;
+        uint256 expectedDivestedValue = (lastSharePrice * shares) / 10 ** 6 + (lastSharePrice2 * shares2) / 10 ** 6
+            + (lastSharePrice3 * shares3) / 10 ** 6;
 
-        uint256 expectedOptimismValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice3 * shares3 / 10 ** 6; // EXACTLY
-            // + ALOE vaults
-            // + ALOE vaults
-        uint256 expectedPolygonValue = lastSharePrice2 * shares2 / 10 ** 6;
+        uint256 expectedOptimismValue = (lastSharePrice * shares) / 10 ** 6 + (lastSharePrice3 * shares3) / 10 ** 6; // EXACTLY
+        // + ALOE vaults
+        // + ALOE vaults
+        uint256 expectedPolygonValue = (lastSharePrice2 * shares2) / 10 ** 6;
 
         divestReq.superformsData[0].outputAmounts[0] = expectedOptimismValue / 2; // EXACTLY
         divestReq.superformsData[0].outputAmounts[1] = expectedOptimismValue / 2; // ALOE
@@ -1216,7 +1217,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
             _buildDivestSingleXChainSingleVaultParams(superformId, investAmount);
 
         VaultReport memory report = oracle.getReport(optimismChainId, vaultAddress);
-        uint256 expectedDivestedValue = report.sharePrice * shares / 10 ** 6;
+        uint256 expectedDivestedValue = (report.sharePrice * shares) / 10 ** 6;
         req.superformData.amount = shares;
         vm.startPrank(users.alice);
 
@@ -1317,8 +1318,8 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report_usdc = oracle.getReport(optimismChainId, vaultAddress_usdc);
         VaultReport memory report_aloe = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
 
-        uint256 expectedValue_usdc = report_usdc.sharePrice * shares_usdc / 10 ** 6;
-        uint256 expectedValue_aloe = report_aloe.sharePrice * shares_aloe / 10 ** 6;
+        uint256 expectedValue_usdc = (report_usdc.sharePrice * shares_usdc) / 10 ** 6;
+        uint256 expectedValue_aloe = (report_aloe.sharePrice * shares_aloe) / 10 ** 6;
         uint256 totalExpectedValue = expectedValue_usdc + expectedValue_aloe;
 
         divestReq.superformsData.outputAmounts[0] = expectedValue_usdc;
@@ -1346,7 +1347,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         assertEq(gateway.totalPendingXChainDivests(), 0);
     }
 
-    function test_MetaVault_divestMultiXChainMultiVault_superform_zero_value() public {
+    function test_MetaVault_divestMultiXChainMultiVault_superform_zero_value_banana() public {
         address vaultAddress_usdc_aloe_op = AVVE_USDC_VAULT_OPTIMISM;
         uint256 superformId_usdc_aloe_op = AVVE_USDC_VAULT_ID_OPTIMISM;
 
@@ -1468,11 +1469,11 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report3 = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
         uint256 lastSharePrice3 = report3.sharePrice;
 
-        uint256 expectedDivestedValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice2 * shares2 / 10 ** 6
-            + lastSharePrice3 * shares3 / 10 ** 6;
+        uint256 expectedDivestedValue = (lastSharePrice * shares) / 10 ** 6 + (lastSharePrice2 * shares2) / 10 ** 6
+            + (lastSharePrice3 * shares3) / 10 ** 6;
 
-        uint256 expectedOptimismValue = lastSharePrice * shares / 10 ** 6 + lastSharePrice3 * shares3 / 10 ** 6;
-        uint256 expectedPolygonValue = lastSharePrice2 * shares2 / 10 ** 6;
+        uint256 expectedOptimismValue = (lastSharePrice * shares) / 10 ** 6 + (lastSharePrice3 * shares3) / 10 ** 6;
+        uint256 expectedPolygonValue = (lastSharePrice2 * shares2) / 10 ** 6;
 
         divestReq.superformsData[0].outputAmounts[0] = expectedOptimismValue / 2; // EXACTLY
         divestReq.superformsData[0].outputAmounts[1] = expectedOptimismValue / 2; // ALOE
@@ -1591,8 +1592,8 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         VaultReport memory report_usdc = oracle.getReport(optimismChainId, vaultAddress_usdc);
         VaultReport memory report_aloe = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
 
-        uint256 expectedValue_usdc = report_usdc.sharePrice * shares_usdc / 10 ** 6;
-        uint256 expectedValue_aloe = report_aloe.sharePrice * shares_aloe / 10 ** 6;
+        uint256 expectedValue_usdc = (report_usdc.sharePrice * shares_usdc) / 10 ** 6;
+        uint256 expectedValue_aloe = (report_aloe.sharePrice * shares_aloe) / 10 ** 6;
         uint256 totalExpectedValue = expectedValue_usdc + expectedValue_aloe;
 
         divestReq.superformsData.outputAmounts[0] = expectedValue_usdc;
@@ -1635,5 +1636,129 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         vm.stopPrank();
 
         assertEq(gateway.totalPendingXChainDivests(), initialPendingDivests, "Zero value refund should be ignored");
+    }
+
+    function test_MetaVault_partialRefund_tracking() public {
+        // Set up vaults similar to test_MetaVault_divestSingleXChainMultiVault
+        address vaultAddress_usdc = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+
+        address vaultAddress_usdc_aloe_op = AVVE_USDC_VAULT_OPTIMISM;
+        uint256 superformId_usdc_aloe_op = AVVE_USDC_VAULT_ID_OPTIMISM;
+        uint32 optimismChainId = 10;
+
+        // Set up oracles and add vaults
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc,
+            _getSharePrice(optimismChainId, vaultAddress_usdc),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress_usdc_aloe_op,
+            _getSharePrice(optimismChainId, vaultAddress_usdc_aloe_op),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc,
+            vault: vaultAddress_usdc,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId_usdc_aloe_op,
+            vault: vaultAddress_usdc_aloe_op,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress_usdc_aloe_op),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        _depositAtomic(2000 * _1_USDCE, users.alice, users.alice);
+
+        // Setup superformIds and amounts
+        uint256[] memory superformIds = new uint256[](2);
+        superformIds[0] = superformId_usdc;
+        superformIds[1] = superformId_usdc_aloe_op;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 600 * _1_USDCE;
+        amounts[1] = 600 * _1_USDCE;
+
+        // Prepare invest request
+        SingleXChainMultiVaultStateReq memory investReq =
+            _buildInvestSingleXChainMultiVaultParams(superformIds, amounts);
+        investReq.superformsData.amounts[0] = amounts[0];
+        investReq.superformsData.amounts[1] = amounts[1];
+
+        uint256 shares_usdc = _previewDeposit(optimismChainId, vaultAddress_usdc, amounts[0]);
+        uint256 shares_aloe = _previewDeposit(optimismChainId, vaultAddress_usdc_aloe_op, amounts[1]);
+
+        bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
+        uint256 nativeValue = multiVaultDepositValues[multiVaultKey];
+
+        // Invest
+        vm.startPrank(users.alice);
+        vault.investSingleXChainMultiVault{ value: nativeValue }(investReq);
+        vm.stopPrank();
+
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares_usdc);
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_aloe_op, shares_aloe);
+
+        // Prepare divest request
+        SingleXChainMultiVaultStateReq memory divestReq =
+            _buildDivestSingleXChainMultiVaultParams(superformIds, amounts);
+        divestReq.superformsData.amounts[0] = shares_usdc;
+        divestReq.superformsData.amounts[1] = shares_aloe;
+
+        VaultReport memory report_usdc = oracle.getReport(optimismChainId, vaultAddress_usdc);
+        VaultReport memory report_aloe = oracle.getReport(optimismChainId, vaultAddress_usdc_aloe_op);
+
+        uint256 expectedValue_usdc = (report_usdc.sharePrice * shares_usdc) / 10 ** 6;
+        uint256 expectedValue_aloe = (report_aloe.sharePrice * shares_aloe) / 10 ** 6;
+        uint256 totalExpectedValue = expectedValue_usdc + expectedValue_aloe;
+
+        divestReq.superformsData.outputAmounts[0] = expectedValue_usdc;
+        divestReq.superformsData.outputAmounts[1] = expectedValue_aloe;
+
+        uint256 nativeValue2 = multiVaultWithdrawValues[multiVaultKey];
+
+        // Divest
+        vm.startPrank(users.alice);
+        vault.divestSingleXChainMultiVault{ value: nativeValue2 }(divestReq);
+        vm.stopPrank();
+
+        // Key assertions for our test
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        address receiver = gateway.getReceiver(requestId);
+
+        // Verify the request is in the queue
+        assertEq(gateway.getRequestsQueue().length, 1, "Request should be in the queue");
+
+        // First, notify refund for one superformId
+        vm.startPrank(receiver);
+
+        // Process first ID
+        _mintSuperpositions(receiver, superformId_usdc, shares_usdc);
+        gateway.notifyRefund(superformId_usdc, shares_usdc);
+
+        // Key assertion: Request should still be in the queue
+        assertEq(gateway.getRequestsQueue().length, 1, "Request should still be in queue after partial refund");
+
+        // Process second ID
+        _mintSuperpositions(receiver, superformId_usdc_aloe_op, shares_aloe);
+        gateway.notifyRefund(superformId_usdc_aloe_op, shares_aloe);
+
+        // Now request should be removed from the queue
+        assertEq(gateway.getRequestsQueue().length, 0, "Request should be removed from queue after all IDs processed");
+
+        vm.stopPrank();
     }
 }
