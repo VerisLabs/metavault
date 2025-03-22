@@ -14,7 +14,7 @@ contract ERC20Receiver {
     address immutable _deployer;
 
     /// @dev The ERC20 token address this receiver manages
-    address immutable _asset;
+    address public immutable _asset;
 
     /// @dev The SuperPositions contract address
     address immutable _superPositions;
@@ -125,9 +125,9 @@ contract ERC20Receiver {
         from;
         values;
         data;
-        for (uint256 i = 0; i < superformIds.length; ++i) {
-            onERC1155Received(address(0), address(0), superformIds[i], 0, "");
-        }
+        if (msg.sender != address(_superPositions)) revert();
+        if (from != address(0)) revert();
+        ISuperformGateway(_deployer).notifyBatchRefund(superformIds, values);
         return this.onERC1155BatchReceived.selector;
     }
 }

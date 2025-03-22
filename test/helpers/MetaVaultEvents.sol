@@ -45,7 +45,6 @@ contract MetaVaultEvents {
     event DepositRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address source, uint256 assets
     );
-
     /// @dev Emitted when a deposit is completed
     event Deposit(address indexed caller, address indexed owner, uint256 assets, uint256 shares);
 
@@ -56,4 +55,7 @@ contract MetaVaultEvents {
 
     /// @dev Emitted when an operator is set or unset for a controller
     event OperatorSet(address indexed controller, address indexed operator, bool approved);
+
+    /// @dev Emitted when the performance fee is set
+    event SetPerformanceFee(uint16 fee);
 }

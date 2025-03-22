@@ -30,6 +30,8 @@ interface ISuperformGateway {
 
     function notifyRefund(uint256 superformId, uint256 amount) external;
 
+    function notifyBatchRefund(uint256[] calldata superformIds, uint256[] calldata values) external;
+
     function totalpendingXChainInvests() external view returns (uint256);
 
     function totalPendingXChainWithdraws() external view returns (uint256);
@@ -55,22 +57,34 @@ interface ISuperformGateway {
         payable
         returns (uint256 totalAmount);
 
-    function divestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+    function divestSingleXChainSingleVault(
+        SingleXChainSingleVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 sharesValue);
 
-    function divestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
+    function divestSingleXChainMultiVault(
+        SingleXChainMultiVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 totalAmount);
 
-    function divestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req)
+    function divestMultiXChainSingleVault(
+        MultiDstSingleVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 totalAmount);
 
-    function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req)
+    function divestMultiXChainMultiVault(
+        MultiDstMultiVaultStateReq calldata req,
+        bool useReceivers
+    )
         external
         payable
         returns (uint256 totalAmount);
@@ -102,8 +116,7 @@ interface ISuperformGateway {
         uint8[][] memory ambIds,
         uint64[] memory dstChainIds,
         SingleVaultSFData[] memory singleVaultDatas,
-        uint256[] memory totalRequestedAssets,
-        uint256[] memory requestedAssetsPerVault
+        uint256[] memory totalRequestedAssets
     )
         external
         payable;
@@ -147,7 +160,7 @@ interface ISuperformGateway {
 
     function receivers(bytes32 key) external view returns (address receiverAddress);
 
-    function settleDivest(bytes32 key, bool force) external;
+    function settleDivest(bytes32 key, uint256 assets, bool force) external;
 
     function previewIdDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq memory req)
         external
@@ -223,4 +236,6 @@ interface ISuperformGateway {
     function removeFunction(bytes4) external;
 
     function removeFunctions(bytes4[] memory) external;
+
+    function requests(bytes32 key) external view returns (address, uint256, address);
 }

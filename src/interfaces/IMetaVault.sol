@@ -124,6 +124,8 @@ interface IMetaVault {
 
     function removeVault(uint256 superformId) external;
 
+    function rearrangeWithdrawalQueue(uint8 queueType, uint256[30] calldata newOrder) external;
+
     function vaults(uint256) external view returns (uint32, uint256, ISharePriceOracle, uint8, uint128, address);
 
     function isVaultListed(address vaultAddress) external view returns (bool);
@@ -156,11 +158,24 @@ interface IMetaVault {
 
     function claimableRedeemRequest(address) external view returns (uint256);
 
+    function pendingProcessedShares(address) external view returns (uint256);
+
     function pendingDepositRequest(address) external view returns (uint256);
 
     function claimableDepositRequest(address) external view returns (uint256);
 
     function processRedeemRequest(ProcessRedeemRequestParams calldata params) external payable;
+
+    function processSignedRequest(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external;
+
+    function nonces(address) external view returns (uint256);
 
     function investSingleDirectSingleVault(
         address vaultAddress,
@@ -222,6 +237,14 @@ interface IMetaVault {
 
     function divestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
 
+    function emergencyDivestSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
+
+    function emergencyDivestSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req) external payable;
+
+    function emergencyDivestMultiXChainSingleVault(MultiDstSingleVaultStateReq calldata req) external payable;
+
+    function emergencyDivestMultiXChainMultiVault(MultiDstMultiVaultStateReq calldata req) external payable;
+
     function setEmergencyShutdown(bool _emergencyShutdown) external;
 
     function setGateway(address) external;
@@ -260,9 +283,35 @@ interface IMetaVault {
 
     function previewWithdrawalRoute(
         address controller,
-        uint256 shares
+        uint256 shares,
+        bool despiseDust
     )
         external
         view
         returns (ERC7540Engine.ProcessRedeemRequestCache memory cachedRoute);
+
+    function setDustThreshold(uint256 dustThreshold) external;
+
+    function getDustThreshold() external view returns (uint256);
+
+    function computeHash(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint256 nonce
+    )
+        external
+        pure
+        returns (bytes32);
+
+    function verifySignature(
+        ProcessRedeemRequestParams calldata params,
+        uint256 deadline,
+        uint256 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external
+        view
+        returns (bool);
 }

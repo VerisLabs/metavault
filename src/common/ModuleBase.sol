@@ -52,6 +52,18 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
+    /// @notice Minimum shares threshold
+    uint256 public MINIMUM_SHARES_THRESHOLD = 10;
+
+    /// @dev Maximum fee that can be set (100% = 10000 basis points)
+    uint16 constant MAX_FEE = 10_000;
+
+    /// @dev Maximum time that can be set (48 hours)
+    uint256 public MAX_TIME = 172_800;
+
+    /// @notice Nonce slot seed
+    uint256 internal constant _NONCES_SLOT_SEED = 0x38377508;
+
     /// @notice mapping from address to the average share price of their deposits
     mapping(address => uint256 averageEntryPrice) public positions;
 
@@ -137,6 +149,9 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
 
     /// @notice Timestamp of last redemption per controller
     mapping(address controller => uint256) public lastRedeem;
+
+    /// @notice Number of shares that are pending to be settled;
+    mapping(address controller => uint256) public pendingProcessedShares;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       HELPR FUNCTIONS                      */
@@ -241,6 +256,15 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Returns the estimate price of 1 vault share
     function sharePrice() public view returns (uint256) {
         return convertToAssets(10 ** decimals());
+    }
+
+    /// @notice Returns the base hurdle rate for performance fee calculations
+    /// @dev The hurdle rate differs by asset:
+    /// - For stablecoins (USDC): Typically set to T-Bills yield (e.g., 5.5% APY)
+    /// - For ETH: Typically set to base staking return like Lido (e.g., 3.5% APY)
+    /// @return uint256 The current base hurdle rate in basis points
+    function hurdleRate() public view returns (uint256) {
+        return _hurdleRateOracle.getRate(asset());
     }
 
     /// @notice helper function to see if a vault is listed

@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import { GatewayBase } from "../common/GatewayBase.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
-
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import {
@@ -386,18 +385,18 @@ contract LiquidateSuperform is GatewayBase {
 
     /// @dev Helper function to fetch module function selectors
     function selectors() public pure returns (bytes4[] memory) {
-        bytes4[] memory s = new bytes4[](8);
+        bytes4[] memory s = new bytes4[](9);
         s[0] = this.liquidateSingleXChainSingleVault.selector;
         s[1] = this.liquidateSingleXChainMultiVault.selector;
         s[2] = this.liquidateMultiDstSingleVault.selector;
         s[3] = this.liquidateMultiDstMultiVault.selector;
 
-        s[3] = this.settleLiquidation.selector;
+        s[4] = this.settleLiquidation.selector;
 
-        s[4] = this.previewLiquidateSingleXChainSingleVault.selector;
-        s[5] = this.previewLiquidateSingleXChainMultiVault.selector;
-        s[6] = this.previewLiquidateMultiDstSingleVault.selector;
-        s[7] = this.previewLiquidateMultiDstMultiVault.selector;
+        s[5] = this.previewLiquidateSingleXChainSingleVault.selector;
+        s[6] = this.previewLiquidateSingleXChainMultiVault.selector;
+        s[7] = this.previewLiquidateMultiDstSingleVault.selector;
+        s[8] = this.previewLiquidateMultiDstMultiVault.selector;
         return s;
     }
 
