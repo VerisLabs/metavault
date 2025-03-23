@@ -36,6 +36,10 @@ contract SuperPositionsReceiver is OwnableRoles {
     /// @dev Contract that manages the SuperPosition tokens
     address public superPositions;
 
+    /// @notice The chain ID of the current chain where this contract is deployed
+    /// @dev This variable is used to identify the current chain in cross-chain operations
+    uint64 public thisChainId;
+
     /// @notice Initializes the receiver with source chain and contract addresses
     /// @dev Sets up the contract with necessary addresses and grants initial admin roles
     /// @param _sourceChain The chain ID where the original gateway is deployed
@@ -45,6 +49,7 @@ contract SuperPositionsReceiver is OwnableRoles {
         sourceChain = _sourceChain;
         gateway = _gateway;
         superPositions = _superPositions;
+        thisChainId = uint64(block.chainid);
         // Initialize ownership and grant admin role
         _initializeOwner(_owner);
         _grantRoles(_owner, ADMIN_ROLE);
@@ -59,7 +64,7 @@ contract SuperPositionsReceiver is OwnableRoles {
     /// @param token The address of the token to recover
     /// @param amount The amount of tokens to recover
     function recoverFunds(address token, uint256 amount) external onlyRoles(RECOVERY_ROLE) {
-        if (sourceChain == block.chainid) revert SourceChainRecoveryNotAllowed();
+        if (sourceChain == thisChainId) revert SourceChainRecoveryNotAllowed();
         token.safeTransfer(msg.sender, amount);
     }
 
@@ -91,7 +96,7 @@ contract SuperPositionsReceiver is OwnableRoles {
         // Silence compiler warnings
         operator;
         data;
-        if (sourceChain == block.chainid) {
+        if (sourceChain == thisChainId) {
             if (msg.sender != address(superPositions)) revert();
             if (from != address(0)) revert();
             ISuperPositions(superPositions).safeTransferFrom(address(this), address(gateway), superformId, value, "");

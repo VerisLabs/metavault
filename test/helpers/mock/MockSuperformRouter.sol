@@ -19,26 +19,44 @@ contract MockSuperformRouter is IBaseRouter {
 
     IMetaVault metavault;
     ISuperPositions sp;
+    address spReceiver;
     address asset;
 
-    function initialize(IMetaVault _metavault, ISuperPositions _sp, address _asset) public {
+    function initialize(IMetaVault _metavault, ISuperPositions _sp, address _asset, address _spReceiver) public {
         asset = _asset;
         sp = _sp;
         metavault = _metavault;
+        spReceiver = _spReceiver;
     }
 
-    function singleDirectSingleVaultDeposit(SingleDirectSingleVaultStateReq memory req_) external payable { }
+    function singleDirectSingleVaultDeposit(SingleDirectSingleVaultStateReq memory req_) external payable {
+        uint256 superformId = req_.superformData.superformId;
+        uint256 assets = req_.superformData.amount;
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+        VaultData memory vault = metavault.getVault(superformId);
+        uint256 shares = vault.convertToShares(assets, asset, false) + 1;
+        sp.mintSingle(spReceiver, superformId, shares);
+    }
 
     function singleXChainSingleVaultDeposit(SingleXChainSingleVaultStateReq memory req_) external payable {
         uint256 superformId = req_.superformData.superformId;
         uint256 assets = req_.superformData.amount;
         asset.safeTransferFrom(msg.sender, address(this), assets);
         VaultData memory vault = metavault.getVault(superformId);
-        uint256 shares = vault.convertToShares(assets, asset, false);
-        sp.mintSingle(msg.sender, superformId, shares);
+        uint256 shares = vault.convertToShares(assets, asset, false) + 1;
+        sp.mintSingle(spReceiver, superformId, shares);
     }
 
-    function singleDirectMultiVaultDeposit(SingleDirectMultiVaultStateReq memory req_) external payable { }
+    function singleDirectMultiVaultDeposit(SingleDirectMultiVaultStateReq memory req_) external payable {
+        for (uint256 i = 0; i < req_.superformData.superformIds.length; i++) {
+            uint256 superformId = req_.superformData.superformIds[i];
+            uint256 assets = req_.superformData.amounts[i];
+            asset.safeTransferFrom(msg.sender, address(this), assets);
+            VaultData memory vault = metavault.getVault(superformId);
+            uint256 shares = vault.convertToShares(assets, asset, false) + 1;
+            sp.mintSingle(spReceiver, superformId, shares);
+        }
+    }
 
     function singleXChainMultiVaultDeposit(SingleXChainMultiVaultStateReq memory req_) external payable {
         for (uint256 i = 0; i < req_.superformsData.superformIds.length; i++) {
@@ -47,7 +65,7 @@ contract MockSuperformRouter is IBaseRouter {
             asset.safeTransferFrom(msg.sender, address(this), assets);
             VaultData memory vault = metavault.getVault(superformId);
             uint256 shares = vault.convertToShares(assets, asset, false);
-            sp.mintSingle(msg.sender, superformId, shares);
+            sp.mintSingle(spReceiver, superformId, shares);
         }
     }
 
@@ -58,8 +76,8 @@ contract MockSuperformRouter is IBaseRouter {
             uint256 assets = svd.amount;
             asset.safeTransferFrom(msg.sender, address(this), assets);
             VaultData memory vault = metavault.getVault(superformId);
-            uint256 shares = vault.convertToShares(assets, asset, false);
-            sp.mintSingle(msg.sender, superformId, shares);
+            uint256 shares = vault.convertToShares(assets, asset, false) + 1;
+            sp.mintSingle(spReceiver, superformId, shares);
         }
     }
 
@@ -67,17 +85,24 @@ contract MockSuperformRouter is IBaseRouter {
         for (uint256 i = 0; i < req_.superformsData.length; i++) {
             MultiVaultSFData memory mvd = req_.superformsData[i];
             for (uint256 j = 0; j < mvd.superformIds.length; j++) {
-                uint256 superformId = mvd.superformIds[i];
-                uint256 assets = mvd.amounts[i];
+                uint256 superformId = mvd.superformIds[j];
+                uint256 assets = mvd.amounts[j];
                 asset.safeTransferFrom(msg.sender, address(this), assets);
                 VaultData memory vault = metavault.getVault(superformId);
-                uint256 shares = vault.convertToShares(assets, asset, false);
-                sp.mintSingle(msg.sender, superformId, shares);
+                uint256 shares = vault.convertToShares(assets, asset, false) + 1;
+                sp.mintSingle(spReceiver, superformId, shares);
             }
         }
     }
 
-    function singleDirectSingleVaultWithdraw(SingleDirectSingleVaultStateReq memory req_) external payable { }
+    function singleDirectSingleVaultWithdraw(SingleDirectSingleVaultStateReq memory req_) external payable {
+        uint256 superformId = req_.superformData.superformId;
+        uint256 shares = req_.superformData.amount;
+        sp.burnSingle(msg.sender, superformId, shares);
+        VaultData memory vault = metavault.getVault(superformId);
+        uint256 assets = vault.convertToAssets(shares, asset, false);
+        asset.safeTransfer(msg.sender, assets);
+    }
 
     function singleXChainSingleVaultWithdraw(SingleXChainSingleVaultStateReq memory req_) external payable {
         uint256 superformId = req_.superformData.superformId;
@@ -88,7 +113,16 @@ contract MockSuperformRouter is IBaseRouter {
         asset.safeTransfer(msg.sender, assets);
     }
 
-    function singleDirectMultiVaultWithdraw(SingleDirectMultiVaultStateReq memory req_) external payable { }
+    function singleDirectMultiVaultWithdraw(SingleDirectMultiVaultStateReq memory req_) external payable {
+        for (uint256 i = 0; i < req_.superformData.superformIds.length; i++) {
+            uint256 superformId = req_.superformData.superformIds[i];
+            uint256 shares = req_.superformData.amounts[i];
+            sp.burnSingle(msg.sender, superformId, shares);
+            VaultData memory vault = metavault.getVault(superformId);
+            uint256 assets = vault.convertToAssets(shares, asset, false);
+            asset.safeTransfer(msg.sender, assets);
+        }
+    }
 
     function singleXChainMultiVaultWithdraw(SingleXChainMultiVaultStateReq memory req_) external payable {
         for (uint256 i = 0; i < req_.superformsData.superformIds.length; i++) {
@@ -117,8 +151,8 @@ contract MockSuperformRouter is IBaseRouter {
         for (uint256 i = 0; i < req_.superformsData.length; i++) {
             MultiVaultSFData memory mvd = req_.superformsData[i];
             for (uint256 j = 0; j < mvd.superformIds.length; j++) {
-                uint256 superformId = mvd.superformIds[i];
-                uint256 shares = mvd.amounts[i];
+                uint256 superformId = mvd.superformIds[j];
+                uint256 shares = mvd.amounts[j];
                 sp.burnSingle(msg.sender, superformId, shares);
                 VaultData memory vault = metavault.getVault(superformId);
                 uint256 assets = vault.convertToAssets(shares, asset, false);

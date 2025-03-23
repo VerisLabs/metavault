@@ -2,12 +2,13 @@
 pragma solidity ^0.8.19;
 
 import { Actors } from "../../../helpers/Actors.sol";
+import { Vaults } from "../../../helpers/Vaults.sol";
 import { CommonBase } from "forge-std/Base.sol";
 import { StdUtils } from "forge-std/StdUtils.sol";
 import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
 
-abstract contract BaseHandler is CommonBase, Test, Actors {
+abstract contract BaseHandler is CommonBase, Test, Actors, Vaults {
     mapping(bytes32 => uint256) public calls;
 
     modifier countCall(bytes32 key) {

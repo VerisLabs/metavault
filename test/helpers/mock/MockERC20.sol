@@ -55,4 +55,6 @@ contract MockERC20 is ERC20 {
     function transferFrom(address from, address to, uint256 amount) public virtual override returns (bool) {
         return super.transferFrom(from, to, amount);
     }
+
+    fallback() external { }
 }

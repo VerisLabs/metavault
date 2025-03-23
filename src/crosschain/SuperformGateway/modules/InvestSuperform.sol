@@ -85,7 +85,6 @@ contract InvestSuperform is GatewayBase {
         superformRouter.singleXChainSingleVaultDeposit{ value: msg.value }(req);
 
         emit PendingInvestUpdated(superformId, oldPendingAmount, pendingXChainInvests[superformId]);
-        emit PendingInvestUpdated(0, oldTotalPending, totalpendingXChainInvests);
     }
 
     /// @notice Invests assets into multiple vaults across a chain

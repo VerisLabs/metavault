@@ -12,7 +12,8 @@ import { MockSignerRelayer } from "../../helpers/mock/MockSignerRelayer.sol";
 import { MockSuperPositions } from "../../helpers/mock/MockSuperPositions.sol";
 import { MockSuperformRouter } from "../../helpers/mock/MockSuperformRouter.sol";
 
-import { SuperPositionsReceiver } from "crosschain/Lib.sol";
+import { MetaVaultWrapper } from "../../helpers/mock/MetaVaultWrapper.sol";
+import { SuperPositionsReceiverWrapper } from "../../helpers/mock/SuperPositionsReceiverWrapper.sol"; // Updated import
 import {
     DivestSuperform, InvestSuperform, LiquidateSuperform, SuperformGateway
 } from "crosschain/SuperformGateway/Lib.sol";
@@ -27,21 +28,31 @@ import {
     ISuperformFactory,
     ISuperformGateway
 } from "interfaces/Lib.sol";
-import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
-import { MetaVault } from "src/MetaVault.sol";
+import {
+    AssetsManager,
+    ERC7540Engine,
+    ERC7540EngineReader,
+    ERC7540EngineSignatures,
+    MetaVaultReader
+} from "modules/Lib.sol";
 import { VaultConfig } from "types/Lib.sol";
 
 contract SetUp is StdInvariant, Test {
     MockERC20 token;
     IMetaVault vault;
     MockSuperformRouter router;
+    SuperPositionsReceiverWrapper spReceiver; // Updated type
     MockSuperPositions superPositions;
     VaultConfig config;
     ISuperformGateway gateway;
-    ERC7540Engine engine;
     MockERC4626Oracle oracle;
-    AssetsManager manager;
+    ERC7540Engine engine;
+    ERC7540EngineReader engineReader;
+    ERC7540EngineSignatures engineSignatures;
+    AssetsManager assetManager;
+    MetaVaultReader metaVaultReader;
     MetaVaultHandler vaultHandler;
+
     address superAdmin = makeAddr("superAdmin");
     address treasury = makeAddr("treasury");
 
@@ -59,9 +70,9 @@ contract SetUp is StdInvariant, Test {
             asset: address(token),
             name: "MetaUsdceVault",
             symbol: "metaUSDCe",
-            managementFee: 100,
-            performanceFee: 2000,
-            oracleFee: 50,
+            managementFee: 0,
+            performanceFee: 0,
+            oracleFee: 0,
             hurdleRateOracle: IHurdleRateOracle(address(new MockHurdleRateOracle())),
             sharesLockTime: 0,
             superPositions: ISuperPositions(address(superPositions)),
@@ -69,20 +80,37 @@ contract SetUp is StdInvariant, Test {
             signerRelayer: address(new MockSignerRelayer(0xA111ce)),
             owner: superAdmin
         });
-        vault = IMetaVault(address(new MetaVault(config)));
-        router.initialize(vault, ISuperPositions(address(superPositions)), vault.asset());
+        vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGateway(address(vault), superAdmin);
-        vaultHandler = new MetaVaultHandler(vault, token, superAdmin);
+        spReceiver = new SuperPositionsReceiverWrapper(1, address(gateway), address(superPositions), superAdmin); // Updated
+        spReceiver.setChainId(1);
+        ISuperformGateway(address(gateway)).setRecoveryAddress(address(spReceiver));
+        MetaVaultWrapper(payable(address(vault))).setChainId(1);
+        router.initialize(vault, ISuperPositions(address(superPositions)), vault.asset(), address(spReceiver));
+        vaultHandler = new MetaVaultHandler(vault, token, superAdmin, oracle);
         vault.setGateway(address(gateway));
         gateway.grantRoles(superAdmin, gateway.RELAYER_ROLE());
 
+        // Add vault modules
         engine = new ERC7540Engine();
         bytes4[] memory engineSelectors = engine.selectors();
         vault.addFunctions(engineSelectors, address(engine), false);
 
-        manager = new AssetsManager();
-        bytes4[] memory managerSelectors = manager.selectors();
-        vault.addFunctions(managerSelectors, address(manager), false);
+        engineReader = new ERC7540EngineReader();
+        bytes4[] memory engineReaderSelectors = engineReader.selectors();
+        vault.addFunctions(engineReaderSelectors, address(engineReader), false);
+
+        engineSignatures = new ERC7540EngineSignatures();
+        bytes4[] memory engineSignaturesSelectors = engineSignatures.selectors();
+        vault.addFunctions(engineSignaturesSelectors, address(engineSignatures), false);
+
+        assetManager = new AssetsManager();
+        bytes4[] memory assetManagerSelectors = assetManager.selectors();
+        vault.addFunctions(assetManagerSelectors, address(assetManager), false);
+
+        metaVaultReader = new MetaVaultReader();
+        bytes4[] memory metaVaultReaderSelectors = metaVaultReader.selectors();
+        vault.addFunctions(metaVaultReaderSelectors, address(metaVaultReader), false);
 
         oracle = new MockERC4626Oracle();
         vault.grantRoles(superAdmin, vault.MANAGER_ROLE());
@@ -113,9 +141,6 @@ contract SetUp is StdInvariant, Test {
         gateway.addFunctions(divestSelectors, address(divest), false);
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         gateway.addFunctions(liquidateSelectors, address(liquidate), false);
-        ISuperformGateway(address(gateway)).setRecoveryAddress(
-            address(new SuperPositionsReceiver(8453, address(gateway), address(superPositions), superAdmin))
-        );
         return ISuperformGateway(address(gateway));
     }
 }
