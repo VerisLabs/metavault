@@ -5,14 +5,18 @@ import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import {ERC20} from "solady/tokens/ERC20.sol";
+import { ReentrancyGuard } from "solady/utils/ReentrancyGuard.sol";
 
 /// @title SuperPositionsReceiver
 /// @notice A cross-chain recovery contract for failed SuperPosition investments
 /// @dev This contract must be deployed with identical addresses across all chains to handle failed cross-chain
 /// operations.
 ///      It serves as a safety mechanism in the Superform protocol to recover stuck assets from failed investments.
-contract SuperPositionsReceiver is OwnableRoles {
+contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     using SafeTransferLib for address;
+
+    event BridgeInitiated(address _token, uint256 _amount);
 
     error SourceChainRecoveryNotAllowed();
 
@@ -36,6 +40,10 @@ contract SuperPositionsReceiver is OwnableRoles {
     /// @dev Contract that manages the SuperPosition tokens
     address public superPositions;
 
+    /// @notice Maximum gas limit for bridge calls
+    /// @dev Prevents excessive gas consumption in bridge transactions
+    uint256 public maxBridgeGasLimit;
+
     /// @notice Initializes the receiver with source chain and contract addresses
     /// @dev Sets up the contract with necessary addresses and grants initial admin roles
     /// @param _sourceChain The chain ID where the original gateway is deployed
@@ -45,6 +53,7 @@ contract SuperPositionsReceiver is OwnableRoles {
         sourceChain = _sourceChain;
         gateway = _gateway;
         superPositions = _superPositions;
+        maxBridgeGasLimit = 2000000; // Default gas limit
         // Initialize ownership and grant admin role
         _initializeOwner(_owner);
         _grantRoles(_owner, ADMIN_ROLE);
@@ -52,6 +61,13 @@ contract SuperPositionsReceiver is OwnableRoles {
 
     function setGateway(address _gateway) external onlyRoles(ADMIN_ROLE) {
         gateway = _gateway;
+    }
+
+    /// @notice Updates the maximum gas limit for bridge calls
+    /// @dev Only callable by admin
+    /// @param _maxGasLimit New maximum gas limit
+    function setMaxBridgeGasLimit(uint256 _maxGasLimit) external onlyRoles(ADMIN_ROLE) {
+        maxBridgeGasLimit = _maxGasLimit;
     }
 
     /// @notice Recovers stuck tokens from failed cross-chain operations
@@ -128,4 +144,21 @@ contract SuperPositionsReceiver is OwnableRoles {
         }
         return this.onERC1155BatchReceived.selector;
     }
+
+    // Function to bridge ERC20 tokens - called by admin/owner with API data
+    function bridgeToken(
+        address payable _to,         // txTarget from API
+        bytes memory _txData,        // txData from API
+        address _token,              // Token to bridge
+        address _allowanceTarget,    // approvalData.allowanceTarget from API
+        uint256 _amount              // approvalData.minimumApprovalAmount from API
+    ) public nonReentrant onlyRoles(RECOVERY_ROLE) {
+        // Approve the bridge contract to spend tokens
+        ERC20(_token).approve(_allowanceTarget, _amount);
+        // Execute the bridge transaction
+        (bool success, ) = _to.call{gas: maxBridgeGasLimit}(_txData);
+        require(success, "Bridge transaction failed");        
+        emit BridgeInitiated(_token, _amount);
+    }
+        
 }
