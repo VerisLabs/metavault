@@ -10,6 +10,8 @@ interface ISuperPositionsReceiver {
     /// @param _amount Amount of tokens being bridged
     event BridgeInitiated(address _token, uint256 _amount);
 
+    event BridgeTransactionFailed(address token, uint256 amount);
+
     /// @notice Error thrown when attempting to recover funds on the source chain
     error SourceChainRecoveryNotAllowed();
 
