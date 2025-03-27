@@ -121,7 +121,7 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
 
         // Verify token movement
         uint256 finalBalance = ERC20(_token).balanceOf(address(this));
-        if (finalBalance < initialBalance) revert NoTokensTransferred();
+        if (finalBalance >= initialBalance) revert NoTokensTransferred();
 
         emit BridgeInitiated(_token, _amount);
     }

@@ -16,7 +16,7 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { MockAllowanceTarget, MockBridgeTarget, MockFailureBridgeTarget } from "../helpers/mock/MockBridgeTarget.sol";
+import { MockBridgeTargetNoTransfer, MockBridgeTarget, MockFailureBridgeTarget } from "../helpers/mock/MockBridgeTarget.sol";
 import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
@@ -135,7 +135,6 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
     function testBridgeToken_SuccessfulBridge() public {
 
         MockERC20 mockToken = new MockERC20("Mock Token", "MTKN", 18);
-        
 
         // Deploy mock bridge target
         MockBridgeTarget bridgeTarget = new MockBridgeTarget();
@@ -154,7 +153,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         );
 
         // Mint tokens to the SuperPositionsReceiver
-        uint256 initialBalance = 1000 * 10**18;
+        uint256 initialBalance = 1000 ether;
         mockToken.mint(address(superPositionsReceiver), initialBalance);
 
         // Expect bridge initiated event
@@ -184,16 +183,44 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         bytes memory txData = abi.encodeWithSignature("mockFailBridgeFunction()");
         uint256 amount = 100 ether;
 
-        // Expect bridge transaction failed event
-        vm.expectEmit(true, true, true, true);
-        emit SuperPositionsReceiver.BridgeTransactionFailed(DAI_BASE, amount);
-
         // Expect revert
-        vm.expectRevert("Bridge transaction failed");
+        vm.expectRevert(abi.encodeWithSignature("BridgeTransactionFailed()"));
 
         // Call bridge token
         vm.prank(users.alice);
         superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount);
+    }
+
+    function testBridgeToken_NoTokensTransferred() public {
+
+        MockERC20 mockToken = new MockERC20("Mock Token", "MTKN", 18);
+
+        // Deploy mock bridge target
+        MockBridgeTargetNoTransfer bridgeTarget = new MockBridgeTargetNoTransfer();
+        address payable to = payable(address(bridgeTarget));
+
+        uint256 amount = 100 ether;
+
+        address externalReceiver = makeAddr("externalReceiver");
+        
+        // Prepare bridge parameters
+        bytes memory txData = abi.encodeWithSignature(
+            "mockBridgeFunction(address,address,uint256)", 
+            address(mockToken), 
+            externalReceiver,
+            amount
+        );
+
+        // Mint tokens to the SuperPositionsReceiver
+        uint256 initialBalance = 1000 ether;
+        mockToken.mint(address(superPositionsReceiver), initialBalance);
+
+        // Expect revert
+        vm.expectRevert(abi.encodeWithSignature("NoTokensTransferred()"));
+
+        // Call bridge token
+        vm.prank(users.alice);
+        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount);
     }
         
     // Test for single ERC1155 token received on the source chain

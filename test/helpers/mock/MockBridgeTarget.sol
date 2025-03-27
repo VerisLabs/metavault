@@ -22,16 +22,26 @@ contract MockBridgeTarget {
     }
 }
 
-contract MockAllowanceTarget {
-    uint256 public allowanceAmount;
-
-    function approve(uint256 amount) public {
-        allowanceAmount = amount;
-    }
-}
-
 contract MockFailureBridgeTarget {
     function mockFailBridgeFunction() public pure {
         revert("Bridge operation failed");
+    }
+}
+
+// Mock Bridge Target that simulates an actual token transfer
+contract MockBridgeTargetNoTransfer {
+    bool public wasCalled;
+
+    function mockBridgeFunction(address token, address receiver, uint256 amount) public {
+        // Not transferring the tokens
+        wasCalled = true;
+    }
+
+    fallback() external payable {
+        wasCalled = true;
+    }
+
+    receive() external payable {
+        wasCalled = true;
     }
 }
