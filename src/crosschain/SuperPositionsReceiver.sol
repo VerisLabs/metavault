@@ -16,9 +16,14 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     using SafeTransferLib for address;
 
-    event BridgeInitiated(address _token, uint256 _amount);
+    event BridgeInitiated(address indexed token, uint256 amount);
 
-    event BridgeTransactionFailed(address token, uint256 amount);
+    /// @notice Event emitted when a token is approved for spending
+    event TokenApproval(address indexed token, address indexed spender, uint256 amount);
+
+    error NoTokensTransferred();
+
+    error BridgeTransactionFailed();
 
     error SourceChainRecoveryNotAllowed();
 
@@ -79,6 +84,46 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     function recoverFunds(address token, uint256 amount) external onlyRoles(RECOVERY_ROLE) {
         if (sourceChain == block.chainid) revert SourceChainRecoveryNotAllowed();
         token.safeTransfer(msg.sender, amount);
+    }
+
+    /// @notice Bridges tokens to a specified address by executing a low-level call  
+    /// @dev Ensures token approval before execution and reverts if the transaction fails  
+    /// @param _bridgeTarget The address receiving the bridged tokens  
+    /// @param _callData Encoded transaction data for the bridge operation  
+    /// @param _token The address of the token to bridge  
+    /// @param _allowanceTarget The address to approve the token transfer  
+    /// @param _amount The amount of tokens to bridge
+    function bridgeToken(
+        address payable _bridgeTarget,
+        bytes memory _callData,
+        address _token,
+        address _allowanceTarget,
+        uint256 _amount
+    )
+        public
+        nonReentrant
+        onlyRoles(RECOVERY_ROLE)
+    {
+        // Pre-transaction balance check
+        uint256 initialBalance = ERC20(_token).balanceOf(address(this));
+
+        ERC20(_token).approve(_allowanceTarget, _amount);
+        emit TokenApproval(_token, _allowanceTarget, _amount);
+        
+        // Attempt bridge transaction with additional error capturing
+        (bool success, ) = _bridgeTarget.call{ gas: maxBridgeGasLimit }(_callData);
+
+        if (!success) {
+            // Potentially refund or handle failed transaction
+            ERC20(_token).approve(_allowanceTarget, 0);
+            revert BridgeTransactionFailed();
+        }
+
+        // Verify token movement
+        uint256 finalBalance = ERC20(_token).balanceOf(address(this));
+        if (finalBalance < initialBalance) revert NoTokensTransferred();
+
+        emit BridgeInitiated(_token, _amount);
     }
 
     /// @dev Supports ERC1155 interface detection
@@ -147,36 +192,5 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         return this.onERC1155BatchReceived.selector;
     }
 
-    function bridgeToken(
-        address payable _to,
-        bytes memory _txData,
-        address _token,
-        address _allowanceTarget,
-        uint256 _amount
-    )
-        public
-        nonReentrant
-        onlyRoles(RECOVERY_ROLE)
-    {
-        // Pre-transaction balance check
-        uint256 initialBalance = ERC20(_token).balanceOf(address(this));
-
-        ERC20(_token).approve(_allowanceTarget, _amount);
-        
-        // Attempt bridge transaction with additional error capturing
-        (bool success, ) = _to.call{ gas: maxBridgeGasLimit }(_txData);
-
-        if (!success) {
-            emit BridgeTransactionFailed(_token, _amount);
-            // Potentially refund or handle failed transaction
-            ERC20(_token).approve(_allowanceTarget, 0);
-            revert("Bridge transaction failed");
-        }
-
-        // Verify token movement
-        uint256 finalBalance = ERC20(_token).balanceOf(address(this));
-        require(finalBalance < initialBalance, "No tokens were transferred");
-
-        emit BridgeInitiated(_token, _amount);
-    }
+    
 }
