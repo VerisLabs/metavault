@@ -100,8 +100,8 @@ contract EmergencyAssetsManager is ModuleBase {
             uint256 superformId = req.superformsData.superformIds[i];
             VaultData memory vault = vaults[superformId];
             uint256 sharesBalance = _sharesBalance(vault);
-            uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
-            vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+            uint256 divestAmount = req.superformsData.amounts[i];
+            vault.totalDebt = _sub0(vaults[superformId].totalDebt, divestAmount).toUint128();
             vaults[superformId] = vault;
             unchecked {
                 ++i;
@@ -125,8 +125,6 @@ contract EmergencyAssetsManager is ModuleBase {
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
             VaultData memory vault = vaults[superformId];
-
-            // Only reduce debt by the actual amount being divested
             uint256 divestAmount = vault.convertToAssets(req.superformsData[i].amount, asset(), true);
             vault.totalDebt = _sub0(vaults[superformId].totalDebt, divestAmount).toUint128();
             vaults[superformId] = vault;
@@ -154,9 +152,8 @@ contract EmergencyAssetsManager is ModuleBase {
             for (uint256 j = 0; j < superformIds.length;) {
                 uint256 superformId = superformIds[j];
                 VaultData memory vault = vaults[superformId];
-                uint256 sharesBalance = _sharesBalance(vault);
-                uint256 sharesValue = vault.convertToAssets(sharesBalance, asset(), true);
-                vault.totalDebt = _sub0(vaults[superformId].totalDebt, sharesValue).toUint128();
+                uint256 divestAmount = vault.convertToAssets(req.superformsData[i].amounts[j], asset(), true);
+                vault.totalDebt = _sub0(vaults[superformId].totalDebt, divestAmount).toUint128();
                 vaults[superformId] = vault;
                 unchecked {
                     ++j;
