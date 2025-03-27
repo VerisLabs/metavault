@@ -158,6 +158,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Thrown when attempting to set a shares lock time higher than the maximum allowed
     error InvalidSharesLockTime();
 
+    /// @notice Thrown when the maximum queue size is exceeded
+    error MaxQueueSizeExceeded();
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -626,7 +629,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         external
         onlyRoles(MANAGER_ROLE)
     {
-        if (superformId == 0) revert();
+        if (superformId == 0) revert InvalidSuperformId();
         // If its already listed revert
         if (isVaultListed(vault)) revert VaultAlreadyListed();
 
@@ -640,12 +643,15 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (lastSharePrice == 0) revert();
         _vaultToSuperformId[vault] = superformId;
 
+        bool found;
+
         if (chainId == THIS_CHAIN_ID) {
             // Push it to the local withdrawal queue
             uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = localWithdrawalQueue;
             for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
                 if (queue[i] == 0) {
                     localWithdrawalQueue[i] = superformId;
+                    found = true;
                     break;
                 }
             }
@@ -657,10 +663,12 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
                 if (queue[i] == 0) {
                     xChainWithdrawalQueue[i] = superformId;
+                    found = true;
                     break;
                 }
             }
         }
+        if (!found) revert MaxQueueSizeExceeded();
 
         emit AddVault(chainId, vault);
     }
