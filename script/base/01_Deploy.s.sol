@@ -36,6 +36,7 @@ contract DeployScript is Script {
     ERC7540EngineSignatures public engineSignatures;
     AssetsManager public assetManager;
     EmergencyAssetsManager public emergencyAssetsManager;
+
     MetaVaultReader public metaVaultReader;
 
     uint256 deployerPrivateKey;
