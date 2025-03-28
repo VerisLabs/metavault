@@ -291,7 +291,7 @@ contract AssetsManager is ModuleBase {
         for (uint256 i = 0; i < req.superformsData.superformIds.length;) {
             uint256 superformId = req.superformsData.superformIds[i];
             VaultData memory vault = vaults[superformId];
-            uint256 divestAmount = req.superformsData.amounts[i];
+            uint256 divestAmount = vault.convertToAssets(req.superformsData.amounts[i], asset(), true);
             vault.totalDebt = _sub0(vaults[superformId].totalDebt, divestAmount).toUint128();
             vaults[superformId] = vault;
             unchecked {
