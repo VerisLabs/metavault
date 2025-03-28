@@ -93,20 +93,20 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         // Should fail if not recovery admin
         vm.prank(users.bob);
         vm.expectRevert();
-        superPositionsReceiver.recoverFunds(USDCE_BASE, amount);
+        superPositionsReceiver.recoverFunds(USDCE_BASE, amount, users.bob);
 
         // Should fail on source chain
         vm.chainId(baseChainId);
         vm.prank(users.alice);
         vm.expectRevert(abi.encodeWithSignature("SourceChainRecoveryNotAllowed()"));
-        superPositionsReceiver.recoverFunds(USDCE_BASE, amount);
+        superPositionsReceiver.recoverFunds(USDCE_BASE, amount, users.bob);
 
         uint256 before = USDCE_BASE.balanceOf(users.alice);
         // Should succeed on destination chain with recovery admin
         vm.chainId(destiChainId);
         vm.prank(users.alice);
-        superPositionsReceiver.recoverFunds(USDCE_BASE, amount);
-        assertEq(USDCE_BASE.balanceOf(users.alice) - before, amount);
+        superPositionsReceiver.recoverFunds(USDCE_BASE, amount, users.bob);
+        assertEq(USDCE_BASE.balanceOf(users.bob) - before, amount);
     }
 
     function test_SupportsInterface() public {
@@ -162,7 +162,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
 
         // Call bridge token
         vm.prank(users.alice);
-        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount);
+        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500000);
 
         // Check that tokens were transferred out of the contract
         assertEq(
@@ -188,7 +188,23 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
 
         // Call bridge token
         vm.prank(users.alice);
-        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount);
+        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 500000);
+    }
+
+    function testBridgeToken_ExceedingGasLimit() public {
+        // Deploy mock failure bridge target
+        MockFailureBridgeTarget failureBridgeTarget = new MockFailureBridgeTarget();
+        address payable to = payable(address(failureBridgeTarget));
+        
+        bytes memory txData = abi.encodeWithSignature("mockFailBridgeFunction()");
+        uint256 amount = 100 ether;
+
+        // Expect revert
+        vm.expectRevert(abi.encodeWithSignature("GasLimitExceeded()"));
+
+        // Call bridge token
+        vm.prank(users.alice);
+        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 5000000);
     }
 
     function testBridgeToken_NoTokensTransferred() public {
@@ -220,7 +236,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
 
         // Call bridge token
         vm.prank(users.alice);
-        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount);
+        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500000);
     }
         
     // Test for single ERC1155 token received on the source chain

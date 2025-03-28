@@ -21,6 +21,8 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     /// @notice Event emitted when a token is approved for spending
     event TokenApproval(address indexed token, address indexed spender, uint256 amount);
 
+    error GasLimitExceeded();
+
     error NoTokensTransferred();
 
     error BridgeTransactionFailed();
@@ -81,9 +83,9 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
     /// @param token The address of the token to recover
     /// @param amount The amount of tokens to recover
-    function recoverFunds(address token, uint256 amount) external onlyRoles(RECOVERY_ROLE) {
+    function recoverFunds(address token, uint256 amount, address to) external onlyRoles(RECOVERY_ROLE) {
         if (sourceChain == block.chainid) revert SourceChainRecoveryNotAllowed();
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransfer(to, amount);
     }
 
     /// @notice Bridges tokens to a specified address by executing a low-level call  
@@ -93,17 +95,20 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     /// @param _token The address of the token to bridge  
     /// @param _allowanceTarget The address to approve the token transfer  
     /// @param _amount The amount of tokens to bridge
+    /// @param _gasLimit The gas limit for the bridging and swapping
     function bridgeToken(
         address payable _bridgeTarget,
         bytes memory _callData,
         address _token,
         address _allowanceTarget,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _gasLimit
     )
-        public
+        external
         nonReentrant
         onlyRoles(RECOVERY_ROLE)
     {
+        if( _gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
         // Pre-transaction balance check
         uint256 initialBalance = ERC20(_token).balanceOf(address(this));
 
@@ -111,7 +116,7 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         emit TokenApproval(_token, _allowanceTarget, _amount);
         
         // Attempt bridge transaction with additional error capturing
-        (bool success, ) = _bridgeTarget.call{ gas: maxBridgeGasLimit }(_callData);
+        (bool success, ) = _bridgeTarget.call{ gas: _gasLimit }(_callData);
 
         if (!success) {
             // Potentially refund or handle failed transaction

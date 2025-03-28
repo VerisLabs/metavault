@@ -19,6 +19,9 @@ interface ISuperPositionsReceiver {
     /// @notice Error thrown when no tokens were transferred during a bridge operation
     error NoTokensTransferred();
 
+    /// @notice Error thrown when the provided gas limit exceeds the maximum allowed for bridging.
+    error GasLimitExceeded();
+
     /// @notice Error thrown when a bridge transaction fails
     error BridgeTransactionFailed();
 
@@ -63,7 +66,7 @@ interface ISuperPositionsReceiver {
     /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
     /// @param token The address of the token to recover
     /// @param amount The amount of tokens to recover
-    function recoverFunds(address token, uint256 amount) external;
+    function recoverFunds(address token, uint256 amount, address to) external;
 
     /// @notice Checks if the contract supports a given interface
     /// @dev Used for ERC1155 interface detection
@@ -110,12 +113,14 @@ interface ISuperPositionsReceiver {
     /// @param _token Address of the token to bridge
     /// @param _allowanceTarget Approval target for the token (approvalData.allowanceTarget from API)
     /// @param _amount Amount of tokens to bridge (approvalData.minimumApprovalAmount from API)
+    /// @param _gasLimit The gas limit for the bridging and swapping
     function bridgeToken(
         address payable _to,
         bytes memory _txData,
         address _token,
         address _allowanceTarget,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _gasLimit
     ) external;
 
     // For OwnableRoles functions we should include them or inherit the interface
