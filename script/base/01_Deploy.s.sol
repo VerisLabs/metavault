@@ -77,8 +77,6 @@ contract DeployScript is Script {
 
         // Set gatway
         vault.setGateway(address(gateway));
-        // Set the Dust Threshold
-        vault.setDustThreshold(3000000);
         
         // Add vault modules
         engine = new ERC7540Engine();
@@ -123,6 +121,9 @@ contract DeployScript is Script {
         vault.grantRoles(managerAddressRole, vault.MANAGER_ROLE());
         vault.grantRoles(relayerRole, vault.RELAYER_ROLE());
         vault.grantRoles(emergencyAdminRole, vault.EMERGENCY_ADMIN_ROLE());
+
+        // Set the Dust Threshold
+        vault.setDustThreshold(3000000);
 
         console2.log("Vault deployed at: ", address(vault));
         console2.log("Gateway deployed at: ", address(gateway));
