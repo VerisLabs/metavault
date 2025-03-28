@@ -1,14 +1,31 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {DivestSuperform, InvestSuperform, LiquidateSuperform, SuperformGateway} from "crosschain/SuperformGateway/Lib.sol";
-import {Script, console2} from "forge-std/Script.sol";
+import {
+    DivestSuperform, InvestSuperform, LiquidateSuperform, SuperformGateway
+} from "crosschain/SuperformGateway/Lib.sol";
+import { Script, console2 } from "forge-std/Script.sol";
 
-import {SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, WETH_BASE} from "helpers/AddressBook.sol";
-import {IBaseRouter, IHurdleRateOracle, IMetaVault, ISharePriceOracle, ISuperPositions, ISuperformFactory, ISuperformGateway} from "interfaces/Lib.sol";
-import {AssetsManager, EmergencyAssetsManager, ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures, MetaVaultReader} from "modules/Lib.sol";
-import {MetaVault} from "src/MetaVault.sol";
-import {VaultConfig} from "types/Lib.sol";
+import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, WETH_BASE } from "helpers/AddressBook.sol";
+import {
+    IBaseRouter,
+    IHurdleRateOracle,
+    IMetaVault,
+    ISharePriceOracle,
+    ISuperPositions,
+    ISuperformFactory,
+    ISuperformGateway
+} from "interfaces/Lib.sol";
+import {
+    AssetsManager,
+    ERC7540Engine,
+    ERC7540EngineReader,
+    ERC7540EngineSignatures,
+    EmergencyAssetsManager,
+    MetaVaultReader
+} from "modules/Lib.sol";
+import { MetaVault } from "src/MetaVault.sol";
+import { VaultConfig } from "types/Lib.sol";
 
 contract DeployScript is Script {
     VaultConfig public config;
@@ -77,7 +94,7 @@ contract DeployScript is Script {
 
         // Set gatway
         vault.setGateway(address(gateway));
-        
+
         // Add vault modules
         engine = new ERC7540Engine();
         bytes4[] memory engineSelectors = engine.selectors();
@@ -88,34 +105,20 @@ contract DeployScript is Script {
         vault.addFunctions(engineReaderSelectors, address(engineReader), false);
 
         engineSignatures = new ERC7540EngineSignatures();
-        bytes4[] memory engineSignaturesSelectors = engineSignatures
-            .selectors();
-        vault.addFunctions(
-            engineSignaturesSelectors,
-            address(engineSignatures),
-            false
-        );
+        bytes4[] memory engineSignaturesSelectors = engineSignatures.selectors();
+        vault.addFunctions(engineSignaturesSelectors, address(engineSignatures), false);
 
         assetManager = new AssetsManager();
         bytes4[] memory assetManagerSelectors = assetManager.selectors();
         vault.addFunctions(assetManagerSelectors, address(assetManager), false);
 
         emergencyAssetsManager = new EmergencyAssetsManager();
-        bytes4[] memory emergencyAssetsManagerSelectors = emergencyAssetsManager
-            .selectors();
-        vault.addFunctions(
-            emergencyAssetsManagerSelectors,
-            address(emergencyAssetsManager),
-            false
-        );
+        bytes4[] memory emergencyAssetsManagerSelectors = emergencyAssetsManager.selectors();
+        vault.addFunctions(emergencyAssetsManagerSelectors, address(emergencyAssetsManager), false);
 
         metaVaultReader = new MetaVaultReader();
         bytes4[] memory metaVaultReaderSelectors = metaVaultReader.selectors();
-        vault.addFunctions(
-            metaVaultReaderSelectors,
-            address(metaVaultReader),
-            false
-        );
+        vault.addFunctions(metaVaultReaderSelectors, address(metaVaultReader), false);
 
         // Grant roles
         vault.grantRoles(managerAddressRole, vault.MANAGER_ROLE());
@@ -123,16 +126,13 @@ contract DeployScript is Script {
         vault.grantRoles(emergencyAdminRole, vault.EMERGENCY_ADMIN_ROLE());
 
         // Set the Dust Threshold
-        vault.setDustThreshold(3000000);
+        vault.setDustThreshold(3_000_000);
 
         console2.log("Vault deployed at: ", address(vault));
         console2.log("Gateway deployed at: ", address(gateway));
         console2.log("Engine deployed at: ", address(engine));
         console2.log("EngineReader deployed at: ", address(engineReader));
-        console2.log(
-            "EngineSignatures deployed at: ",
-            address(engineSignatures)
-        );
+        console2.log("EngineSignatures deployed at: ", address(engineSignatures));
         console2.log("AssetManager deployed at: ", address(assetManager));
         console2.log("MetaVaultReader deployed at: ", address(metaVaultReader));
         console2.log("InvestSuperform deployed at: ", address(invest));
