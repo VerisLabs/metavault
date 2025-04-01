@@ -21,9 +21,14 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     /// @notice Event emitted when a token is approved for spending
     event TokenApproval(address indexed token, address indexed spender, uint256 amount);
 
+    /// @notice Event emitted when a target contract is whitelisted
+    event TargetWhitelisted(address indexed target, bool status);
+
     error GasLimitExceeded();
 
     error NoTokensTransferred();
+    
+    error TargetNotWhitelisted();
 
     error BridgeTransactionFailed();
 
@@ -53,6 +58,10 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     /// @dev Prevents excessive gas consumption in bridge transactions
     uint256 public maxBridgeGasLimit;
 
+    /// @notice Mapping to track whitelisted bridge target addresses
+    /// @dev Only whitelisted targets can be used in bridgeToken function
+    mapping(address => bool) public whitelistedTargets;
+
     /// @notice Initializes the receiver with source chain and contract addresses
     /// @dev Sets up the contract with necessary addresses and grants initial admin roles
     /// @param _sourceChain The chain ID where the original gateway is deployed
@@ -77,6 +86,15 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     /// @param _maxGasLimit New maximum gas limit
     function setMaxBridgeGasLimit(uint256 _maxGasLimit) external onlyRoles(ADMIN_ROLE) {
         maxBridgeGasLimit = _maxGasLimit;
+    }
+
+    /// @notice Adds or removes a target contract from the whitelist
+    /// @dev Only callable by admin
+    /// @param _target The address of the target contract
+    /// @param _status True to whitelist, false to remove from whitelist
+    function setTargetWhitelisted(address _target, bool _status) external onlyRoles(ADMIN_ROLE) {
+        whitelistedTargets[_target] = _status;
+        emit TargetWhitelisted(_target, _status);
     }
 
     /// @notice Recovers stuck tokens from failed cross-chain operations
@@ -107,7 +125,10 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         external
         nonReentrant
         onlyRoles(RECOVERY_ROLE)
-    {
+    {   
+        // Check if the bridge target is whitelisted
+        if (!whitelistedTargets[_bridgeTarget]) revert TargetNotWhitelisted();
+
         if( _gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
         // Pre-transaction balance check
         uint256 initialBalance = ERC20(_token).balanceOf(address(this));

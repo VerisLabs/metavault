@@ -134,6 +134,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
 
     function testBridgeToken_SuccessfulBridge() public {
 
+        vm.startPrank(users.alice);
         MockERC20 mockToken = new MockERC20("Mock Token", "MTKN", 18);
 
         // Deploy mock bridge target
@@ -156,12 +157,15 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         uint256 initialBalance = 1000 ether;
         mockToken.mint(address(superPositionsReceiver), initialBalance);
 
+        vm.expectEmit(true, true, true, true);
+        emit SuperPositionsReceiver.TargetWhitelisted(to, true);
+        superPositionsReceiver.setTargetWhitelisted(to, true);
+
         // Expect bridge initiated event
         vm.expectEmit(true, true, true, true);
-        emit SuperPositionsReceiver.BridgeInitiated(address(mockToken), amount);
+        emit SuperPositionsReceiver.BridgeInitiated(address(mockToken), amount);        
 
-        // Call bridge token
-        vm.prank(users.alice);
+        // Call bridge token        
         superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500000);
 
         // Check that tokens were transferred out of the contract
@@ -176,9 +180,11 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
     }
 
     function testBridgeToken_FailedBridgeTransaction() public {
+        vm.startPrank(users.alice);
         // Deploy mock failure bridge target
         MockFailureBridgeTarget failureBridgeTarget = new MockFailureBridgeTarget();
         address payable to = payable(address(failureBridgeTarget));
+        superPositionsReceiver.setTargetWhitelisted(to, true);
         
         bytes memory txData = abi.encodeWithSignature("mockFailBridgeFunction()");
         uint256 amount = 100 ether;
@@ -187,14 +193,15 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         vm.expectRevert(abi.encodeWithSignature("BridgeTransactionFailed()"));
 
         // Call bridge token
-        vm.prank(users.alice);
         superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 500000);
     }
 
     function testBridgeToken_ExceedingGasLimit() public {
+        vm.startPrank(users.alice);
         // Deploy mock failure bridge target
         MockFailureBridgeTarget failureBridgeTarget = new MockFailureBridgeTarget();
         address payable to = payable(address(failureBridgeTarget));
+        superPositionsReceiver.setTargetWhitelisted(to, true);
         
         bytes memory txData = abi.encodeWithSignature("mockFailBridgeFunction()");
         uint256 amount = 100 ether;
@@ -203,17 +210,17 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         vm.expectRevert(abi.encodeWithSignature("GasLimitExceeded()"));
 
         // Call bridge token
-        vm.prank(users.alice);
         superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 5000000);
     }
 
     function testBridgeToken_NoTokensTransferred() public {
-
+        vm.startPrank(users.alice);
         MockERC20 mockToken = new MockERC20("Mock Token", "MTKN", 18);
 
         // Deploy mock bridge target
         MockBridgeTargetNoTransfer bridgeTarget = new MockBridgeTargetNoTransfer();
         address payable to = payable(address(bridgeTarget));
+        superPositionsReceiver.setTargetWhitelisted(to, true);
 
         uint256 amount = 100 ether;
 
@@ -235,7 +242,6 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         vm.expectRevert(abi.encodeWithSignature("NoTokensTransferred()"));
 
         // Call bridge token
-        vm.prank(users.alice);
         superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500000);
     }
         

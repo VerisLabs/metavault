@@ -16,6 +16,11 @@ interface ISuperPositionsReceiver {
     /// @param amount The approved token amount
     event TokenApproval(address indexed token, address indexed spender, uint256 amount);
 
+    /// @notice Event emitted when a target contract is whitelisted or removed from whitelist
+    /// @param target The address of the target contract whose whitelist status changed
+    /// @param status The new whitelist status (true = whitelisted, false = not whitelisted)
+    event TargetWhitelisted(address indexed target, bool status);
+
     /// @notice Error thrown when no tokens were transferred during a bridge operation
     error NoTokensTransferred();
 
@@ -27,6 +32,9 @@ interface ISuperPositionsReceiver {
 
     /// @notice Error thrown when attempting to recover funds on the source chain
     error SourceChainRecoveryNotAllowed();
+
+    /// @notice Error thrown when attempting to use a non-whitelisted target in bridgeToken
+    error TargetNotWhitelisted();
 
     /// @notice Gets the current source chain ID
     /// @return The chain ID of the source chain where the gateway is deployed
@@ -52,6 +60,11 @@ interface ISuperPositionsReceiver {
     /// @return The role identifier for recovery admin privileges
     function RECOVERY_ROLE() external view returns (uint256);
 
+    /// @notice Checks if a target address is whitelisted
+    /// @param _target The address to check
+    /// @return status True if the address is whitelisted, false otherwise
+    function whitelistedTargets(address _target) external view returns (bool status);
+
     /// @notice Updates the gateway contract address
     /// @dev Only callable by addresses with ADMIN_ROLE
     /// @param _gateway New gateway contract address
@@ -61,6 +74,12 @@ interface ISuperPositionsReceiver {
     /// @dev Only callable by addresses with ADMIN_ROLE
     /// @param _maxGasLimit New maximum gas limit
     function setMaxBridgeGasLimit(uint256 _maxGasLimit) external;
+
+    /// @notice Adds or removes a target contract from the whitelist
+    /// @dev Only callable by admin
+    /// @param _target The address of the target contract
+    /// @param _status True to whitelist, false to remove from whitelist
+    function setTargetWhitelisted(address _target, bool _status) external;
 
     /// @notice Recovers stuck tokens from failed cross-chain operations
     /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
