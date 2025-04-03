@@ -678,10 +678,14 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     function removeVault(uint256 superformId) external onlyRoles(MANAGER_ROLE) {
         if (superformId == 0) revert InvalidSuperformId();
 
-        if (_sharesBalance(vaults[superformId]) > MINIMUM_SHARES_THRESHOLD) revert SharesBalanceNotZero();
+        VaultData memory vault = vaults[superformId];
 
-        uint64 chainId = vaults[superformId].chainId;
-        address vaultAddress = vaults[superformId].vaultAddress;
+        if (vault.convertToAssets(_sharesBalance(vaults[superformId]), asset(), true) > dustThreshold) {
+            revert SharesBalanceNotZero();
+        }
+
+        uint64 chainId = vault.chainId;
+        address vaultAddress = vault.vaultAddress;
         delete vaults[superformId];
         delete _vaultToSuperformId[vaultAddress];
         if (chainId == THIS_CHAIN_ID) {
