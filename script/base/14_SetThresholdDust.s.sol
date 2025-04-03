@@ -17,12 +17,12 @@ contract SetTresholdDust is Script {
 
         vm.startBroadcast(deployerPrivateKey);
         metavault = IMetaVault(metavaultAddress);
-        uint256 dust = metavault.getDustThreshold();
+        uint256 dust = metavault.dustThreshold();
         console.log("Actual treshold is set to: ", dust);
 
         if (dust == 0) {
             metavault.setDustThreshold(3_000_000);
-            dust = metavault.getDustThreshold();
+            dust = metavault.dustThreshold();
         }
 
         console.log("Dust threshold is set to: ", dust);

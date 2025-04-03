@@ -52,9 +52,6 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     /// @notice Number of supported chains
     uint256 public constant N_CHAINS = 7;
 
-    /// @notice Minimum shares threshold
-    uint256 public MINIMUM_SHARES_THRESHOLD = 10;
-
     /// @dev Maximum fee that can be set (100% = 10000 basis points)
     uint16 constant MAX_FEE = 10_000;
 
@@ -112,6 +109,8 @@ contract ModuleBase is OwnableRoles, ERC7540, ReentrancyGuard {
     uint256 public lastFeesCharged;
     /// @notice The ATH share price
     uint256 public sharePriceWaterMark;
+    /// @notice The amount of assets to be considered dust by the protocol
+    uint256 public dustThreshold;
     /// @notice Array of destination chain IDs
     /// @dev Includes Ethereum Mainnet, Polygon, BNB Chain, Optimism, Base, Arbitrum One, and Avalanche
     uint64[N_CHAINS] public DST_CHAINS = [
