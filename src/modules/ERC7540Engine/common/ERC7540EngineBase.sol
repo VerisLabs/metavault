@@ -115,7 +115,7 @@ contract ERC7540EngineBase is ModuleBase {
             }
 
             // If its crosschain and the dust threshold is reached stop
-            if (resetValues && despiseDust && cache.amountToWithdraw < getDustThreshold()) {
+            if (resetValues && despiseDust && cache.amountToWithdraw < dustThreshold) {
                 uint256 amountToWithdraw = cache.amountToWithdraw;
                 cache.amountToWithdraw = 0;
                 cache.assets -= amountToWithdraw;
@@ -197,18 +197,12 @@ contract ERC7540EngineBase is ModuleBase {
         }
     }
 
-    function setDustThreshold(uint256 dustThreshold) external onlyRoles(ADMIN_ROLE) {
-        assembly {
-            // 0x12722c9c27a96bb30316c23f0f0d07cf14e557649edd724d6fa31e7a8fa6ec6c = keccak256("erc7540.dust.threshold")
-            sstore(0x12722c9c27a96bb30316c23f0f0d07cf14e557649edd724d6fa31e7a8fa6ec6c, dustThreshold)
-        }
-    }
-
-    function getDustThreshold() public view returns (uint256) {
-        uint256 dustThreshold;
-        assembly {
-            dustThreshold := sload(0x12722c9c27a96bb30316c23f0f0d07cf14e557649edd724d6fa31e7a8fa6ec6c)
-        }
-        return dustThreshold;
+    /// @notice Sets the minimum amount of assets that can be withdrawn without incurring a penalty.
+    /// @dev This function allows the admin to define a threshold for "dust" withdrawals, which are
+    /// amounts considered too small to be efficiently processed. Setting this threshold helps in
+    /// managing the overall efficiency of asset management.
+    /// @param _dustThreshold The new dust threshold value to be set.
+    function setDustThreshold(uint256 _dustThreshold) external onlyRoles(ADMIN_ROLE) {
+        dustThreshold = _dustThreshold;
     }
 }

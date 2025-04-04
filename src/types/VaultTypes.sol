@@ -12,7 +12,7 @@ import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
 import { ISuperformGateway } from "src/interfaces/ISuperformGateway.sol";
 
 /// @dev The maximum allowable staleness for oracle data before being considered outdated
-uint256 constant ORACLE_STALENESS_TOLERANCE = 8 hours;
+uint256 constant ORACLE_STALENESS_TOLERANCE = 1 days;
 
 /// @notice A struct describing the status of an underlying vault
 /// @dev Contains data about a vault's chain ID, share price, oracle, and more

@@ -158,6 +158,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Thrown when attempting to set a shares lock time higher than the maximum allowed
     error InvalidSharesLockTime();
 
+    /// @notice Thrown when the maximum queue size is exceeded
+    error MaxQueueSizeExceeded();
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -626,7 +629,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         external
         onlyRoles(MANAGER_ROLE)
     {
-        if (superformId == 0) revert();
+        if (superformId == 0) revert InvalidSuperformId();
         // If its already listed revert
         if (isVaultListed(vault)) revert VaultAlreadyListed();
 
@@ -640,12 +643,15 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (lastSharePrice == 0) revert();
         _vaultToSuperformId[vault] = superformId;
 
+        bool found;
+
         if (chainId == THIS_CHAIN_ID) {
             // Push it to the local withdrawal queue
             uint256[WITHDRAWAL_QUEUE_SIZE] memory queue = localWithdrawalQueue;
             for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
                 if (queue[i] == 0) {
                     localWithdrawalQueue[i] = superformId;
+                    found = true;
                     break;
                 }
             }
@@ -657,10 +663,12 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             for (uint256 i = 0; i != WITHDRAWAL_QUEUE_SIZE; i++) {
                 if (queue[i] == 0) {
                     xChainWithdrawalQueue[i] = superformId;
+                    found = true;
                     break;
                 }
             }
         }
+        if (!found) revert MaxQueueSizeExceeded();
 
         emit AddVault(chainId, vault);
     }
@@ -670,10 +678,14 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     function removeVault(uint256 superformId) external onlyRoles(MANAGER_ROLE) {
         if (superformId == 0) revert InvalidSuperformId();
 
-        if (_sharesBalance(vaults[superformId]) > MINIMUM_SHARES_THRESHOLD) revert SharesBalanceNotZero();
+        VaultData memory vault = vaults[superformId];
 
-        uint64 chainId = vaults[superformId].chainId;
-        address vaultAddress = vaults[superformId].vaultAddress;
+        if (vault.convertToAssets(_sharesBalance(vaults[superformId]), asset(), true) > dustThreshold) {
+            revert SharesBalanceNotZero();
+        }
+
+        uint64 chainId = vault.chainId;
+        address vaultAddress = vault.vaultAddress;
         delete vaults[superformId];
         delete _vaultToSuperformId[vaultAddress];
         if (chainId == THIS_CHAIN_ID) {
@@ -761,18 +773,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
                 }
             }
             if (!found) revert MissingVaultFromCurrentQueue();
-        }
-
-        // Verify all new vaults were in current queue
-        for (uint256 i = 0; i < newCount; i++) {
-            bool found = false;
-            for (uint256 j = 0; j < currentCount; j++) {
-                if (newVaults[i] == currentVaults[j]) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) revert NewVaultNotInCurrentQueue();
         }
 
         // Update queue with new order

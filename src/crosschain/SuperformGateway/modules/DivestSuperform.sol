@@ -365,8 +365,6 @@ contract DivestSuperform is GatewayBase {
     /// @param superformId The ID of the Superform position being refunded
     /// @param value The amount of SuperPositions being refunded
     function notifyRefund(uint256 superformId, uint256 value) external {
-        // Prevent bugs from superform
-        if (value == 0) return;
         bytes32 key = ERC20Receiver(msg.sender).key();
         if (requests[key].receiverAddress != msg.sender) revert();
         RequestData memory req = requests[key];
@@ -383,8 +381,7 @@ contract DivestSuperform is GatewayBase {
 
         _handleRefund(key, superformId, value, vaultRequestedAssets);
 
-        _requestsQueue.remove(key); // We can only remove the request if it's a single vault otherwise we need to
-            // confirm both succeeded
+        _requestsQueue.remove(key); 
         ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
     }
 
