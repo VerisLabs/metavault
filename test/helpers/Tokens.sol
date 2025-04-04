@@ -5,6 +5,7 @@ import { USDCE_BASE, USDCE_POLYGON, USDC_MAINNET, WETH_MAINNET } from "src/helpe
 
 uint256 constant _1_USDC = 1e6;
 uint256 constant _1_USDCE = 1e6;
+address constant DAI_BASE = 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb;
 
 function getTokensList(string memory chain) pure returns (address[] memory) {
     if (keccak256(abi.encodePacked(chain)) == keccak256(abi.encodePacked("MAINNET"))) {
