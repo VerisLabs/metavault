@@ -76,7 +76,7 @@ contract DeployScript is Script {
         console2.log("Setting up vault configuration...");
         config = VaultConfig({
             asset: USDCE_BASE,
-            name: "MaxUSD Vault",
+            name: "maxUSD Vault",
             symbol: "maxUSD",
             managementFee: 100,
             performanceFee: 2000,
@@ -224,6 +224,7 @@ contract DeployScript is Script {
         
         console2.log("2. Granting RELAYER_ROLE to:", relayerRole);
         vault.grantRoles(relayerRole, vault.RELAYER_ROLE());
+        gateway.grantRoles(relayerRole, gateway.RELAYER_ROLE());
         console2.log("   RELAYER_ROLE granted successfully");
         
         console2.log("3. Granting EMERGENCY_ADMIN_ROLE to:", emergencyAdminRole);
