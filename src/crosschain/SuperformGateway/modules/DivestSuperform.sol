@@ -381,7 +381,7 @@ contract DivestSuperform is GatewayBase {
 
         _handleRefund(key, superformId, value, vaultRequestedAssets);
 
-        _requestsQueue.remove(key); 
+        _requestsQueue.remove(key);
         ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
     }
 

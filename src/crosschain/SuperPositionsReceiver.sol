@@ -4,7 +4,6 @@ pragma solidity ^0.8.19;
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
-import { ERC20 } from "solady/tokens/ERC20.sol";
 import { ReentrancyGuard } from "solady/utils/ReentrancyGuard.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
@@ -12,26 +11,28 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 /// @notice A cross-chain recovery contract for failed SuperPosition investments
 /// @dev This contract must be deployed with identical addresses across all chains to handle failed cross-chain
 /// operations.
-///      It serves as a safety mechanism in the Superform protocol to recover stuck assets from failed investments.
 contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     using SafeTransferLib for address;
 
+    /// @notice Emitted when a bridge operation is initiated
     event BridgeInitiated(address indexed token, uint256 amount);
 
-    /// @notice Event emitted when a token is approved for spending
-    event TokenApproval(address indexed token, address indexed spender, uint256 amount);
-
-    /// @notice Event emitted when a target contract is whitelisted
+    /// @notice Emitted when a target contract is whitelisted
     event TargetWhitelisted(address indexed target, bool status);
 
+    /// @notice Error thrown when the gas limit for a bridge transaction is exceeded
     error GasLimitExceeded();
 
+    /// @notice Error thrown when no tokens are transferred in a bridge operation
     error NoTokensTransferred();
-    
+
+    /// @notice Error thrown when a target address is not whitelisted
     error TargetNotWhitelisted();
 
+    /// @notice Error thrown when a bridge transaction fails
     error BridgeTransactionFailed();
 
+    /// @notice Error thrown when recovery from the source chain is not allowed
     error SourceChainRecoveryNotAllowed();
 
     /// @notice Role identifier for admin privileges
@@ -106,12 +107,12 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         token.safeTransfer(to, amount);
     }
 
-    /// @notice Bridges tokens to a specified address by executing a low-level call  
-    /// @dev Ensures token approval before execution and reverts if the transaction fails  
-    /// @param _bridgeTarget The address receiving the bridged tokens  
-    /// @param _callData Encoded transaction data for the bridge operation  
-    /// @param _token The address of the token to bridge  
-    /// @param _allowanceTarget The address to approve the token transfer  
+    /// @notice Bridges tokens to a specified address by executing a low-level call
+    /// @dev Ensures token approval before execution and reverts if the transaction fails
+    /// @param _bridgeTarget The address receiving the bridged tokens
+    /// @param _callData Encoded transaction data for the bridge operation
+    /// @param _token The address of the token to bridge
+    /// @param _allowanceTarget The address to approve the token transfer
     /// @param _amount The amount of tokens to bridge
     /// @param _gasLimit The gas limit for the bridging and swapping
     function bridgeToken(
@@ -125,30 +126,27 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         external
         nonReentrant
         onlyRoles(RECOVERY_ROLE)
-    {   
+    {
         // Check if the bridge target is whitelisted
         if (!whitelistedTargets[_bridgeTarget]) revert TargetNotWhitelisted();
 
-        if( _gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
+        if (_gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
         // Pre-transaction balance check
-        uint256 initialBalance = ERC20(_token).balanceOf(address(this));
+        uint256 initialBalance = _token.balanceOf(address(this));
 
-        ERC20(_token).approve(_allowanceTarget, _amount);
-        emit TokenApproval(_token, _allowanceTarget, _amount);
-        
+        _token.safeApproveWithRetry(_allowanceTarget, _amount);
+
         // Attempt bridge transaction with additional error capturing
-        (bool success, ) = _bridgeTarget.call{ gas: _gasLimit }(_callData);
+        (bool success,) = _bridgeTarget.call{ gas: _gasLimit }(_callData);
 
         if (!success) {
-            // Potentially refund or handle failed transaction
-            ERC20(_token).approve(_allowanceTarget, 0);
             revert BridgeTransactionFailed();
         }
 
         // Verify token movement
-        uint256 finalBalance = ERC20(_token).balanceOf(address(this));
+        uint256 finalBalance = _token.balanceOf(address(this));
         if (finalBalance >= initialBalance) revert NoTokensTransferred();
-
+        _token.safeApproveWithRetry(_allowanceTarget, 0);
         emit BridgeInitiated(_token, _amount);
     }
 
@@ -217,6 +215,4 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         }
         return this.onERC1155BatchReceived.selector;
     }
-
-    
 }
