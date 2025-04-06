@@ -107,14 +107,18 @@ interface ISuperPositionsReceiver {
         uint256 superformId,
         uint256 value,
         bytes memory data
-    ) external returns (bytes4);
+    )
+        external
+        returns (bytes4);
 
     /// @notice Handles the receipt of multiple ERC1155 token types
     /// @dev This function is called at the end of a `safeBatchTransferFrom` after the balances have been updated
     /// @param operator The address which initiated the batch transfer (i.e. msg.sender)
     /// @param from The address which previously owned the tokens
-    /// @param superformIds An array containing ids of each token being transferred (order and length must match values array)
-    /// @param values An array containing amounts of each token being transferred (order and length must match ids array)
+    /// @param superformIds An array containing ids of each token being transferred (order and length must match values
+    /// array)
+    /// @param values An array containing amounts of each token being transferred (order and length must match ids
+    /// array)
     /// @param data Additional data with no specified format
     /// @return bytes4 `bytes4(keccak256("onERC1155BatchReceived(address,address,uint[],uint[],bytes)"))`
     function onERC1155BatchReceived(
@@ -123,7 +127,9 @@ interface ISuperPositionsReceiver {
         uint256[] memory superformIds,
         uint256[] memory values,
         bytes memory data
-    ) external returns (bytes4);
+    )
+        external
+        returns (bytes4);
 
     /// @notice Bridges ERC20 tokens using provided API data
     /// @dev Only callable by addresses with ADMIN_ROLE
@@ -140,7 +146,8 @@ interface ISuperPositionsReceiver {
         address _allowanceTarget,
         uint256 _amount,
         uint256 _gasLimit
-    ) external;
+    )
+        external;
 
     // For OwnableRoles functions we should include them or inherit the interface
     // Assuming we need to interact with role management

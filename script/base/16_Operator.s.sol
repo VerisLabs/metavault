@@ -3,10 +3,12 @@ pragma solidity ^0.8.0;
 
 import { Script, console2 } from "forge-std/Script.sol";
 
-import { IERC20 } from "interfaces/IERC20.sol";
 import { IMetaVault, ISharePriceOracle } from "interfaces/Lib.sol";
+import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 contract OperatorScript is Script {
+    using SafeTransferLib for address;
+
     IMetaVault public metavault;
     uint256 deployerPrivateKey;
     uint256 relayerPrivateKey;
@@ -22,13 +24,13 @@ contract OperatorScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         metavault.setOperator(0x88190A6F759CF1115e0c6BCF4Eea1Fef0994e873, true);
-        IERC20(metavault.asset()).approve(executor, 1_000_000);
-        IERC20(metavault.asset()).transfer(executor, 1_000_000);
+        metavault.asset().safeApproveWithRetry(executor, 1_000_000);
+        metavault.asset().safeTransfer(executor, 1_000_000);
 
         vm.stopBroadcast();
         vm.startBroadcast(relayerPrivateKey);
 
-        IERC20(metavault.asset()).approve(address(metavault), 1_000_000);
+        metavault.asset().safeApproveWithRetry(address(metavault), 1_000_000);
         metavault.requestDeposit(1_000_000, owner, executor);
         metavault.deposit(1_000_000, owner, owner);
         vm.stopBroadcast();
