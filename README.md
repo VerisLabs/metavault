@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](https://spdx.org/licenses/BUSL-1.1.html)
 [![Solidity](https://img.shields.io/badge/solidity-%5E0.8.26-lightgrey)](https://soliditylang.org/)
+[![Package Manager: Soldeer](https://img.shields.io/badge/Package%20Manager-Soldeer-orange)](https://github.com/Zoltu/soldeer)
 
 ## Overview
 
