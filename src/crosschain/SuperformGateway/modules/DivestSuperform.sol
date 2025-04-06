@@ -381,7 +381,12 @@ contract DivestSuperform is GatewayBase {
 
         _handleRefund(key, superformId, value, vaultRequestedAssets);
 
-        _requestsQueue.remove(key); 
+        // Only remove from queue if ALL superformIds have been refunded
+        // We can check this by seeing if remaining requestedAssets is zero
+        if (requests[key].requestedAssets == 0) {
+            _requestsQueue.remove(key);
+        }
+
         ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, vaultRequestedAssets));
     }
 
@@ -414,7 +419,10 @@ contract DivestSuperform is GatewayBase {
             _handleRefund(key, superformIds[j], values[j], vaultRequestedAssets);
         }
 
-        _requestsQueue.remove(key);
+        // Only remove from queue if ALL superformIds have been refunded
+        if (requests[key].requestedAssets == 0) {
+            _requestsQueue.remove(key);
+        }
         ERC20Receiver(msg.sender).setMinExpectedBalance(_sub0(currentExpectedBalance, totalVaultRequestedAssets));
     }
 

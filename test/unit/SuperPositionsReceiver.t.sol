@@ -16,7 +16,9 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { MockBridgeTargetNoTransfer, MockBridgeTarget, MockFailureBridgeTarget } from "../helpers/mock/MockBridgeTarget.sol";
+import {
+    MockBridgeTarget, MockBridgeTargetNoTransfer, MockFailureBridgeTarget
+} from "../helpers/mock/MockBridgeTarget.sol";
 import { MockERC20 } from "../helpers/mock/MockERC20.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
@@ -133,7 +135,6 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
     }
 
     function testBridgeToken_SuccessfulBridge() public {
-
         vm.startPrank(users.alice);
         MockERC20 mockToken = new MockERC20("Mock Token", "MTKN", 18);
 
@@ -144,13 +145,10 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         uint256 amount = 100 ether;
 
         address externalReceiver = makeAddr("externalReceiver");
-        
+
         // Prepare bridge parameters
         bytes memory txData = abi.encodeWithSignature(
-            "mockBridgeFunction(address,address,uint256)", 
-            address(mockToken), 
-            externalReceiver,
-            amount
+            "mockBridgeFunction(address,address,uint256)", address(mockToken), externalReceiver, amount
         );
 
         // Mint tokens to the SuperPositionsReceiver
@@ -163,15 +161,15 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
 
         // Expect bridge initiated event
         vm.expectEmit(true, true, true, true);
-        emit SuperPositionsReceiver.BridgeInitiated(address(mockToken), amount);        
+        emit SuperPositionsReceiver.BridgeInitiated(address(mockToken), amount);
 
-        // Call bridge token        
-        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500000);
+        // Call bridge token
+        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500_000);
 
         // Check that tokens were transferred out of the contract
         assertEq(
-            mockToken.balanceOf(address(superPositionsReceiver)), 
-            initialBalance - amount, 
+            mockToken.balanceOf(address(superPositionsReceiver)),
+            initialBalance - amount,
             "Incorrect token balance after bridge"
         );
 
@@ -185,7 +183,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         MockFailureBridgeTarget failureBridgeTarget = new MockFailureBridgeTarget();
         address payable to = payable(address(failureBridgeTarget));
         superPositionsReceiver.setTargetWhitelisted(to, true);
-        
+
         bytes memory txData = abi.encodeWithSignature("mockFailBridgeFunction()");
         uint256 amount = 100 ether;
 
@@ -193,7 +191,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         vm.expectRevert(abi.encodeWithSignature("BridgeTransactionFailed()"));
 
         // Call bridge token
-        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 500000);
+        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 500_000);
     }
 
     function testBridgeToken_ExceedingGasLimit() public {
@@ -202,7 +200,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         MockFailureBridgeTarget failureBridgeTarget = new MockFailureBridgeTarget();
         address payable to = payable(address(failureBridgeTarget));
         superPositionsReceiver.setTargetWhitelisted(to, true);
-        
+
         bytes memory txData = abi.encodeWithSignature("mockFailBridgeFunction()");
         uint256 amount = 100 ether;
 
@@ -210,7 +208,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         vm.expectRevert(abi.encodeWithSignature("GasLimitExceeded()"));
 
         // Call bridge token
-        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 5000000);
+        superPositionsReceiver.bridgeToken(to, txData, DAI_BASE, to, amount, 5_000_000);
     }
 
     function testBridgeToken_NoTokensTransferred() public {
@@ -225,13 +223,10 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         uint256 amount = 100 ether;
 
         address externalReceiver = makeAddr("externalReceiver");
-        
+
         // Prepare bridge parameters
         bytes memory txData = abi.encodeWithSignature(
-            "mockBridgeFunction(address,address,uint256)", 
-            address(mockToken), 
-            externalReceiver,
-            amount
+            "mockBridgeFunction(address,address,uint256)", address(mockToken), externalReceiver, amount
         );
 
         // Mint tokens to the SuperPositionsReceiver
@@ -242,40 +237,38 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         vm.expectRevert(abi.encodeWithSignature("NoTokensTransferred()"));
 
         // Call bridge token
-        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500000);
+        superPositionsReceiver.bridgeToken(to, txData, address(mockToken), to, amount, 500_000);
     }
-        
+
     // Test for single ERC1155 token received on the source chain
     function test_onERC1155Received_SourceChain() public {
         uint256 superformId = 123; // Example SuperPosition ID
-        uint256 amount = 1000 * 10**6; // 1000 USDC 
+        uint256 amount = 1000 * 10 ** 6; // 1000 USDC
 
         // Prepare mock SuperPositions contract
         vm.mockCall(
-            SUPERFORM_SUPERPOSITIONS_BASE, 
-            abi.encodeWithSelector(IERC1155A.safeTransferFrom.selector), 
-            abi.encode(true)
+            SUPERFORM_SUPERPOSITIONS_BASE, abi.encodeWithSelector(IERC1155A.safeTransferFrom.selector), abi.encode(true)
         );
 
         // Prepare test scenario on source chain
         vm.chainId(baseChainId);
-        
+
         // Give SuperPositions contract permission to send tokens
         vm.prank(address(SUPERFORM_SUPERPOSITIONS_BASE));
-        
-        // Call onERC1155Received 
+
+        // Call onERC1155Received
         bytes4 response = SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155Received(
-            address(this),  // operator
-            address(0),     // from (must be address(0) on source chain)
-            superformId,    // superformId
-            amount,         // value
-            ""              // data
+            address(this), // operator
+            address(0), // from (must be address(0) on source chain)
+            superformId, // superformId
+            amount, // value
+            "" // data
         );
 
         // Assert the response matches the expected selector
         assertEq(
-            response, 
-            SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155Received.selector, 
+            response,
+            SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155Received.selector,
             "Incorrect response selector"
         );
     }
@@ -283,21 +276,21 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
     // Test for single ERC1155 token received on a destination chain
     function test_onERC1155Received_DestinationChain() public {
         uint256 superformId = 123; // Example SuperPosition ID
-        uint256 amount = 1000 * 10**6; // 1000 USDC 
+        uint256 amount = 1000 * 10 ** 6; // 1000 USDC
 
         // Switch to destination chain
         vm.chainId(destiChainId);
-        
-        // Call onERC1155Received 
+
+        // Call onERC1155Received
         SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155Received(
-            address(this),  // operator
-            address(1),     // from (non-zero address)
-            superformId,    // superformId
-            amount,         // value
-            ""              // data
+            address(this), // operator
+            address(1), // from (non-zero address)
+            superformId, // superformId
+            amount, // value
+            "" // data
         );
 
-        // Since the function returns nothing when not on source chain, 
+        // Since the function returns nothing when not on source chain,
         // we can't assert much beyond ensuring no revert occurs
         assertTrue(true, "Function should not revert on destination chain");
     }
@@ -310,35 +303,33 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         superformIds[1] = 456;
 
         uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1000 * 10**6; // 1000 USDC
-        amounts[1] = 500 * 10**6;  // 500 USDC
+        amounts[0] = 1000 * 10 ** 6; // 1000 USDC
+        amounts[1] = 500 * 10 ** 6; // 500 USDC
 
         // Prepare mock SuperPositions contract
         vm.mockCall(
-            SUPERFORM_SUPERPOSITIONS_BASE, 
-            abi.encodeWithSelector(IERC1155A.safeTransferFrom.selector), 
-            abi.encode(true)
+            SUPERFORM_SUPERPOSITIONS_BASE, abi.encodeWithSelector(IERC1155A.safeTransferFrom.selector), abi.encode(true)
         );
 
         // Prepare test scenario on source chain
         vm.chainId(baseChainId);
-        
+
         // Give SuperPositions contract permission to send tokens
         vm.prank(address(SUPERFORM_SUPERPOSITIONS_BASE));
-        
-        // Call onERC1155BatchReceived 
+
+        // Call onERC1155BatchReceived
         bytes4 response = SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155BatchReceived(
-            address(this),  // operator
-            address(0),     // from (must be address(0) on source chain)
-            superformIds,   // superformIds
-            amounts,        // values
-            ""              // data
+            address(this), // operator
+            address(0), // from (must be address(0) on source chain)
+            superformIds, // superformIds
+            amounts, // values
+            "" // data
         );
 
         // Assert the response matches the expected selector
         assertEq(
-            response, 
-            SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155BatchReceived.selector, 
+            response,
+            SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155BatchReceived.selector,
             "Incorrect response selector"
         );
     }
@@ -351,23 +342,22 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         superformIds[1] = 456;
 
         uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1000 * 10**6; // 1000 USDC
-        amounts[1] = 500 * 10**6;  // 500 USDC
+        amounts[0] = 1000 * 10 ** 6; // 1000 USDC
+        amounts[1] = 500 * 10 ** 6; // 500 USDC
 
         // Switch to destination chain
         vm.chainId(destiChainId);
-        
-        
-        // Call onERC1155BatchReceived 
+
+        // Call onERC1155BatchReceived
         SuperPositionsReceiver(address(superPositionsReceiver)).onERC1155BatchReceived(
-            address(this),  // operator
-            address(1),     // from (non-zero address)
-            superformIds,   // superformIds
-            amounts,        // values
-            ""              // data
+            address(this), // operator
+            address(1), // from (non-zero address)
+            superformIds, // superformIds
+            amounts, // values
+            "" // data
         );
 
-        // Since the function returns nothing when not on source chain, 
+        // Since the function returns nothing when not on source chain,
         // we can't assert much beyond ensuring no revert occurs
         assertTrue(true, "Function should not revert on destination chain");
     }

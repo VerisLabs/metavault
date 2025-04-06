@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
 
-
 contract SuperPositionsReceiverEvents {
     /// @notice Event emitted when tokens are successfully bridged
     /// @param token The address of the token being bridged

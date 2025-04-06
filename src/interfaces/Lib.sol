@@ -10,6 +10,7 @@ import { ISharePriceOracle, VaultReport } from "./ISharePriceOracle.sol";
 import { IHurdleRateOracle } from "./IHurdleRateOracle.sol";
 import { IMetaVault } from "./IMetaVault.sol";
 import { ISuperPositions } from "./ISuperPositions.sol";
+
+import { ISuperPositionsReceiver } from "./ISuperPositionsReceiver.sol";
 import { ISuperformFactory } from "./ISuperformFactory.sol";
 import { ISuperformGateway } from "./ISuperformGateway.sol";
-import { ISuperPositionsReceiver } from "./ISuperPositionsReceiver.sol";

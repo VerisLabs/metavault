@@ -27,7 +27,7 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     error GasLimitExceeded();
 
     error NoTokensTransferred();
-    
+
     error TargetNotWhitelisted();
 
     error BridgeTransactionFailed();
@@ -106,12 +106,12 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         token.safeTransfer(to, amount);
     }
 
-    /// @notice Bridges tokens to a specified address by executing a low-level call  
-    /// @dev Ensures token approval before execution and reverts if the transaction fails  
-    /// @param _bridgeTarget The address receiving the bridged tokens  
-    /// @param _callData Encoded transaction data for the bridge operation  
-    /// @param _token The address of the token to bridge  
-    /// @param _allowanceTarget The address to approve the token transfer  
+    /// @notice Bridges tokens to a specified address by executing a low-level call
+    /// @dev Ensures token approval before execution and reverts if the transaction fails
+    /// @param _bridgeTarget The address receiving the bridged tokens
+    /// @param _callData Encoded transaction data for the bridge operation
+    /// @param _token The address of the token to bridge
+    /// @param _allowanceTarget The address to approve the token transfer
     /// @param _amount The amount of tokens to bridge
     /// @param _gasLimit The gas limit for the bridging and swapping
     function bridgeToken(
@@ -125,19 +125,19 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         external
         nonReentrant
         onlyRoles(RECOVERY_ROLE)
-    {   
+    {
         // Check if the bridge target is whitelisted
         if (!whitelistedTargets[_bridgeTarget]) revert TargetNotWhitelisted();
 
-        if( _gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
+        if (_gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
         // Pre-transaction balance check
         uint256 initialBalance = ERC20(_token).balanceOf(address(this));
 
         ERC20(_token).approve(_allowanceTarget, _amount);
         emit TokenApproval(_token, _allowanceTarget, _amount);
-        
+
         // Attempt bridge transaction with additional error capturing
-        (bool success, ) = _bridgeTarget.call{ gas: _gasLimit }(_callData);
+        (bool success,) = _bridgeTarget.call{ gas: _gasLimit }(_callData);
 
         if (!success) {
             // Potentially refund or handle failed transaction
@@ -217,6 +217,4 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
         }
         return this.onERC1155BatchReceived.selector;
     }
-
-    
 }
