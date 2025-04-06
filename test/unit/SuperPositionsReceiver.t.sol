@@ -2,7 +2,6 @@
 pragma solidity ^0.8.19;
 
 import { SuperPositionsReceiverWrapper } from "../helpers/mock/SuperPositionsReceiverWrapper.sol";
-import { IERC20 } from "../interfaces/IERC20.sol";
 import { IERC1155A } from "src/interfaces/IERC1155A.sol";
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
