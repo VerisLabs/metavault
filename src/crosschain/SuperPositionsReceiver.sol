@@ -1,12 +1,10 @@
 /// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
-
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
-import { ERC20 } from "solady/tokens/ERC20.sol";
 import { ReentrancyGuard } from "solady/utils/ReentrancyGuard.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
+import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 
 /// @title SuperPositionsReceiver
 /// @notice A cross-chain recovery contract for failed SuperPosition investments
@@ -131,9 +129,9 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
 
         if( _gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
         // Pre-transaction balance check
-        uint256 initialBalance = ERC20(_token).balanceOf(address(this));
+        uint256 initialBalance = SafeTransferLib.balanceOf(_token, address(this));
 
-        ERC20(_token).approve(_allowanceTarget, _amount);
+        _token.safeApprove(_allowanceTarget, _amount);
         emit TokenApproval(_token, _allowanceTarget, _amount);
         
         // Attempt bridge transaction with additional error capturing
@@ -141,12 +139,12 @@ contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
 
         if (!success) {
             // Potentially refund or handle failed transaction
-            ERC20(_token).approve(_allowanceTarget, 0);
+            _token.safeApprove(_allowanceTarget, 0);
             revert BridgeTransactionFailed();
         }
 
         // Verify token movement
-        uint256 finalBalance = ERC20(_token).balanceOf(address(this));
+        uint256 finalBalance = SafeTransferLib.balanceOf(_token, address(this));
         if (finalBalance >= initialBalance) revert NoTokensTransferred();
 
         emit BridgeInitiated(_token, _amount);
