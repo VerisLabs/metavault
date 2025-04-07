@@ -3,164 +3,161 @@
 > Professional cross-chain yield aggregation protocol built on ERC7540
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Solidity](https://img.shields.io/badge/solidity-%5E0.8.19-lightgrey)]()
-
-MetaVault is a next-generation yield aggregation protocol that enables efficient cross-chain capital allocation through asynchronous deposits and withdrawals. Built on the ERC7540 standard, it provides a secure and modular architecture for managing assets across multiple blockchain networks.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Core Features](#core-features)
-- [Technical Details](#technical-details)
-- [Protocol Flow](#protocol-flow)
-- [Getting Started](#getting-started)
-- [Testing](#testing)
-- [License](#license)
+[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](https://spdx.org/licenses/BUSL-1.1.html)
+[![Solidity](https://img.shields.io/badge/solidity-%5E0.8.26-lightgrey)](https://soliditylang.org/)
+[![Package Manager: Soldeer](https://img.shields.io/badge/Package%20Manager-Soldeer-orange)](https://github.com/Zoltu/soldeer)
 
 ## Overview
 
-MetaVault reimagines cross-chain yield aggregation by implementing:
+MetaVault is a next-generation yield aggregation protocol that enables efficient cross-chain capital allocation through asynchronous deposits and withdrawals. Built on the ERC7540 standard, it provides a secure and modular architecture for managing assets across multiple blockchain networks.
 
-- ERC7540-compliant asynchronous operations
-- Modular proxy architecture for upgradeable components
-- Sophisticated withdrawal queue management
-- Cross-chain bridging and recovery mechanisms
-- Multi-layered fee structure with high watermark
+The protocol leverages Superform infrastructure to deposit and withdraw from vaults on other chains, allowing users to access yield opportunities across the DeFi ecosystem from a single interface without having to manage multiple wallets or bridge assets manually.
 
-### Protocol Architecture
+## Key Features
+
+### Cross-Chain Interoperability
+- **Seamless Multi-Chain Operations**: Invest and divest across Ethereum, Polygon, Optimism, Base, Arbitrum, and more from a single interface
+- **Asynchronous Processing**: Built on ERC7540 for non-blocking deposit and withdrawal operations
+- **Bridging Agnostic**: Leverages Superform protocol for reliable cross-chain messaging and asset transfers
+
+### Advanced Portfolio Management
+- **Sophisticated Withdrawal Strategy**: Three-tier liquidation system that optimizes gas and minimizes slippage
+- **Prioritized Liquidation Queue**: Configurable withdrawal queues for both local and cross-chain vaults
+- **Risk Management**: Circuit breakers and emergency recovery mechanisms to protect user funds
+
+### Professional Fee Structure
+- **Performance Fee with High Watermark**: Only charge performance fees on new profits
+- **Hurdle Rate Implementation**: Performance fees only apply above minimum return thresholds
+- **Time-Weighted Management Fees**: Fairly calculated based on duration of asset custody
+- **Customizable Fee Exemptions**: Special rates for strategic partners or institutional clients
+
+### Security & Resilience
+- **Modular Proxy Architecture**: Upgradeable components for continuous improvement
+- **Cross-Chain Recovery System**: Dedicated recovery contracts for handling failed bridge transactions
+- **Emergency Shutdown**: Circuit breakers to pause operations during extreme market conditions
+
+## Architecture
+
+MetaVault employs a modular architecture with specialized components. Both the MetaVault and SuperformGateway contracts use a simplified version of the diamond proxy pattern called MultiFacet proxy, which allows for modular functionality and upgradeability.
 
 ```mermaid
 graph TD
-    subgraph User Operations
-        User[Users] --> |Deposit/Redeem|MetaVault
-    end
+    Users[Users] -->|Deposit/Redeem| MetaVault[MetaVault]
     
     subgraph Core Protocol
-        MetaVault[MetaVault] --> |Modular Logic|Engine[ERC7540Engine]
-        MetaVault --> |Cross-chain Ops|Gateway[SuperformGateway]
-        MetaVault --> |Share Price|Oracles[Price Oracles]
+        MetaVault -->|Redemption Processing| Engine[ERC7540Engine]
+        MetaVault -->|Asset Management| AssetsManager[AssetsManager]
+        MetaVault -->|Cross-chain Operations| Gateway[SuperformGateway]
+        MetaVault -->|Emergency Recovery| Emergency[EmergencyAssetsManager]
+        MetaVault -->|Analytics| Reader[MetaVaultReader]
     end
     
     subgraph Cross-Chain Infrastructure
-        Gateway --> |Recovery|SPR[SuperPositionsReceiver]
-        Gateway --> |Request Handling|ERC20R[ERC20Receiver Factory]
-        Gateway --> |Bridging|Bridges[Superform]
+        Gateway -->|Asset Bridging| Superform[Superform Router]
+        Gateway -->|Position Tracking| Superpositions[SuperPositions ERC1155]
+        Gateway -->|Failed Transaction Recovery| Receivers[ERC20Receivers]
+        Gateway -->|Cross-Chain Recovery| SPR[SuperPositionsReceiver]
     end
     
     subgraph Yield Sources
-        MetaVault --> |Local|LocalVaults[Same-Chain Vaults]
-        MetaVault --> |Remote|RemoteVaults[Cross-Chain Vaults]
+        MetaVault --> LocalVaults[Same-Chain Vaults]
+        MetaVault --> RemoteVaults[Cross-Chain Vaults]
+    end
+    
+    subgraph Oracle System
+        MetaVault -->|Share Price Verification| PriceOracles[Share Price Oracles]
+        MetaVault -->|Performance Benchmarks| HurdleOracle[Hurdle Rate Oracle]
     end
 ```
-
-## Core Features
-
-### Investment Management
-
-#### Vault Operations
-- **Investment**: Managers can allocate capital across chains
-- **Divestment**: Strategic withdrawal of positions
-- **Asset Tracking**: Comprehensive position monitoring
-
-#### Withdrawal Queue System
-- Separate queues for local and cross-chain operations
-- Priority-based liquidation strategy
-- Optimized gas consumption
-
-### User Operations
-
-#### Deposits
-- Atomic deposit processing
-- Immediate share minting
-- Configurable lock-up periods
-
-#### Withdrawals
-- Asynchronous redemption mechanism
-- Three-tier liquidation strategy:
-  1. Idle funds utilization
-  2. Local vault liquidation
-  3. Cross-chain position unwinding
-- Request-specific accounting
-
-## Technical Details
-
-### Smart Contracts
-
-#### MetaVault.sol
-```solidity
-contract MetaVault is MultiFacetProxy, Multicallable {
-    // Core vault functionality
-    // Asset management
-    // Fee calculations
-}
-```
-
-#### SuperformGateway.sol
-```solidity
-contract SuperformGateway {
-    // Cross-chain operations
-    // Bridge integration
-    // Recovery mechanisms
-}
-```
-
-#### Key Components
-- **ERC7540Engine**: Redemption processing logic
-- **ERC20Receiver**: Request-specific balance tracking
-- **SuperPositionsReceiver**: Cross-chain recovery
-- **Price Oracles**: Share price verification
-
-### Fee Structure
-
-#### Performance Fees
-- Applied above high watermark
-- Configurable rates
-- Custom exemptions available
-
-#### Management Fees
-- Time-based calculation
-- Asset-based pricing
-- Flexible fee schedules
-
-#### Oracle Fees
-- Cross-chain price updates
-- Network-specific rates
-- Cost distribution model
 
 ## Protocol Flow
 
 ### Deposit Flow
-1. User deposits assets
-2. Shares minted and locked
-3. Assets added to idle pool
-4. Manager allocates capital
+
+1. User deposits assets into MetaVault
+2. User receives vault shares that represent their proportional ownership
+3. Protocol manager allocates capital to various yield sources
+4. Capital can be deployed across same-chain or cross-chain vaults based on yield opportunities
 
 ### Withdrawal Flow
+
 ```mermaid
 sequenceDiagram
     participant User
     participant MetaVault
-    participant Gateway
-    participant Receivers
-
+    participant Engine as ERC7540Engine
+    participant Gateway as SuperformGateway
+    
     User->>MetaVault: Request Withdrawal
-    MetaVault->>MetaVault: Check Idle Funds
+    MetaVault->>User: Acknowledge Request
+    
+    Note over MetaVault,Engine: Redemption Execution
+    User->>Engine: Process Redemption (or Relayer)
+    
+    Engine->>Engine: Check Idle Liquidity
+    
     alt Sufficient Idle Funds
-        MetaVault->>User: Immediate Transfer
+        Engine->>MetaVault: Fulfill From Idle
+        MetaVault->>User: Transfer Assets
     else Insufficient Idle Funds
-        MetaVault->>MetaVault: Check Local Queue
-        alt Local Funds Available
-            MetaVault->>User: Local Transfer
-        else Need Cross-chain
-            MetaVault->>Gateway: Initiate Cross-chain
-            Gateway->>Receivers: Deploy Receiver
-            Receivers->>Gateway: Process Request
-            Gateway->>MetaVault: Complete Transfer
-            MetaVault->>User: Final Settlement
+        Engine->>Engine: Liquidate Local Vaults
+        alt Local Vaults Sufficient
+            Engine->>MetaVault: Fulfill From Local Vaults
+            MetaVault->>User: Transfer Assets
+        else Need Cross-chain Liquidation
+            Engine->>Gateway: Initiate Cross-chain Withdrawal
+            Gateway->>Superform: Bridge Request
+            Gateway->>Engine: Notify When Complete
+            Engine->>MetaVault: Fulfill Request
+            MetaVault->>User: Transfer Assets
         end
     end
 ```
+
+## Technical Implementation
+
+### Core Smart Contracts
+
+The protocol is built around four main contract systems:
+
+1. **MetaVault and its modules**
+   - `MetaVault.sol`: Main vault contract implementing ERC7540 for asynchronous operations
+   - `ERC7540Engine.sol`: Processes redemption requests and manages withdrawal strategies
+   - `AssetsManager.sol`: Manages asset allocation and interaction with underlying vaults
+   - `EmergencyAssetsManager.sol`: Provides emergency recovery functions
+   - `MetaVaultReader.sol`: Offers analytics and reporting functions
+
+2. **SuperformGateway and its modules**
+   - `SuperformGateway.sol`: Handles cross-chain communication and asset transfers
+   - `InvestSuperform.sol`: Manages cross-chain deposit operations
+   - `DivestSuperform.sol`: Manages cross-chain withdrawal operations
+   - `LiquidateSuperform.sol`: Manages cross-chain redemption operations
+
+3. **Recovery Contracts**
+   - `ERC20Receiver.sol`: Receives and manages assets during cross-chain operations
+   - `SuperPositionsReceiver.sol`: Recovers stuck assets from failed cross-chain operations
+
+4. **External Protocol Integration**
+   - Uses Superform Router for cross-chain message passing
+   - Uses SuperPositions (ERC1155) for tracking cross-chain positions
+   - Custom Share Price Oracle system to track and verify the price of shares (SuperPositions) owned by MetaVault across different chains
+
+### Fee Structure
+
+#### Management Fee
+- Annual rate applied to total assets under management
+- Pro-rated based on time assets are held in vault
+- Configurable rate with admin controls
+
+#### Performance Fee
+- Applied only to profits above the high watermark
+- Subject to hurdle rate (minimum performance threshold)
+- Only charged on excess returns above the hurdle rate
+
+#### Oracle Fee
+- Covers cost of cross-chain price oracle operations
+- Network-specific rates to account for varying gas costs
+- Proportional to duration of asset custody
 
 ## Getting Started
 
@@ -168,51 +165,68 @@ sequenceDiagram
 
 To install Foundry:
 
-```sh
+```bash
 curl -L https://foundry.paradigm.xyz | bash
-```
-
-This will download foundryup. To start Foundry, run:
-
-```sh
 foundryup
 ```
 
 To install Soldeer:
 
-```sh
+```bash
 cargo install soldeer
 ```
 
-### Clone the repo
+### Clone and Install
 
-```sh
+```bash
 git clone https://github.com/UnlockdFinance/metavault.git
-```
-
-### Install the dependencies
-
-```sh
+cd metavault
 soldeer install
 ```
 
 ### Compile
 
-```sh
+```bash
 forge build
 ```
 
-## Testing
+### Test
 
-### Run Tests
 ```bash
 # Set test environment
 export FOUNDRY_PROFILE=fork
 
-# Unit tests
-forge t
+# Run all tests
+forge test
+
+# Run specific test file
+forge test --match-path test/MetaVault.t.sol
+
+# Run with gas reporting
+forge test --gas-report
 ```
+
+## Deployment
+
+MetaVault can be deployed to various networks using the deployment scripts in the `script` directory:
+
+```bash
+# Deploy to Base network
+forge script script/base/01_Deploy.s.sol --rpc-url $RPC_BASE --broadcast --verify
+```
+
+Environment variables needed for deployment:
+- `DEPLOYER_PRIVATE_KEY`: Private key of the deployer account
+- `ADMIN_AND_OWNER_ROLE`: Address to receive admin and owner roles
+- `RELAYER_ROLE`: Address to receive relayer role
+- `EMERGENCY_ADMIN_ROLE`: Address to receive emergency admin role
+- `MANAGER_ADDRESS_ROLE`: Address to receive manager role
+- `HURDLE_RATE_ORACLE_ADDRESS`: Address of the hurdle rate oracle
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under dual licenses:
+- Core contracts: BUSL-1.1 (Business Source License) - See [BUSL_LICENSE](licenses/BUSL_LICENSE)
+  - Applies to core protocol functionality
+  - Changes to MIT license after one year from publication
+- Helper libraries and interfaces: MIT License - See [MIT_LICENSE](licenses/MIT_LICENSE)

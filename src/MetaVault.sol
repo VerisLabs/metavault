@@ -103,6 +103,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @dev Emitted when the emergency shutdown state is changed
     event EmergencyShutdown(bool enabled);
 
+    /// @dev Emitted when the treasury address is updated
+    event TreasuryUpdated(address indexed treasury);
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -160,6 +163,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
     /// @notice Thrown when the maximum queue size is exceeded
     error MaxQueueSizeExceeded();
+
+    /// @notice Thrown when an invalid zero address is encountered
+    error InvalidZeroAddress();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -505,6 +511,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             // Emit events
             /// @solidity memory-safe-assembly
             assembly {
+                let mp := mload(0x40) // Grab the free memory pointer.
                 // Emit the {Withdraw} event
                 mstore(0x00, totalAssetsAfterFee)
                 mstore(0x20, shares)
@@ -522,6 +529,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
                 mstore(0x20, performanceFees)
                 mstore(0x40, oracleFees)
                 log2(0x00, 0x60, 0xa443e1db11cb46c65620e8e21d4830a6b9b444fa4c350f0dd0024b8a5a6b6ef5, and(m, controller))
+                mstore(0x40, mp) // Restore the free memory pointer.
+                mstore(0x60, 0) // Restore the zero pointer.
             }
         }
 
@@ -601,7 +610,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (totalFees > 0) {
             _mint(treasury, convertToShares(totalFees));
         }
+        /// @solidity memory-safe-assembly
         assembly {
+            let mp := mload(0x40) // Grab the free memory pointer.
             let m := shr(96, not(0))
 
             // Emit the {AssessFees} event
@@ -609,6 +620,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             mstore(0x20, performanceFees)
             mstore(0x40, oracleFees)
             log2(0x00, 0x60, 0xa443e1db11cb46c65620e8e21d4830a6b9b444fa4c350f0dd0024b8a5a6b6ef5, and(m, address()))
+            mstore(0x40, mp) // Restore the free memory pointer.
+            mstore(0x60, 0) // Restore the zero pointer.
         }
         return totalFees;
     }
@@ -835,10 +848,22 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         oracleFeeExempt[controller] = oracleFeeExcemption;
     }
 
+    /// @notice Sets the lock time for shares in the vault.
+    /// @dev Can only be called by addresses with the ADMIN_ROLE.
+    /// @param _time The lock time to set for shares, must not exceed MAX_TIME.
     function setSharesLockTime(uint24 _time) external onlyRoles(ADMIN_ROLE) {
         if (_time > MAX_TIME) revert InvalidSharesLockTime();
         sharesLockTime = _time;
         emit SetSharesLockTime(_time);
+    }
+
+    /// @notice Sets the treasury address for the vault
+    /// @dev Can only be called by addresses with the ADMIN_ROLE
+    /// @param _treasury The address of the treasury
+    function setTreasury(address _treasury) external onlyRoles(ADMIN_ROLE) {
+        if (_treasury == address(0)) revert InvalidZeroAddress();
+        treasury = _treasury;
+        emit TreasuryUpdated(_treasury);
     }
 
     /// @notice sets the annually management fee

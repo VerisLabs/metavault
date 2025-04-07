@@ -4,16 +4,35 @@ pragma solidity ^0.8.19;
 import { ISuperPositions, ISuperformGateway } from "interfaces/Lib.sol";
 
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
+import { ReentrancyGuard } from "solady/utils/ReentrancyGuard.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 /// @title SuperPositionsReceiver
 /// @notice A cross-chain recovery contract for failed SuperPosition investments
 /// @dev This contract must be deployed with identical addresses across all chains to handle failed cross-chain
 /// operations.
-///      It serves as a safety mechanism in the Superform protocol to recover stuck assets from failed investments.
-contract SuperPositionsReceiver is OwnableRoles {
+contract SuperPositionsReceiver is OwnableRoles, ReentrancyGuard {
     using SafeTransferLib for address;
 
+    /// @notice Emitted when a bridge operation is initiated
+    event BridgeInitiated(address indexed token, uint256 amount);
+
+    /// @notice Emitted when a target contract is whitelisted
+    event TargetWhitelisted(address indexed target, bool status);
+
+    /// @notice Error thrown when the gas limit for a bridge transaction is exceeded
+    error GasLimitExceeded();
+
+    /// @notice Error thrown when no tokens are transferred in a bridge operation
+    error NoTokensTransferred();
+
+    /// @notice Error thrown when a target address is not whitelisted
+    error TargetNotWhitelisted();
+
+    /// @notice Error thrown when a bridge transaction fails
+    error BridgeTransactionFailed();
+
+    /// @notice Error thrown when recovery from the source chain is not allowed
     error SourceChainRecoveryNotAllowed();
 
     /// @notice Role identifier for admin privileges
@@ -36,6 +55,14 @@ contract SuperPositionsReceiver is OwnableRoles {
     /// @dev Contract that manages the SuperPosition tokens
     address public superPositions;
 
+    /// @notice Maximum gas limit for bridge calls
+    /// @dev Prevents excessive gas consumption in bridge transactions
+    uint256 public maxBridgeGasLimit;
+
+    /// @notice Mapping to track whitelisted bridge target addresses
+    /// @dev Only whitelisted targets can be used in bridgeToken function
+    mapping(address => bool) public whitelistedTargets;
+
     /// @notice Initializes the receiver with source chain and contract addresses
     /// @dev Sets up the contract with necessary addresses and grants initial admin roles
     /// @param _sourceChain The chain ID where the original gateway is deployed
@@ -45,6 +72,7 @@ contract SuperPositionsReceiver is OwnableRoles {
         sourceChain = _sourceChain;
         gateway = _gateway;
         superPositions = _superPositions;
+        maxBridgeGasLimit = 2_000_000; // Default gas limit
         // Initialize ownership and grant admin role
         _initializeOwner(_owner);
         _grantRoles(_owner, ADMIN_ROLE);
@@ -54,13 +82,72 @@ contract SuperPositionsReceiver is OwnableRoles {
         gateway = _gateway;
     }
 
+    /// @notice Updates the maximum gas limit for bridge calls
+    /// @dev Only callable by admin
+    /// @param _maxGasLimit New maximum gas limit
+    function setMaxBridgeGasLimit(uint256 _maxGasLimit) external onlyRoles(ADMIN_ROLE) {
+        maxBridgeGasLimit = _maxGasLimit;
+    }
+
+    /// @notice Adds or removes a target contract from the whitelist
+    /// @dev Only callable by admin
+    /// @param _target The address of the target contract
+    /// @param _status True to whitelist, false to remove from whitelist
+    function setTargetWhitelisted(address _target, bool _status) external onlyRoles(ADMIN_ROLE) {
+        whitelistedTargets[_target] = _status;
+        emit TargetWhitelisted(_target, _status);
+    }
+
     /// @notice Recovers stuck tokens from failed cross-chain operations
     /// @dev Can only be called by addresses with RECOVERY_ROLE and only on destination chains
     /// @param token The address of the token to recover
     /// @param amount The amount of tokens to recover
-    function recoverFunds(address token, uint256 amount) external onlyRoles(RECOVERY_ROLE) {
+    function recoverFunds(address token, uint256 amount, address to) external onlyRoles(RECOVERY_ROLE) {
         if (sourceChain == block.chainid) revert SourceChainRecoveryNotAllowed();
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransfer(to, amount);
+    }
+
+    /// @notice Bridges tokens to a specified address by executing a low-level call
+    /// @dev Ensures token approval before execution and reverts if the transaction fails
+    /// @param _bridgeTarget The address receiving the bridged tokens
+    /// @param _callData Encoded transaction data for the bridge operation
+    /// @param _token The address of the token to bridge
+    /// @param _allowanceTarget The address to approve the token transfer
+    /// @param _amount The amount of tokens to bridge
+    /// @param _gasLimit The gas limit for the bridging and swapping
+    function bridgeToken(
+        address payable _bridgeTarget,
+        bytes memory _callData,
+        address _token,
+        address _allowanceTarget,
+        uint256 _amount,
+        uint256 _gasLimit
+    )
+        external
+        nonReentrant
+        onlyRoles(RECOVERY_ROLE)
+    {
+        // Check if the bridge target is whitelisted
+        if (!whitelistedTargets[_bridgeTarget]) revert TargetNotWhitelisted();
+
+        if (_gasLimit > maxBridgeGasLimit) revert GasLimitExceeded();
+        // Pre-transaction balance check
+        uint256 initialBalance = _token.balanceOf(address(this));
+
+        _token.safeApproveWithRetry(_allowanceTarget, _amount);
+
+        // Attempt bridge transaction with additional error capturing
+        (bool success,) = _bridgeTarget.call{ gas: _gasLimit }(_callData);
+
+        if (!success) {
+            revert BridgeTransactionFailed();
+        }
+
+        // Verify token movement
+        uint256 finalBalance = _token.balanceOf(address(this));
+        if (finalBalance >= initialBalance) revert NoTokensTransferred();
+        _token.safeApproveWithRetry(_allowanceTarget, 0);
+        emit BridgeInitiated(_token, _amount);
     }
 
     /// @dev Supports ERC1155 interface detection

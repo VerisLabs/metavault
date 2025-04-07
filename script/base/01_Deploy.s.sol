@@ -46,29 +46,31 @@ contract DeployScript is Script {
     address relayerRole;
     address emergencyAdminRole;
     address managerAddressRole;
+    address treasury;
 
     function run() public {
         console2.log("=======================================================");
         console2.log("            STARTING DEPLOYMENT PROCESS");
         console2.log("=======================================================");
-        
+
         console2.log("Loading environment variables...");
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
-
+        treasury = vm.envAddress("TREASURY_ADDRESS");
         adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
         relayerRole = vm.envAddress("RELAYER_ROLE");
         emergencyAdminRole = vm.envAddress("EMERGENCY_ADMIN_ROLE");
         managerAddressRole = vm.envAddress("MANAGER_ADDRESS_ROLE");
-        
+
         console2.log("Environment variables loaded successfully");
         console2.log("Deployer account:", vm.addr(deployerPrivateKey));
         console2.log("Hurdle Rate Oracle:", hurdleRateOracleAddress);
+        console2.log("Treasury:", treasury);
         console2.log("Admin/Owner Role address:", adminAndOwnerRole);
         console2.log("Relayer Role address:", relayerRole);
         console2.log("Emergency Admin Role address:", emergencyAdminRole);
         console2.log("Manager Role address:", managerAddressRole);
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Starting broadcast from deployer account");
         vm.startBroadcast(deployerPrivateKey);
@@ -84,7 +86,7 @@ contract DeployScript is Script {
             hurdleRateOracle: IHurdleRateOracle(hurdleRateOracleAddress),
             sharesLockTime: 0,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
-            treasury: makeAddr("treasury"),
+            treasury: treasury,
             signerRelayer: relayerRole,
             owner: adminAndOwnerRole
         });
@@ -96,28 +98,28 @@ contract DeployScript is Script {
         console2.log(" - Performance Fee: 2000 (20%)");
         console2.log(" - Oracle Fee: 50 (0.5%)");
         console2.log(" - SuperPositions:", address(SUPERFORM_SUPERPOSITIONS_BASE));
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Deploying MetaVault contract...");
         MetaVault _vault = new MetaVault(config);
         vault = IMetaVault(address(_vault));
         console2.log("MetaVault deployed successfully at:", address(vault));
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Deploying Superform Gateway components...");
-        
+
         console2.log("1. Deploying InvestSuperform...");
         InvestSuperform invest = new InvestSuperform();
         console2.log("   InvestSuperform deployed at:", address(invest));
-        
+
         console2.log("2. Deploying DivestSuperform...");
         DivestSuperform divest = new DivestSuperform();
         console2.log("   DivestSuperform deployed at:", address(divest));
-        
+
         console2.log("3. Deploying LiquidateSuperform...");
         LiquidateSuperform liquidate = new LiquidateSuperform();
         console2.log("   LiquidateSuperform deployed at:", address(liquidate));
-        
+
         console2.log("4. Deploying SuperformGateway...");
         SuperformGateway _gateway = new SuperformGateway(
             IMetaVault(vault),
@@ -128,10 +130,10 @@ contract DeployScript is Script {
         gateway = ISuperformGateway(address(_gateway));
         console2.log("   SuperformGateway deployed at:", address(gateway));
         console2.log("   Using Router:", SUPERFORM_ROUTER_BASE);
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Adding function selectors to SuperformGateway...");
-        
+
         console2.log("1. Adding InvestSuperform functions...");
         bytes4[] memory investSelectors = invest.selectors();
         console2.log("   Number of selectors:", investSelectors.length);
@@ -140,7 +142,7 @@ contract DeployScript is Script {
         }
         _gateway.addFunctions(investSelectors, address(invest), false);
         console2.log("   InvestSuperform functions added successfully");
-        
+
         console2.log("2. Adding DivestSuperform functions...");
         bytes4[] memory divestSelectors = divest.selectors();
         console2.log("   Number of selectors:", divestSelectors.length);
@@ -149,7 +151,7 @@ contract DeployScript is Script {
         }
         _gateway.addFunctions(divestSelectors, address(divest), false);
         console2.log("   DivestSuperform functions added successfully");
-        
+
         console2.log("3. Adding LiquidateSuperform functions...");
         bytes4[] memory liquidateSelectors = liquidate.selectors();
         console2.log("   Number of selectors:", liquidateSelectors.length);
@@ -158,15 +160,15 @@ contract DeployScript is Script {
         }
         _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
         console2.log("   LiquidateSuperform functions added successfully");
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Setting gateway in MetaVault...");
         vault.setGateway(address(gateway));
         console2.log("Gateway set successfully in MetaVault");
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Deploying and adding vault modules...");
-        
+
         console2.log("1. Deploying ERC7540Engine...");
         engine = new ERC7540Engine();
         bytes4[] memory engineSelectors = engine.selectors();
@@ -214,26 +216,26 @@ contract DeployScript is Script {
         console2.log("   Number of selectors:", metaVaultReaderSelectors.length);
         vault.addFunctions(metaVaultReaderSelectors, address(metaVaultReader), false);
         console2.log("   MetaVaultReader functions added to vault");
-        
+
         console2.log("-------------------------------------------------------");
         console2.log("Setting up roles...");
-        
+
         console2.log("1. Granting MANAGER_ROLE to:", managerAddressRole);
         vault.grantRoles(managerAddressRole, vault.MANAGER_ROLE());
         console2.log("   MANAGER_ROLE granted successfully");
-        
+
         console2.log("2. Granting RELAYER_ROLE to:", relayerRole);
         vault.grantRoles(relayerRole, vault.RELAYER_ROLE());
         gateway.grantRoles(relayerRole, gateway.RELAYER_ROLE());
         console2.log("   RELAYER_ROLE granted successfully");
-        
+
         console2.log("3. Granting EMERGENCY_ADMIN_ROLE to:", emergencyAdminRole);
         vault.grantRoles(emergencyAdminRole, vault.EMERGENCY_ADMIN_ROLE());
         console2.log("   EMERGENCY_ADMIN_ROLE granted successfully");
 
         console2.log("-------------------------------------------------------");
         console2.log("Setting vault parameters...");
-        
+
         console2.log("Setting Dust Threshold to 3,000,000 (3 USDC)");
         vault.setDustThreshold(3_000_000);
         console2.log("Dust Threshold set successfully");

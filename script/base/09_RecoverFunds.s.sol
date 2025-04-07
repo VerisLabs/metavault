@@ -21,7 +21,7 @@ contract RecoverFundsScript is Script {
         address usdce = 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174;
         uint256 balance = usdce.balanceOf(address(receiver));
 
-        receiver.recoverFunds(usdce, balance);
+        receiver.recoverFunds(usdce, balance, address(this));
 
         vm.stopBroadcast();
     }
