@@ -212,7 +212,12 @@ MetaVault can be deployed to various networks using the deployment scripts in th
 
 ```bash
 # Deploy to Base network
-forge script script/base/01_Deploy.s.sol --rpc-url $RPC_BASE --broadcast --verify
+forge script script/base/01_Deploy.s.sol:DeployScript \
+  --sig "run(address)" <<token_address>> \
+  --rpc-url $RPC_URL \
+  --etherscan-api-key $ETHERSCAN_API_KEY\
+  --broadcast \
+  --verify
 ```
 
 Environment variables needed for deployment:

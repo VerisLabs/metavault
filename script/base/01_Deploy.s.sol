@@ -6,7 +6,7 @@ import {
 } from "crosschain/SuperformGateway/Lib.sol";
 import { Script, console2 } from "forge-std/Script.sol";
 
-import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, WETH_BASE } from "helpers/AddressBook.sol";
+import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE } from "helpers/AddressBook.sol";
 import {
     IBaseRouter,
     IHurdleRateOracle,
@@ -49,6 +49,16 @@ contract DeployScript is Script {
     address treasury;
 
     function run() public {
+        // Default run function for backward compatibility - get token from env var
+        address tokenAddress = vm.envAddress("TOKEN_ADDRESS");
+        _deployWithToken(tokenAddress);
+    }
+
+    function runWithParams(address tokenAddress) public {
+        _deployWithToken(tokenAddress);
+    }
+
+    function _deployWithToken(address tokenAddress) internal {
         console2.log("=======================================================");
         console2.log("            STARTING DEPLOYMENT PROCESS");
         console2.log("=======================================================");
@@ -70,16 +80,20 @@ contract DeployScript is Script {
         console2.log("Relayer Role address:", relayerRole);
         console2.log("Emergency Admin Role address:", emergencyAdminRole);
         console2.log("Manager Role address:", managerAddressRole);
+        console2.log("Token address:", tokenAddress);
 
         console2.log("-------------------------------------------------------");
         console2.log("Starting broadcast from deployer account");
         vm.startBroadcast(deployerPrivateKey);
 
+        // Generate vault name and symbol based on token address
+        (string memory vaultName, string memory vaultSymbol) = _generateVaultNameAndSymbol(tokenAddress);
+
         console2.log("Setting up vault configuration...");
         config = VaultConfig({
-            asset: USDCE_BASE,
-            name: "maxUSD Vault",
-            symbol: "maxUSD",
+            asset: tokenAddress,
+            name: vaultName,
+            symbol: vaultSymbol,
             managementFee: 100,
             performanceFee: 2000,
             oracleFee: 50,
@@ -91,9 +105,9 @@ contract DeployScript is Script {
             owner: adminAndOwnerRole
         });
         console2.log("Vault configuration set with:");
-        console2.log(" - Asset:", USDCE_BASE);
-        console2.log(" - Name: MaxUSD Vault");
-        console2.log(" - Symbol: maxUSD");
+        console2.log(" - Asset:", tokenAddress);
+        console2.log(" - Name:", vaultName);
+        console2.log(" - Symbol:", vaultSymbol);
         console2.log(" - Management Fee: 100 (1%)");
         console2.log(" - Performance Fee: 2000 (20%)");
         console2.log(" - Oracle Fee: 50 (0.5%)");
@@ -236,8 +250,10 @@ contract DeployScript is Script {
         console2.log("-------------------------------------------------------");
         console2.log("Setting vault parameters...");
 
-        console2.log("Setting Dust Threshold to 3,000,000 (3 USDC)");
-        vault.setDustThreshold(3_000_000);
+        // Set dust threshold based on token decimals
+        uint256 dustThreshold = _getDustThresholdForToken(tokenAddress);
+        console2.log("Setting Dust Threshold to:", dustThreshold);
+        vault.setDustThreshold(dustThreshold);
         console2.log("Dust Threshold set successfully");
 
         console2.log("=======================================================");
@@ -260,4 +276,56 @@ contract DeployScript is Script {
 
         vm.stopBroadcast();
     }
+
+    // Helper function to generate vault name and symbol based on token address
+    function _generateVaultNameAndSymbol(address tokenAddress)
+        internal
+        view
+        returns (string memory name, string memory symbol)
+    {
+        try IERC20Metadata(tokenAddress).name() returns (string memory tokenName) {
+            try IERC20Metadata(tokenAddress).symbol() returns (string memory tokenSymbol) {
+                name = string(abi.encodePacked("max", tokenName, " Vault"));
+                symbol = string(abi.encodePacked("max", tokenSymbol));
+                return (name, symbol);
+            } catch {
+                // Default if symbol fails
+                name = string(abi.encodePacked("max", tokenName, " Vault"));
+                symbol = "maxTKN";
+                return (name, symbol);
+            }
+        } catch {
+            // Default if both fail
+            name = "MetaVault";
+            symbol = "maxTKN";
+            return (name, symbol);
+        }
+    }
+
+    // Helper function to get appropriate dust threshold based on token decimals
+    function _getDustThresholdForToken(address tokenAddress) internal view returns (uint256) {
+        uint8 decimals;
+        try IERC20Metadata(tokenAddress).decimals() returns (uint8 tokenDecimals) {
+            decimals = tokenDecimals;
+        } catch {
+            // Default to 18 if decimals() call fails
+            decimals = 18;
+        }
+
+        // Set dust threshold to equivalent of 3 units with 6 decimals (like USDC)
+        // If token has 18 decimals, this would be 3 * 10^18 / 10^6 = 3 * 10^12
+        if (decimals >= 6) {
+            return 3 * 10 ** (decimals - 6) * 1_000_000;
+        } else {
+            // For tokens with less than 6 decimals, set a smaller threshold
+            return 3 * 10 ** decimals;
+        }
+    }
+}
+
+// Interface needed for token metadata checks
+interface IERC20Metadata {
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
+    function decimals() external view returns (uint8);
 }
