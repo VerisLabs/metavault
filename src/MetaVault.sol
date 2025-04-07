@@ -103,6 +103,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @dev Emitted when the emergency shutdown state is changed
     event EmergencyShutdown(bool enabled);
 
+    /// @dev Emitted when the treasury address is updated
+    event TreasuryUpdated(address indexed treasury);
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           ERRORS                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -160,6 +163,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
     /// @notice Thrown when the maximum queue size is exceeded
     error MaxQueueSizeExceeded();
+
+    /// @notice Thrown when an invalid zero address is encountered
+    error InvalidZeroAddress();
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           MODIFIERS                        */
@@ -835,10 +841,22 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         oracleFeeExempt[controller] = oracleFeeExcemption;
     }
 
+    /// @notice Sets the lock time for shares in the vault.
+    /// @dev Can only be called by addresses with the ADMIN_ROLE.
+    /// @param _time The lock time to set for shares, must not exceed MAX_TIME.
     function setSharesLockTime(uint24 _time) external onlyRoles(ADMIN_ROLE) {
         if (_time > MAX_TIME) revert InvalidSharesLockTime();
         sharesLockTime = _time;
         emit SetSharesLockTime(_time);
+    }
+
+    /// @notice Sets the treasury address for the vault
+    /// @dev Can only be called by addresses with the ADMIN_ROLE
+    /// @param _treasury The address of the treasury
+    function setTreasury(address _treasury) external onlyRoles(ADMIN_ROLE) {
+        if (_treasury == address(0)) revert InvalidZeroAddress();
+        treasury = _treasury;
+        emit TreasuryUpdated(_treasury);
     }
 
     /// @notice sets the annually management fee

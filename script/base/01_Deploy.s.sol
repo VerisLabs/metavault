@@ -46,6 +46,7 @@ contract DeployScript is Script {
     address relayerRole;
     address emergencyAdminRole;
     address managerAddressRole;
+    address treasury;
 
     function run() public {
         console2.log("=======================================================");
@@ -55,7 +56,7 @@ contract DeployScript is Script {
         console2.log("Loading environment variables...");
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         hurdleRateOracleAddress = vm.envAddress("HURDLE_RATE_ORACLE_ADDRESS");
-
+        treasury = vm.envAddress("TREASURY_ADDRESS");
         adminAndOwnerRole = vm.envAddress("ADMIN_AND_OWNER_ROLE");
         relayerRole = vm.envAddress("RELAYER_ROLE");
         emergencyAdminRole = vm.envAddress("EMERGENCY_ADMIN_ROLE");
@@ -64,6 +65,7 @@ contract DeployScript is Script {
         console2.log("Environment variables loaded successfully");
         console2.log("Deployer account:", vm.addr(deployerPrivateKey));
         console2.log("Hurdle Rate Oracle:", hurdleRateOracleAddress);
+        console2.log("Treasury:", treasury);
         console2.log("Admin/Owner Role address:", adminAndOwnerRole);
         console2.log("Relayer Role address:", relayerRole);
         console2.log("Emergency Admin Role address:", emergencyAdminRole);
@@ -84,7 +86,7 @@ contract DeployScript is Script {
             hurdleRateOracle: IHurdleRateOracle(hurdleRateOracleAddress),
             sharesLockTime: 0,
             superPositions: ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
-            treasury: makeAddr("treasury"),
+            treasury: treasury,
             signerRelayer: relayerRole,
             owner: adminAndOwnerRole
         });
