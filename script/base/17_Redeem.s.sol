@@ -12,7 +12,7 @@ contract RedeemScript is Script, StdCheats {
 
     address vaultAddress;
     address constant callerAddress = 0x80DB09D92E234B1B2EE6ed40BB729DF3B27e2F60;
-
+    
     function run() public {
         deal(callerAddress, 100 ether);
         vm.startPrank(callerAddress);

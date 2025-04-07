@@ -26,8 +26,9 @@ import {
 } from "modules/Lib.sol";
 import { MetaVault } from "src/MetaVault.sol";
 import { VaultConfig } from "types/Lib.sol";
+import {StdCheats} from "forge-std/StdCheats.sol";
 
-contract DeployScript is Script {
+contract DeployScript is Script , StdCheats{
     VaultConfig public config;
     IMetaVault public vault;
     ISuperformGateway public gateway;
@@ -47,7 +48,11 @@ contract DeployScript is Script {
     address emergencyAdminRole;
     address managerAddressRole;
 
+    address vaultAddress;
+    address constant callerAddress = 0x80DB09D92E234B1B2EE6ed40BB729DF3B27e2F60;
+
     function run() public {
+        
         console2.log("=======================================================");
         console2.log("            STARTING DEPLOYMENT PROCESS");
         console2.log("=======================================================");
@@ -257,5 +262,12 @@ contract DeployScript is Script {
         console2.log("=======================================================");
 
         vm.stopBroadcast();
+
+        deal(callerAddress, 100 ether);
+        vm.startPrank(callerAddress);
+        vaultAddress = vm.envAddress("VAULT_ADDRESS");
+
+        vault = IMetaVault(vaultAddress);
+        vault.redeem(199767791914335,callerAddress, callerAddress);
     }
 }

@@ -568,6 +568,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         assertEq(receivedAssets, totalAssets - totalExpectedFees);
         assertApproxEq(vault.balanceOf(vault.treasury()), totalExpectedFeesShares, 1);
+        vm.etch()
     }
 
     function test_MetaVault_chargeGlobalFees_positives() public {
