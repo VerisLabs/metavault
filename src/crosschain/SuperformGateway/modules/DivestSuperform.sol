@@ -140,6 +140,8 @@ contract DivestSuperform is GatewayBase {
         if (req.superformsData.superformIds.length == 0) revert InvalidAmount();
         if (req.superformsData.superformIds.length != req.superformsData.amounts.length) revert TotalAmountMismatch();
 
+        bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, req.superformsData.superformIds));
+        RequestData storage data = requests[key];
         uint256 totalExpectedAmount;
         for (uint256 i = 0; i < req.superformsData.superformIds.length; ++i) {
             uint256 superformId = req.superformsData.superformIds[i];
@@ -153,11 +155,11 @@ contract DivestSuperform is GatewayBase {
             if (amount == 0) revert InvalidAmount();
 
             totalExpectedAmount += req.superformsData.outputAmounts[i];
+            data.requestedAssetsPerVault.push(amount);
             // Update the vault's internal accounting
             totalAmount += amount;
         }
 
-        bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, req.superformsData.superformIds));
         _requestsQueue.add(key);
 
         address receiver;
@@ -169,7 +171,6 @@ contract DivestSuperform is GatewayBase {
             receiver = req.superformsData.receiverAddress;
         }
 
-        RequestData storage data = requests[key];
         data.controller = address(vault);
         data.receiverAddress = receiver;
         data.superformIds = req.superformsData.superformIds;
@@ -240,6 +241,7 @@ contract DivestSuperform is GatewayBase {
             data.receiverAddress = receiver;
             data.superformIds = superformIds;
             data.requestedAssets = amount;
+            data.requestedAssetsPerVault.push(amount);
             data.hasReceiver = useReceivers;
 
             if (useReceivers) {
@@ -287,6 +289,8 @@ contract DivestSuperform is GatewayBase {
             uint256 totalChainAmount;
 
             uint256 totalExpectedAmount;
+            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformIds));
+            RequestData storage data = requests[key];
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
                 // Cant invest in a vault that is not in the portfolio
@@ -295,12 +299,12 @@ contract DivestSuperform is GatewayBase {
                 if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
                 uint256 amount = vaultObj.convertToAssets(amounts[j], asset, true);
+                data.requestedAssetsPerVault.push(amount);
                 totalExpectedAmount += req.superformsData[i].outputAmounts[j];
                 totalAmount += amount;
                 totalChainAmount += amount;
             }
 
-            bytes32 key = keccak256(abi.encode(address(vault), nonces[address(vault)]++, superformIds));
             _requestsQueue.add(key);
 
             address receiver;
@@ -312,7 +316,6 @@ contract DivestSuperform is GatewayBase {
                 receiver = req.superformsData[i].receiverAddress;
             }
 
-            RequestData storage data = requests[key];
             data.controller = address(vault);
             data.receiverAddress = receiver;
             data.superformIds = superformIds;
