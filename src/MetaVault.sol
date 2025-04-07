@@ -511,6 +511,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             // Emit events
             /// @solidity memory-safe-assembly
             assembly {
+                let mp := mload(0x40) // Grab the free memory pointer.
                 // Emit the {Withdraw} event
                 mstore(0x00, totalAssetsAfterFee)
                 mstore(0x20, shares)
@@ -528,6 +529,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
                 mstore(0x20, performanceFees)
                 mstore(0x40, oracleFees)
                 log2(0x00, 0x60, 0xa443e1db11cb46c65620e8e21d4830a6b9b444fa4c350f0dd0024b8a5a6b6ef5, and(m, controller))
+                mstore(0x40, mp) // Restore the free memory pointer.
+                mstore(0x60, 0) // Restore the zero pointer.
             }
         }
 
@@ -607,7 +610,9 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (totalFees > 0) {
             _mint(treasury, convertToShares(totalFees));
         }
+        /// @solidity memory-safe-assembly
         assembly {
+            let mp := mload(0x40) // Grab the free memory pointer.
             let m := shr(96, not(0))
 
             // Emit the {AssessFees} event
@@ -615,6 +620,8 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
             mstore(0x20, performanceFees)
             mstore(0x40, oracleFees)
             log2(0x00, 0x60, 0xa443e1db11cb46c65620e8e21d4830a6b9b444fa4c350f0dd0024b8a5a6b6ef5, and(m, address()))
+            mstore(0x40, mp) // Restore the free memory pointer.
+            mstore(0x60, 0) // Restore the zero pointer.
         }
         return totalFees;
     }
