@@ -24,7 +24,30 @@ import {
     VaultLib
 } from "types/Lib.sol";
 
+
 interface IMetaVault {
+
+    struct VaultDetailedData {
+        /// @dev The ID of the chain where the vault is deployed
+        uint32 chainId;
+        /// @dev The superform ID of the vault in the Superform protocol
+        uint256 superformId;
+        /// @dev The oracle that provides the share price for the vault
+        ISharePriceOracle oracle;
+        /// @dev The number of decimals used in the ERC4626 shares
+        uint8 decimals;
+        /// @dev The total assets invested in the vault
+        uint128 totalDebt;
+        /// @dev The address of the vault
+        address vaultAddress;
+        /// @dev Owned vault shares
+        uint256 sharesBalance;
+        /// @dev Share price of the vault
+        uint256 sharePrice;
+        /// @dev Total assets managed by vault
+        uint256 totalAssets;
+    }
+    
     function WITHDRAWAL_QUEUE_SIZE() external view returns (uint256);
 
     function SECS_PER_YEAR() external view returns (uint256);
@@ -314,4 +337,6 @@ interface IMetaVault {
         external
         view
         returns (bool);
+
+    function getAllVaultsDetailedData() external view returns (VaultDetailedData[] memory);
 }

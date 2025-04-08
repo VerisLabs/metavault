@@ -10,6 +10,7 @@ import { IHurdleRateOracle } from "src/interfaces/IHurdleRateOracle.sol";
 import { ISuperPositions } from "src/interfaces/ISuperPositions.sol";
 import { ISuperformFactory } from "src/interfaces/ISuperformFactory.sol";
 import { ISuperformGateway } from "src/interfaces/ISuperformGateway.sol";
+import { console2 } from "forge-std/console2.sol";
 
 /// @dev The maximum allowable staleness for oracle data before being considered outdated
 uint256 constant ORACLE_STALENESS_TOLERANCE = 1 days;
@@ -81,11 +82,18 @@ library VaultLib {
         view
         returns (uint256 assets)
     {
+        console2.log("self.chainId", self.chainId);
+        console2.log("self.vaultAddress", self.vaultAddress);
+        console2.log("metavaultAsset", metavaultAsset);
         (uint256 sharePrice_, uint64 lastUpdated) =
             self.oracle.getLatestSharePrice(self.chainId, self.vaultAddress, metavaultAsset);
+        console2.log("sharePrice_", sharePrice_);
+        console2.log("lastUpdated", lastUpdated);
         if (revertIfStale) {
             if (lastUpdated + ORACLE_STALENESS_TOLERANCE < block.timestamp) revert StaleSharePrice();
         }
+        console2.log("shares", shares);
+        console2.log("self.decimals", self.decimals);
         return sharePrice_ * shares / 10 ** self.decimals;
     }
 
