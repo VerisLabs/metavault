@@ -5,7 +5,7 @@ import {
     DivestSuperform, InvestSuperform, LiquidateSuperform, SuperformGateway
 } from "crosschain/SuperformGateway/Lib.sol";
 
-import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, WETH_BASE, WETH_BASE } from "helpers/AddressBook.sol";
+import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, USDCE_BASE } from "helpers/AddressBook.sol";
 import {
     IBaseRouter,
     IHurdleRateOracle,
@@ -26,8 +26,11 @@ import {
 import { MetaVault } from "src/MetaVault.sol";
 import { VaultConfig } from "types/Lib.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
+import {Script, console} from "forge-std/Script.sol";
+import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
-contract TestRedeemScript is Script , StdCheats{
+contract TestRedeemScriptWeth is Script , StdCheats{
+    using SafeTransferLib for address;
     VaultConfig public config;
     IMetaVault public vault;
     ISuperformGateway public gateway;
@@ -66,9 +69,9 @@ contract TestRedeemScript is Script , StdCheats{
         console.log("DEPLOYING NEW VAULT...");
 
         config = VaultConfig({
-            asset: WETH_BASE,
-            name: "maxETH Vault",
-            symbol: "maxETH",
+            asset: USDCE_BASE,
+            name: "maxUSDC Vault",
+            symbol: "maxUSDC",
             managementFee: 100,
             performanceFee: 2000,
             oracleFee: 50,
@@ -151,12 +154,13 @@ contract TestRedeemScript is Script , StdCheats{
       
         //// TEST STARTS HERE
         console.log("IMPERSONATING LIVE VAULT WITH NEW VAULT...");
-        deal(callerAddress, 100 ether);
+        deal(USDCE_BASE, callerAddress, 100 ether);
         vm.startPrank(callerAddress);
-        vaultAddress = vm.envAddress("VAULT_ADDRESS");
+        vaultAddress = vm.envAddress("METAVAULT_ADDRESS");
         IMetaVault vault2 = IMetaVault(vaultAddress);
         // OUR CONTRACT IMPERSONATES THE ALREADY EXISTING CONTRACT
         vm.etch(vaultAddress, address(vault).code);
-        vault2.redeem(199767791914335,callerAddress, callerAddress);
+        USDCE_BASE.safeApprove(address(vault2), type(uint256).max);
+        vault2.requestDeposit(10_000_000, callerAddress, callerAddress);
     }
 }

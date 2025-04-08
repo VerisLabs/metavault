@@ -11,6 +11,7 @@ import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
 import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { NoDelegateCall } from "lib/Lib.sol";
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
+import "forge-std/Test.sol";
 
 //                                              XXSSNNNNNNNNSS
 //                                        XSEAAAAAAAAAAAAAAAAAAAAAJSS
@@ -265,6 +266,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         noEmergencyShutdown
         returns (uint256 requestId)
     {
+        console.log("PUTA :::");
         if (owner != msg.sender) revert InvalidOperator();
         requestId = super.requestDeposit(assets, controller, owner);
         // fulfill the request directly

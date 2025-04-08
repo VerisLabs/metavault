@@ -6,6 +6,7 @@ import { ModuleBase } from "common/Lib.sol";
 import { ISharePriceOracle } from "../interfaces/ISharePriceOracle.sol";
 import { FixedPointMathLib } from "solady/utils/FixedPointMathLib.sol";
 import { VaultData, VaultLib } from "types/Lib.sol";
+import "forge-std/Test.sol";
 
 /// @title MetaVaultReader
 /// @notice Module for reading vault data and calculating returns
@@ -41,6 +42,7 @@ contract MetaVaultReader is ModuleBase {
     /// @param superformId The ID of the vault to query
     /// @return VaultDetailedData struct containing vault details
     function getVaultDetailedData(uint256 superformId) public view returns (VaultDetailedData memory) {
+        console.log(":::::::::::::PUTA:::::::::::::::");
         VaultData memory vault = vaults[superformId];
         uint256 sharesBalance = _sharesBalance(vault);
         uint256 totalAssets = vault.convertToAssets(sharesBalance, asset(), true);

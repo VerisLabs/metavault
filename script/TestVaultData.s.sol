@@ -14,18 +14,6 @@ contract TestVaultDataScript is Script, StdCheats {
     address deployer;
     address constant callerAddress = 0x80DB09D92E234B1B2EE6ed40BB729DF3B27e2F60;
 
-    // Define the structs locally to avoid type resolution issues
-    struct VaultDetailedData {
-        uint32 chainId;
-        uint256 superformId;
-        ISharePriceOracle oracle;
-        uint8 decimals;
-        uint128 totalDebt;
-        address vaultAddress;
-        uint256 sharesBalance;
-        uint256 sharePrice;
-        uint256 totalAssets;
-    }
 
     struct VaultReturnsData {
         uint256 totalReturn;
@@ -38,14 +26,9 @@ contract TestVaultDataScript is Script, StdCheats {
         console2.log("            STARTING VAULT DATA TEST");
         console2.log("=======================================================");
 
-        // Load environment variables
-        deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        deployer = vm.addr(deployerPrivateKey);
-        
         // Load vault address from environment
         address vaultAddress = vm.envAddress("METAVAULT_ADDRESS");
         
-        console2.log("Deployer address:", deployer);
         console2.log("Vault address:", vaultAddress);
         
         // Start prank as caller address
@@ -56,7 +39,7 @@ contract TestVaultDataScript is Script, StdCheats {
         
         // Get all vaults data
         console2.log("Getting all vaults data...");
-        VaultDetailedData[] memory allVaults = reader.getAllVaultsDetailedData();
+        MetaVaultReader.VaultDetailedData[] memory allVaults = reader.getAllVaultsDetailedData();
         
         // Print data for each vault
         for (uint256 i = 0; i < allVaults.length; i++) {
@@ -75,7 +58,7 @@ contract TestVaultDataScript is Script, StdCheats {
         // Get returns data
         console2.log("-------------------------------------------------------");
         console2.log("Getting vault returns data...");
-        VaultReturnsData memory returnsData = reader.getLastEpochVaultReturns();
+        MetaVaultReader.VaultReturnsData memory returnsData = reader.getLastEpochVaultReturns();
         console2.log("Total Return:", returnsData.totalReturn);
         console2.log("Hurdle Return:", returnsData.hurdleReturn);
         console2.log("Excess Return:", returnsData.excessReturn);
@@ -84,8 +67,7 @@ contract TestVaultDataScript is Script, StdCheats {
         console2.log("-------------------------------------------------------");
         console2.log("Getting total returns per share...");
         int256 totalReturns = reader.totalReturnsPerShare();
-        console2.log("Total Returns Per Share:", totalReturns);
-        
+       
         vm.stopPrank();
         
         console2.log("=======================================================");
