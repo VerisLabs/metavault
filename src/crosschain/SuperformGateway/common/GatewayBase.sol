@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { ERC20Receiver } from "crosschain/Lib.sol";
-import { IBaseRouter, IMetaVault, ISuperPositions } from "interfaces/Lib.sol";
+import { IBaseRouter, IMetaVault, ISuperPositions, ISuperRegistry } from "interfaces/Lib.sol";
 import { OwnableRoles } from "solady/auth/OwnableRoles.sol";
 import { EnumerableSetLib } from "solady/utils/EnumerableSetLib.sol";
 
@@ -91,6 +91,9 @@ contract GatewayBase is OwnableRoles {
 
     /// @notice Superform router interface
     IBaseRouter public superformRouter;
+
+    /// @notice Superform regitry interface
+    ISuperRegistry public superRegistry;
 
     /// @notice Underlying vault interface
     IMetaVault public vault;

@@ -6,13 +6,20 @@ import {
 } from "crosschain/SuperformGateway/Lib.sol";
 import { Script, console2 } from "forge-std/Script.sol";
 
-import { SUPERFORM_ROUTER_BASE, SUPERFORM_SUPERPOSITIONS_BASE, USDCE_BASE, WETH_BASE } from "helpers/AddressBook.sol";
+import {
+    SUPERFORM_ROUTER_BASE,
+    SUPERFORM_SUPEREGISTRY_BASE,
+    SUPERFORM_SUPERPOSITIONS_BASE,
+    USDCE_BASE,
+    WETH_BASE
+} from "helpers/AddressBook.sol";
 import {
     IBaseRouter,
     IHurdleRateOracle,
     IMetaVault,
     ISharePriceOracle,
     ISuperPositions,
+    ISuperRegistry,
     ISuperformFactory,
     ISuperformGateway
 } from "interfaces/Lib.sol";
@@ -125,6 +132,7 @@ contract DeployScript is Script {
             IMetaVault(vault),
             IBaseRouter(SUPERFORM_ROUTER_BASE),
             ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
+            ISuperRegistry(SUPERFORM_SUPEREGISTRY_BASE),
             adminAndOwnerRole
         );
         gateway = ISuperformGateway(address(_gateway));
