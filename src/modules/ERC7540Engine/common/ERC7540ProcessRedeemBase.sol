@@ -66,7 +66,6 @@ abstract contract ERC7540ProcessRedeemBase is ERC7540EngineBase {
         ProcessRedeemRequestCache memory cache;
         cache.totalIdle = _totalIdle;
         cache.totalDebt = _totalDebt;
-        config.shares = Math.min(balanceOf(address(this)), config.shares);
 
         // Custom error check for shares greater than pending redeem request
         uint256 pendingShares = pendingRedeemRequest(config.controller);

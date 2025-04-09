@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { SuperformGateway } from "crosschain/SuperformGateway/Lib.sol";
 import { SuperPositionsReceiver } from "crosschain/SuperPositionsReceiver.sol";
+import { SuperformGateway } from "crosschain/SuperformGateway/Lib.sol";
 import { Script, console2 } from "forge-std/Script.sol";
 
 import { ISuperformGateway } from "interfaces/Lib.sol";

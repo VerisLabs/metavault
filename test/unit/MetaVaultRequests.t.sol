@@ -1524,4 +1524,108 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
             ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
         );
     }
+
+    function test_MetaVault_processRedeemRequest_refund_flow() public {
+        address vaultAddress = EXACTLY_USDC_VAULT_OPTIMISM;
+        uint256 superformId = EXACTLY_USDC_VAULT_ID_OPTIMISM;
+        uint32 optimismChainId = 10;
+
+        // Setup vaults
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+        vault.addVault({
+            chainId: optimismChainId,
+            superformId: superformId,
+            vault: vaultAddress,
+            vaultDecimals: _getDecimals(optimismChainId, vaultAddress),
+            oracle: ISharePriceOracle(address(oracle))
+        });
+
+        // Deposit funds
+        _depositAtomic(1000 * _1_USDCE, users.alice, users.alice);
+
+        // Invest in cross-chain vault
+        uint256 investAmount = 600 * _1_USDCE;
+        (SingleXChainSingleVaultStateReq memory req) =
+            _buildInvestSingleXChainSingleVaultParams(superformId, investAmount);
+
+        uint256 sharesAmount = _previewDeposit(optimismChainId, vaultAddress, investAmount);
+        req.superformData.amount = investAmount;
+
+        vault.investSingleXChainSingleVault{ value: _getInvestSingleXChainSingleVaultValue(superformId, investAmount) }(
+            req
+        );
+
+        // Mint superpositions to mock successful investment
+        _mintSuperpositions(address(gateway.recoveryAddress()), superformId, sharesAmount);
+
+        vm.startPrank(users.alice);
+        vault.setSharesLockTime(0);
+        uint256 aliceBalance = vault.balanceOf(users.alice);
+
+        // Request redemption
+        vault.requestRedeem(aliceBalance, users.alice, users.alice);
+
+        oracle.setValues(
+            optimismChainId,
+            vaultAddress,
+            _getSharePrice(optimismChainId, vaultAddress),
+            block.timestamp,
+            USDCE_BASE,
+            users.bob,
+            6
+        );
+
+        // Setup redemption parameters
+        SingleXChainSingleVaultWithdraw memory sXsV;
+        SingleXChainMultiVaultWithdraw memory sXmV;
+        MultiXChainSingleVaultWithdraw memory mXsV;
+        MultiXChainMultiVaultWithdraw memory mXmV;
+
+        (sXsV.ambIds, sXsV.outputAmount, sXsV.maxSlippage, sXsV.liqRequest, sXsV.hasDstSwap) =
+            _buildWithdrawSingleXChainSingleVaultParams(superformId, investAmount);
+        sXsV.outputAmount = 588 * _1_USDCE; // Slightly less due to fees
+        sXsV.value = _getWithdrawSingleXChainSingleVaultValue(superformId, investAmount);
+
+        // Process redemption request
+        vm.expectEmit(true, true, true, true);
+        emit ProcessRedeemRequest(users.alice, aliceBalance);
+
+        vault.processRedeemRequest{ value: sXsV.value }(
+            ProcessRedeemRequestParams(users.alice, 0, sXsV, sXmV, mXsV, mXmV)
+        );
+
+        // Get receiver address from request
+        bytes32 requestId = gateway.getRequestsQueue()[0];
+        address receiverAddress = gateway.getReceiver(requestId);
+
+        // Verify initial state
+        assertEq(vault.totalSupply(), 0);
+        assertEq(vault.totalDebt(), 0);
+        assertEq(vault.pendingProcessedShares(users.alice), 599_999_947);
+        assertEq(vault.claimableRedeemRequest(users.alice), 400_000_053);
+
+        // Store state before refund for later comparison
+        uint256 vaultBalanceBefore = USDCE_BASE.balanceOf(address(vault));
+        (,,,, uint128 vaultDebtBefore,) = vault.vaults(superformId);
+
+        vault.sharePrice();
+
+        // Instead of settling with funds, simulate refund by minting SuperPositions back to receiver
+        _mintSuperpositions(receiverAddress, superformId, sharesAmount);
+
+        vault.sharePrice();
+        assertApproxEq(vault.pendingProcessedShares(users.alice), 0, 100);
+
+        // Verify that the refund was processed correctly
+        assertEq(gateway.getRequestsQueue().length, 0); // Request should still be in queue
+        assertEq(config.superPositions.balanceOf(address(vault), superformId), sharesAmount);
+    }
 }

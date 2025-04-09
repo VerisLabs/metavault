@@ -354,7 +354,13 @@ contract DivestSuperform is GatewayBase {
 
         superPositions.safeTransferFrom(msg.sender, address(this), superformId, value, "");
         superPositions.safeTransferFrom(
-            address(this), address(vault), superformId, value, abi.encode(vaultRequestedAssets)
+            address(this),
+            address(vault),
+            superformId,
+            value,
+            abi.encode(
+                requests[key].controller == address(vault) ? address(0) : requests[key].controller, vaultRequestedAssets
+            )
         );
 
         emit DivestRefunded(superformId, value, key);
