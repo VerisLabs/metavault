@@ -110,6 +110,7 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         operator;
         value;
         data;
+        if (msg.sender != address(superPositions)) revert Unauthorized();
         if (from == address(vault)) return this.onERC1155Received.selector;
         try ERC20Receiver(from).key() returns (bytes32 key) {
             if (requests[key].receiverAddress == from) {

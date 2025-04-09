@@ -977,6 +977,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         // Silence compiler warnings
         operator;
         value;
+        if (msg.sender != address(gateway.superPositions())) revert Unauthorized();
         if (from != address(gateway)) revert Unauthorized();
         if (data.length > 0) {
             uint256 refundedAssets = abi.decode(data, (uint256));
@@ -1013,6 +1014,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         values;
         data;
         superformIds;
+        if (msg.sender != address(gateway.superPositions())) revert Unauthorized();
         if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155BatchReceived.selector;
     }
