@@ -314,4 +314,24 @@ interface IMetaVault {
         external
         view
         returns (bool);
+
+      function onERC1155Received(
+        address operator,
+        address from,
+        uint256 superformId,
+        uint256 value,
+        bytes memory data
+    )
+        external
+        returns (bytes4);
+
+    function onERC1155BatchReceived(
+        address operator,
+        address from,
+        uint256[] memory superformIds,
+        uint256[] memory values,
+        bytes memory data
+    )
+        external
+        returns (bytes4);
 }
