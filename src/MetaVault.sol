@@ -8,6 +8,7 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
 
+import "forge-std/Test.sol";
 import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { NoDelegateCall } from "lib/Lib.sol";
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
@@ -980,10 +981,18 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         if (msg.sender != address(gateway.superPositions())) revert Unauthorized();
         if (from != address(gateway)) revert Unauthorized();
         if (data.length > 0) {
-            uint256 refundedAssets = abi.decode(data, (uint256));
+            (address controller, uint256 refundedAssets) = abi.decode(data, (address, uint256));
             if (refundedAssets != 0) {
                 _totalDebt += refundedAssets.toUint128();
+                // Calculate shares corresponding to refundedAssets
+                uint256 shares = _convertToShares(refundedAssets, totalAssets() - refundedAssets);
+                if (controller != address(0)) {
+                    // Decrease the pending xchain shares of the user
+                    pendingProcessedShares[controller] = _sub0(pendingProcessedShares[controller], shares);
+                }
                 vaults[superformId].totalDebt += refundedAssets.toUint128();
+                // Mint back failed shares
+                _mint(address(this), shares);
             }
         }
         return this.onERC1155Received.selector;

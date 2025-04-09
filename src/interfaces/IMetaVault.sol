@@ -315,7 +315,7 @@ interface IMetaVault {
         view
         returns (bool);
 
-      function onERC1155Received(
+    function onERC1155Received(
         address operator,
         address from,
         uint256 superformId,

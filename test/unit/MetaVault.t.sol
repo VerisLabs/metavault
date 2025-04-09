@@ -117,12 +117,12 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
     function test_revert_MetaVault_onERC1155Received() public {
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
-        vault.onERC1155Received(users.alice, address(0), 1,1, "");
+        vault.onERC1155Received(users.alice, address(0), 1, 1, "");
     }
 
     function test_revert_SuperformGateway_onERC1155Received() public {
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
-        gateway.onERC1155Received(users.alice, address(0), 1,1, "");
+        gateway.onERC1155Received(users.alice, address(0), 1, 1, "");
     }
 
     function test_MetaVault_initialization() public view {
