@@ -60,6 +60,7 @@ contract InvestSuperform is GatewayBase {
         payable
         onlyVault
         refundGas
+        returns (uint256 totalAmount)
     {
         if (recoveryAddress == address(0)) revert InvalidRecoveryAddress();
 
@@ -93,6 +94,8 @@ contract InvestSuperform is GatewayBase {
 
         emit PendingInvestUpdated(superformId, oldPendingAmount, pendingXChainInvests[superformId]);
         emit PendingInvestUpdated(0, oldTotalPending, totalpendingXChainInvests);
+
+        return amount;
     }
 
     /// @notice Invests assets into multiple vaults across a chain

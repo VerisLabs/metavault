@@ -3,15 +3,11 @@ src = "src"
 out = "out"
 libs = ["dependencies"]
 gas_reports = ['*']
-evm_version =  "paris"
+evm_version =  "shanghai"
 via_ir = true
 solc_version = "0.8.26"
 
-[profile.fork]
-evm_version =  "shanghai" # we use shanghai because we are using multiple chains in our tests
-
 [profile.deployment]
-evm_version =  "paris"
 optimizer = true
 optimizer_runs = 200
 via_ir=true

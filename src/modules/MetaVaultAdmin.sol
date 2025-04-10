@@ -179,7 +179,6 @@ contract MetaVaultAdmin is ModuleBase {
         emit EmergencyShutdown(_emergencyShutdown);
     }
 
-
     /// @dev Helper function to fetch module function selectors
     function selectors() external pure returns (bytes4[] memory) {
         bytes4[] memory s = new bytes4[](10);

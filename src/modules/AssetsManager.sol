@@ -143,10 +143,9 @@ contract AssetsManager is ModuleBase {
         payable
         onlyRoles(MANAGER_ROLE)
     {
-        gateway.investSingleXChainSingleVault{ value: msg.value }(req);
+        uint256 amount = gateway.investSingleXChainSingleVault{ value: msg.value }(req);
 
         // Update the vault's internal accounting
-        uint256 amount = req.superformData.amount;
         uint128 amountUint128 = amount.toUint128();
         _totalIdle -= amountUint128;
 

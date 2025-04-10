@@ -204,7 +204,7 @@ contract DeployScript is Script {
         vault.setGateway(address(gateway));
         console2.log("Gateway set successfully in MetaVault");
 
-          console2.log("-------------------------------------------------------");
+        console2.log("-------------------------------------------------------");
         console2.log("Adding function selectors to SuperformGateway...");
 
         console2.log("1. Adding InvestSuperform functions...");
