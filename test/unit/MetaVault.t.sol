@@ -21,7 +21,7 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, MetaVaultAdmin } from "modules/Lib.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
@@ -62,6 +62,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
     MockERC4626Oracle public oracle;
     ERC7540Engine engine;
     AssetsManager manager;
+    MetaVaultAdmin admin;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
 
@@ -71,6 +72,11 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+
+        admin = new MetaVaultAdmin();
+        bytes4[] memory adminSelectors = admin.selectors();
+        vault.addFunctions(adminSelectors, address(admin), false);
+        
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
@@ -81,6 +87,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         manager = new AssetsManager();
         bytes4[] memory managerSelectors = manager.selectors();
         vault.addFunctions(managerSelectors, address(manager), false);
+
 
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());
@@ -389,7 +396,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         vm.startPrank(users.alice);
 
-        vm.expectRevert(MetaVault.InvalidSharesLockTime.selector);
+        vm.expectRevert(MetaVaultAdmin.InvalidSharesLockTime.selector);
         vault.setSharesLockTime(invalidTime);
 
         assertEq(vault.sharesLockTime(), config.sharesLockTime);
@@ -416,7 +423,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint16 tooHighFee = 10_001; // 100.01%
 
-        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vm.expectRevert(MetaVaultAdmin.FeeExceedsMaximum.selector);
         vault.setManagementFee(tooHighFee);
 
         assertEq(vault.managementFee(), 0);
@@ -987,7 +994,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint16 tooHighFee = 10_001; // MAX_FEE is 3000 (30%)
 
-        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vm.expectRevert(MetaVaultAdmin.FeeExceedsMaximum.selector);
         vault.setPerformanceFee(tooHighFee);
 
         assertEq(vault.performanceFee(), 2000);
@@ -1000,7 +1007,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
 
         uint16 tooHighFee = 10_001; // MAX_FEE is 3000 (30%)
 
-        vm.expectRevert(MetaVault.FeeExceedsMaximum.selector);
+        vm.expectRevert(MetaVaultAdmin.FeeExceedsMaximum.selector);
         vault.setOracleFee(tooHighFee);
 
         assertEq(vault.oracleFee(), 0);
@@ -1061,7 +1068,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         uint24 tooHighTime = 72 hours;
 
         vm.startPrank(users.alice);
-        vm.expectRevert(MetaVault.InvalidSharesLockTime.selector);
+        vm.expectRevert(MetaVaultAdmin.InvalidSharesLockTime.selector);
         vault.setSharesLockTime(tooHighTime);
         vm.stopPrank();
     }

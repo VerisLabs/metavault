@@ -53,13 +53,14 @@ import {
     SingleXChainSingleVaultStateReq,
     VaultReport
 } from "src/types/Lib.sol";
+import {MetaVaultAdmin} from "src/modules/Lib.sol";
 
 contract MetaVaultInvestTest is BaseVaultTest {
     using SafeTransferLib for address;
     using LibString for bytes;
 
     MockERC4626Oracle public oracle;
-
+    MetaVaultAdmin public admin;
     ISuperformGateway public gateway;
     uint64 baseChainId = 8453;
 
@@ -69,6 +70,8 @@ contract MetaVaultInvestTest is BaseVaultTest {
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+        admin = new MetaVaultAdmin();
+        vault.addFunctions(admin.selectors(), address(admin),false);
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
