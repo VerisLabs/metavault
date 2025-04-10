@@ -74,7 +74,7 @@ contract MultiFacetProxy is Proxy, OwnableRoles {
     function _implementation() internal view override returns (address) {
         bytes4 selector = msg.sig;
         address implementation = selectorToImplementation[selector];
-        if (implementation == address(0)) revert("nmot found");
+        if (implementation == address(0)) revert();
         return implementation;
     }
 }
