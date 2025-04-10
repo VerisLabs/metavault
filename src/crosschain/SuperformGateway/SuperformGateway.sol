@@ -1,7 +1,7 @@
 /// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.19;
 
-import { GatewayBase, IBaseRouter, IMetaVault, ISuperPositions } from "./common/GatewayBase.sol";
+import { GatewayBase, IBaseRouter, IMetaVault, ISuperPositions, ISuperRegistry } from "./common/GatewayBase.sol";
 import { MultiFacetProxy } from "common/Lib.sol";
 import { ERC20Receiver } from "crosschain/Lib.sol";
 
@@ -26,6 +26,7 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         IMetaVault _vault,
         IBaseRouter _superformRouter,
         ISuperPositions _superPositions,
+        ISuperRegistry _superRegistry,
         address owner
     )
         MultiFacetProxy(ADMIN_ROLE)
@@ -34,6 +35,7 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         asset = vault.asset();
         superformRouter = _superformRouter;
         superPositions = _superPositions;
+        superRegistry = _superRegistry;
 
         // Deploy and set the receiver implementation
         receiverImplementation = address(new ERC20Receiver(asset, address(superPositions)));
@@ -110,6 +112,7 @@ contract SuperformGateway is GatewayBase, MultiFacetProxy {
         operator;
         value;
         data;
+        if (msg.sender != address(superPositions)) revert Unauthorized();
         if (from == address(vault)) return this.onERC1155Received.selector;
         try ERC20Receiver(from).key() returns (bytes32 key) {
             if (requests[key].receiverAddress == from) {

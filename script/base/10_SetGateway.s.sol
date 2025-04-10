@@ -9,15 +9,23 @@ contract SetGateway is Script {
 
     uint256 deployerPrivateKey;
     address gatewayAddress;
+    address superPositionsReceiverAddress;
 
     function run() public {
         deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        gatewayAddress = 0x7c0a54980C9CA702308688014fda0E8016e6c1F9;
+        gatewayAddress = vm.envAddress("SUPERFORM_GATEWAY_ADDRESS");
+        superPositionsReceiverAddress = vm.envAddress("SUPER_POSITIONS_RECEIVER_ADDRESS");
+
+        console2.log("Setting up with following parameters:");
+        console2.log("Gateway Address:", gatewayAddress);
+        console2.log("SuperPositionsReceiver Address:", superPositionsReceiverAddress);
 
         vm.startBroadcast(deployerPrivateKey);
 
-        receiver = SuperPositionsReceiver(0xd734735784aEE9D66FB7314469c7aF9972A7F735);
+        console2.log("Setting gateway address on SuperPositionsReceiver...");
+        receiver = SuperPositionsReceiver(superPositionsReceiverAddress);
         receiver.setGateway(gatewayAddress);
+        console2.log("Gateway address set successfully on SuperPositionsReceiver");
 
         vm.stopBroadcast();
     }

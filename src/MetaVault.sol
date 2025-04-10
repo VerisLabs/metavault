@@ -8,6 +8,7 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultBase, MultiFacetProxy } from "common/Lib.sol";
 
+import "forge-std/Test.sol";
 import { IHurdleRateOracle, ISharePriceOracle, ISuperformGateway } from "interfaces/Lib.sol";
 import { NoDelegateCall } from "lib/Lib.sol";
 import { VaultConfig, VaultData, VaultLib, VaultReport } from "types/Lib.sol";
@@ -152,15 +153,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
     /// @notice Thrown when attempting to add a vault with invalid address
     error InvalidVaultAddress();
 
-    /// @notice Thrown when attempting to add a vault with invalid oracle
-    error InvalidOracleAddress();
-
-    /// @notice Thrown when attempting to set a fee higher than the maximum allowed
-    error FeeExceedsMaximum();
-
-    /// @notice Thrown when attempting to set a shares lock time higher than the maximum allowed
-    error InvalidSharesLockTime();
-
     /// @notice Thrown when the maximum queue size is exceeded
     error MaxQueueSizeExceeded();
 
@@ -228,27 +220,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
 
         // Set initial watermark
         sharePriceWaterMark = 10 ** decimals();
-    }
-
-    /// @notice Sets the gateway contract for cross-chain communication
-    /// @param _gateway The address of the new gateway contract
-    /// @dev Only callable by addresses with ADMIN_ROLE
-    function setGateway(ISuperformGateway _gateway) external onlyRoles(ADMIN_ROLE) {
-        if (address(gateway) != address(0)) {
-            gateway.superPositions().setApprovalForAll(address(gateway), false);
-            asset().safeApprove(address(gateway), 0);
-        }
-
-        gateway = _gateway;
-        asset().safeApprove(address(_gateway), type(uint256).max);
-        gateway.superPositions().setApprovalForAll(address(_gateway), true);
-    }
-
-    /// @notice Sets the hurdle rate oracle for performance fee calculations
-    /// @param hurdleRateOracle The new oracle address to set
-    /// @dev Only callable by addresses with ADMIN_ROLE
-    function setHurdleRateOracle(IHurdleRateOracle hurdleRateOracle) external onlyRoles(ADMIN_ROLE) {
-        _hurdleRateOracle = hurdleRateOracle;
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -794,14 +765,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         }
     }
 
-    /// @notice Sets the oracle for a specific vault
-    /// @dev Can only be called by addresses with the ADMIN_ROLE
-    /// @param superformId The ID of the superform to set the oracle for
-    /// @param oracle The new oracle address to set
-    function setVaultOracle(uint256 superformId, ISharePriceOracle oracle) external onlyRoles(ADMIN_ROLE) {
-        vaults[superformId].oracle = oracle;
-    }
-
     /// @notice Reorganize `withdrawalQueue` based on premise that if there is an
     /// empty value between two actual values, then the empty value should be
     /// replaced by the later value.
@@ -823,71 +786,6 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
                 ++i;
             }
         }
-    }
-
-    /// @notice Sets the emergency shutdown state of the vault
-    /// @dev Can only be called by addresses with the EMERGENCY_ADMIN_ROLE
-    /// @param _emergencyShutdown True to enable emergency shutdown, false to disable
-    function setEmergencyShutdown(bool _emergencyShutdown) external onlyRoles(EMERGENCY_ADMIN_ROLE) {
-        emergencyShutdown = _emergencyShutdown;
-        emit EmergencyShutdown(_emergencyShutdown);
-    }
-
-    /// @notice Whitelists specific clients so they pay less or zero fees
-    function setFeeExcemption(
-        address controller,
-        uint256 managementFeeExcemption,
-        uint256 performanceFeeExcemption,
-        uint256 oracleFeeExcemption
-    )
-        external
-        onlyRoles(ADMIN_ROLE)
-    {
-        performanceFeeExempt[controller] = performanceFeeExcemption;
-        managementFeeExempt[controller] = managementFeeExcemption;
-        oracleFeeExempt[controller] = oracleFeeExcemption;
-    }
-
-    /// @notice Sets the lock time for shares in the vault.
-    /// @dev Can only be called by addresses with the ADMIN_ROLE.
-    /// @param _time The lock time to set for shares, must not exceed MAX_TIME.
-    function setSharesLockTime(uint24 _time) external onlyRoles(ADMIN_ROLE) {
-        if (_time > MAX_TIME) revert InvalidSharesLockTime();
-        sharesLockTime = _time;
-        emit SetSharesLockTime(_time);
-    }
-
-    /// @notice Sets the treasury address for the vault
-    /// @dev Can only be called by addresses with the ADMIN_ROLE
-    /// @param _treasury The address of the treasury
-    function setTreasury(address _treasury) external onlyRoles(ADMIN_ROLE) {
-        if (_treasury == address(0)) revert InvalidZeroAddress();
-        treasury = _treasury;
-        emit TreasuryUpdated(_treasury);
-    }
-
-    /// @notice sets the annually management fee
-    /// @param _managementFee new BPS management fee
-    function setManagementFee(uint16 _managementFee) external onlyRoles(ADMIN_ROLE) {
-        if (_managementFee > MAX_FEE) revert FeeExceedsMaximum();
-        managementFee = _managementFee;
-        emit SetManagementFee(_managementFee);
-    }
-
-    /// @notice sets the annually management fee
-    /// @param _performanceFee new BPS management fee
-    function setPerformanceFee(uint16 _performanceFee) external onlyRoles(ADMIN_ROLE) {
-        if (_performanceFee > MAX_FEE) revert FeeExceedsMaximum();
-        performanceFee = _performanceFee;
-        emit SetPerformanceFee(_performanceFee);
-    }
-
-    /// @notice sets the annually oracle fee
-    /// @param _oracleFee new BPS oracle fee
-    function setOracleFee(uint16 _oracleFee) external onlyRoles(ADMIN_ROLE) {
-        if (_oracleFee > MAX_FEE) revert FeeExceedsMaximum();
-        oracleFee = _oracleFee;
-        emit SetOracleFee(_oracleFee);
     }
 
     /// @notice Allows direct donation of assets to the vault
@@ -977,12 +875,21 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         // Silence compiler warnings
         operator;
         value;
+        if (msg.sender != address(gateway.superPositions())) revert Unauthorized();
         if (from != address(gateway)) revert Unauthorized();
         if (data.length > 0) {
-            uint256 refundedAssets = abi.decode(data, (uint256));
+            (address controller, uint256 refundedAssets) = abi.decode(data, (address, uint256));
             if (refundedAssets != 0) {
                 _totalDebt += refundedAssets.toUint128();
+                // Calculate shares corresponding to refundedAssets
+                uint256 shares = _convertToShares(refundedAssets, totalAssets() - refundedAssets);
+                if (controller != address(0)) {
+                    // Decrease the pending xchain shares of the user
+                    pendingProcessedShares[controller] = _sub0(pendingProcessedShares[controller], shares);
+                }
                 vaults[superformId].totalDebt += refundedAssets.toUint128();
+                // Mint back failed shares
+                _mint(address(this), shares);
             }
         }
         return this.onERC1155Received.selector;
@@ -1013,6 +920,7 @@ contract MetaVault is MetaVaultBase, Multicallable, NoDelegateCall {
         values;
         data;
         superformIds;
+        if (msg.sender != address(gateway.superPositions())) revert Unauthorized();
         if (from != address(gateway)) revert Unauthorized();
         return this.onERC1155BatchReceived.selector;
     }

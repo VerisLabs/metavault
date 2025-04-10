@@ -18,7 +18,7 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { AssetsManager, ERC7540Engine, EmergencyAssetsManager } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, EmergencyAssetsManager, MetaVaultAdmin } from "modules/Lib.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
@@ -64,6 +64,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     AssetsManager manager;
     EmergencyAssetsManager emergencyManager;
     ISuperformGateway public gateway;
+    MetaVaultAdmin admin;
     uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
@@ -72,6 +73,11 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+
+        admin = new MetaVaultAdmin();
+        bytes4[] memory adminSelectors = admin.selectors();
+        vault.addFunctions(adminSelectors, address(admin), false);
+        
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
@@ -86,6 +92,7 @@ contract MetaVaultDivestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         emergencyManager = new EmergencyAssetsManager();
         bytes4[] memory emergencySelectors = emergencyManager.selectors();
         vault.addFunctions(emergencySelectors, address(emergencyManager), false);
+
 
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());

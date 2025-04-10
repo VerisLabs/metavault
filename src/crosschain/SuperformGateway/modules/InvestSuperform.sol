@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { GatewayBase } from "../common/GatewayBase.sol";
-
+import { IBridgeValidator } from "interfaces/Lib.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 import {
     MultiDstMultiVaultStateReq,
@@ -69,7 +69,14 @@ contract InvestSuperform is GatewayBase {
 
         if (!vault.isVaultListed(vaultObj.vaultAddress)) revert VaultNotListed();
 
-        uint256 amount = req.superformData.amount;
+        uint256 amount;
+
+        if (req.superformData.liqRequest.txData.length != 0) {
+            amount = IBridgeValidator(superRegistry.getBridgeValidator(req.superformData.liqRequest.bridgeId))
+                .decodeAmountIn(req.superformData.liqRequest.txData, false);
+        } else {
+            amount = req.superformData.amount;
+        }
 
         asset.safeTransferFrom(address(vault), address(this), amount);
 
@@ -109,7 +116,14 @@ contract InvestSuperform is GatewayBase {
             req.superformsData.receiverAddressSP = recoveryAddress;
             req.superformsData.receiverAddress = recoveryAddress;
 
-            uint256 amount = req.superformsData.amounts[i];
+            uint256 amount;
+
+            if (req.superformsData.liqRequests[i].txData.length != 0) {
+                amount = IBridgeValidator(superRegistry.getBridgeValidator(req.superformsData.liqRequests[i].bridgeId))
+                    .decodeAmountIn(req.superformsData.liqRequests[i].txData, false);
+            } else {
+                amount = req.superformsData.amounts[i];
+            }
 
             uint256 oldPendingAmount = pendingXChainInvests[superformId];
             pendingXChainInvests[superformId] += amount;
@@ -143,7 +157,14 @@ contract InvestSuperform is GatewayBase {
         if (req.superformsData.length == 0) revert InvalidAmount();
         for (uint256 i = 0; i < req.superformsData.length;) {
             uint256 superformId = req.superformsData[i].superformId;
-            uint256 amount = req.superformsData[i].amount;
+            uint256 amount;
+
+            if (req.superformsData[i].liqRequest.txData.length != 0) {
+                amount = IBridgeValidator(superRegistry.getBridgeValidator(req.superformsData[i].liqRequest.bridgeId))
+                    .decodeAmountIn(req.superformsData[i].liqRequest.txData, false);
+            } else {
+                amount = req.superformsData[i].amount;
+            }
 
             req.superformsData[i].receiverAddressSP = recoveryAddress;
             req.superformsData[i].receiverAddress = recoveryAddress;
@@ -193,7 +214,15 @@ contract InvestSuperform is GatewayBase {
             if (superformIds.length != amounts.length) revert TotalAmountMismatch();
             for (uint256 j = 0; j < superformIds.length; j++) {
                 uint256 superformId = superformIds[j];
-                uint256 amount = amounts[j];
+                uint256 amount;
+
+                if (req.superformsData[i].liqRequests[j].txData.length != 0) {
+                    amount = IBridgeValidator(
+                        superRegistry.getBridgeValidator(req.superformsData[i].liqRequests[j].bridgeId)
+                    ).decodeAmountIn(req.superformsData[i].liqRequests[j].txData, false);
+                } else {
+                    amount = amounts[j];
+                }
 
                 // Cant invest in a vault that is not in the portfolio
                 VaultData memory vaultObj = vault.getVault(superformId);

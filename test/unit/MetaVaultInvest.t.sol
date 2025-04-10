@@ -20,7 +20,7 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { AssetsManager, ERC7540Engine } from "modules/Lib.sol";
+import { AssetsManager, ERC7540Engine, MetaVaultAdmin } from "modules/Lib.sol";
 
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
@@ -64,6 +64,7 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
     ERC7540Engine engine;
     AssetsManager manager;
     ISuperformGateway public gateway;
+    MetaVaultAdmin admin;
     uint32 baseChainId = 8453;
 
     function _setUpTestEnvironment() private {
@@ -71,6 +72,11 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
         config.signerRelayer = relayer;
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+
+        admin = new MetaVaultAdmin();
+        bytes4[] memory adminSelectors = admin.selectors();
+        vault.addFunctions(adminSelectors, address(admin), false);
+
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
@@ -447,11 +453,11 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         MultiDstSingleVaultStateReq memory req = _buildInvestMultiXChainSingleVaultParams(superformIds, amounts);
 
-        uint256 shares = _previewDeposit(optimismChainId, vaultAddress_usdc, req.superformsData[0].amount);
-        uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, req.superformsData[1].amount);
+        uint256 shares = _previewDeposit(optimismChainId, vaultAddress_usdc, amounts[0]);
+        uint256 shares2 = _previewDeposit(polygonChainId, vaultAddress_usdc_pol, amounts[1]);
 
         vm.expectEmit(true, true, true, true);
-        emit Invest(1_919_785_055);
+        emit Invest(1200 * _1_USDCE);
 
         bytes32 multiVaultKey = _getMultiVaultPayloadKey(superformIds, amounts);
         uint256 nativeValue = multiChainDepositValues[multiVaultKey];
@@ -460,20 +466,20 @@ contract MetaVaultInvestTest is BaseVaultTest, SuperformActions, MetaVaultEvents
 
         vault.investMultiXChainSingleVault{ value: nativeValue }(req);
 
-        assertEq(USDCE_BASE.balanceOf(address(vault)), 80_214_945);
+        assertEq(USDCE_BASE.balanceOf(address(vault)), 800 * _1_USDCE);
         assertEq(vault.totalAssets(), 2000 * _1_USDCE);
         assertEq(vault.totalXChainAssets(), 0);
-        assertEq(vault.totalLocalAssets(), 80_214_945);
-        assertEq(vault.totalWithdrawableAssets(), 80_214_945);
+        assertEq(vault.totalLocalAssets(), 800 * _1_USDCE);
+        assertEq(vault.totalWithdrawableAssets(), 800 * _1_USDCE);
 
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc, shares);
         _mintSuperpositions(address(gateway.recoveryAddress()), superformId_usdc_pol, shares2);
 
-        assertEq(vault.totalAssets(), 1_999_999_318);
-        assertEq(vault.totalWithdrawableAssets(), 1_999_999_318);
-        assertEq(vault.totalXChainAssets(), 1_919_784_373);
-        assertEq(vault.totalLocalAssets(), 80_214_945);
-        assertEq(vault.totalIdle(), 80_214_945);
+        assertApproxEq(vault.totalAssets(), 2000 * _1_USDCE, 500);
+        assertApproxEq(vault.totalWithdrawableAssets(), 2000 * _1_USDCE, 500);
+        assertApproxEq(vault.totalXChainAssets(), 1200 * _1_USDCE, 500);
+        assertEq(vault.totalLocalAssets(), 800 * _1_USDCE);
+        assertEq(vault.totalIdle(), 800 * _1_USDCE);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc), shares);
         assertEq(config.superPositions.balanceOf(address(vault), superformId_usdc_pol), shares2);
     }

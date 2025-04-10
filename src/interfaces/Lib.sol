@@ -11,6 +11,8 @@ import { IHurdleRateOracle } from "./IHurdleRateOracle.sol";
 import { IMetaVault } from "./IMetaVault.sol";
 import { ISuperPositions } from "./ISuperPositions.sol";
 
+import { IBridgeValidator } from "./IBridgeValidator.sol";
 import { ISuperPositionsReceiver } from "./ISuperPositionsReceiver.sol";
+import { ISuperRegistry } from "./ISuperRegistry.sol";
 import { ISuperformFactory } from "./ISuperformFactory.sol";
 import { ISuperformGateway } from "./ISuperformGateway.sol";

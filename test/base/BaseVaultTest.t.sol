@@ -14,6 +14,7 @@ import {
     IMetaVault,
     ISharePriceOracle,
     ISuperPositions,
+    ISuperRegistry,
     ISuperformFactory,
     ISuperformGateway
 } from "interfaces/Lib.sol";
@@ -27,6 +28,8 @@ import {
     SUPERFORM_FACTORY_POLYGON,
     SUPERFORM_ROUTER_BASE,
     SUPERFORM_ROUTER_POLYGON,
+    SUPERFORM_SUPEREGISTRY_BASE,
+    SUPERFORM_SUPEREGISTRY_POLYGON,
     SUPERFORM_SUPERPOSITIONS_BASE,
     SUPERFORM_SUPERPOSITIONS_POLYGON,
     USDCE_BASE,
@@ -80,6 +83,7 @@ contract BaseVaultTest is BaseTest {
             IMetaVault(vault),
             IBaseRouter(SUPERFORM_ROUTER_POLYGON),
             ISuperPositions(SUPERFORM_SUPERPOSITIONS_POLYGON),
+            ISuperRegistry(SUPERFORM_SUPEREGISTRY_POLYGON),
             users.alice
         );
         bytes4[] memory investSelectors = invest.selectors();
@@ -102,6 +106,7 @@ contract BaseVaultTest is BaseTest {
             IMetaVault(vault),
             IBaseRouter(SUPERFORM_ROUTER_BASE),
             ISuperPositions(SUPERFORM_SUPERPOSITIONS_BASE),
+            ISuperRegistry(SUPERFORM_SUPEREGISTRY_BASE),
             users.alice
         );
         bytes4[] memory investSelectors = invest.selectors();
