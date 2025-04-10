@@ -31,7 +31,7 @@ import {
     SingleXChainSingleVaultWithdraw
 } from "src/types/Lib.sol";
 
-import { ERC7540Engine } from "modules/Lib.sol";
+import { ERC7540Engine, MetaVaultAdmin } from "modules/Lib.sol";
 
 contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     using SafeTransferLib for address;
@@ -42,6 +42,7 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
     uint24 sharesLockTime = 30 days;
     address treasury = makeAddr("treasury");
     ERC7540Engine engine;
+    MetaVaultAdmin admin;
 
     function setUp() public {
         super._setUp("POLYGON", 68_186_888);
@@ -50,9 +51,11 @@ contract ERC7540PropertiesTest is BaseVaultTest, ERC7540Events, ERC4626Events {
         factory = ISuperformFactory(SUPERFORM_FACTORY_POLYGON);
         config = polygonUsdceVaultConfig();
         vault = IMetaVault(address(new MetaVault(config)));
-        engine = new ERC7540Engine();
+        admin = new MetaVaultAdmin();
+        vault.addFunctions(admin.selectors(), address(admin), false);
         ISuperformGateway gateway = deployGatewayPolygon(address(vault), users.alice);
         vault.setGateway(address(gateway));
+        engine = new ERC7540Engine();
         vault.addFunctions(engine.selectors(), address(engine), false);
         USDCE_POLYGON.safeApprove(address(vault), type(uint256).max);
         vault.grantRoles(users.alice, vault.RELAYER_ROLE());

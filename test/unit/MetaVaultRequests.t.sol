@@ -21,7 +21,9 @@ import { LibString } from "solady/utils/LibString.sol";
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 import { MetaVaultWrapper } from "../helpers/mock/MetaVaultWrapper.sol";
-import { AssetsManager, ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures } from "modules/Lib.sol";
+import {
+    AssetsManager, ERC7540Engine, ERC7540EngineReader, ERC7540EngineSignatures, MetaVaultAdmin
+} from "modules/Lib.sol";
 import { ERC4626 } from "solady/tokens/ERC4626.sol";
 import { MetaVault } from "src/MetaVault.sol";
 
@@ -70,6 +72,7 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
     ERC7540Engine engine;
     ERC7540EngineSignatures engineSignatures;
     AssetsManager manager;
+    MetaVaultAdmin admin;
     ISuperformGateway public gateway;
     uint32 baseChainId = 8453;
 
@@ -79,6 +82,11 @@ contract MetaVaultRequestsTest is BaseVaultTest, SuperformActions, MetaVaultEven
 
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
+
+        admin = new MetaVaultAdmin();
+        bytes4[] memory adminSelectors = admin.selectors();
+        vault.addFunctions(adminSelectors, address(admin), false);
+
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 

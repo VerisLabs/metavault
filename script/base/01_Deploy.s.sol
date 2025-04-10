@@ -29,6 +29,7 @@ import {
     ERC7540EngineReader,
     ERC7540EngineSignatures,
     EmergencyAssetsManager,
+    MetaVaultAdmin,
     MetaVaultReader
 } from "modules/Lib.sol";
 import { MetaVault } from "src/MetaVault.sol";
@@ -43,8 +44,8 @@ contract DeployScript is Script {
     ERC7540EngineSignatures public engineSignatures;
     AssetsManager public assetManager;
     EmergencyAssetsManager public emergencyAssetsManager;
-
     MetaVaultReader public metaVaultReader;
+    MetaVaultAdmin public metaVaultAdmin;
 
     uint256 deployerPrivateKey;
     address hurdleRateOracleAddress;
@@ -140,41 +141,6 @@ contract DeployScript is Script {
         console2.log("   Using Router:", SUPERFORM_ROUTER_BASE);
 
         console2.log("-------------------------------------------------------");
-        console2.log("Adding function selectors to SuperformGateway...");
-
-        console2.log("1. Adding InvestSuperform functions...");
-        bytes4[] memory investSelectors = invest.selectors();
-        console2.log("   Number of selectors:", investSelectors.length);
-        for (uint256 i = 0; i < investSelectors.length; i++) {
-            console2.log("   - Selector:", uint32(investSelectors[i]));
-        }
-        _gateway.addFunctions(investSelectors, address(invest), false);
-        console2.log("   InvestSuperform functions added successfully");
-
-        console2.log("2. Adding DivestSuperform functions...");
-        bytes4[] memory divestSelectors = divest.selectors();
-        console2.log("   Number of selectors:", divestSelectors.length);
-        for (uint256 i = 0; i < divestSelectors.length; i++) {
-            console2.log("   - Selector:", uint32(divestSelectors[i]));
-        }
-        _gateway.addFunctions(divestSelectors, address(divest), false);
-        console2.log("   DivestSuperform functions added successfully");
-
-        console2.log("3. Adding LiquidateSuperform functions...");
-        bytes4[] memory liquidateSelectors = liquidate.selectors();
-        console2.log("   Number of selectors:", liquidateSelectors.length);
-        for (uint256 i = 0; i < liquidateSelectors.length; i++) {
-            console2.log("   - Selector:", uint32(liquidateSelectors[i]));
-        }
-        _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
-        console2.log("   LiquidateSuperform functions added successfully");
-
-        console2.log("-------------------------------------------------------");
-        console2.log("Setting gateway in MetaVault...");
-        vault.setGateway(address(gateway));
-        console2.log("Gateway set successfully in MetaVault");
-
-        console2.log("-------------------------------------------------------");
         console2.log("Deploying and adding vault modules...");
 
         console2.log("1. Deploying ERC7540Engine...");
@@ -224,6 +190,49 @@ contract DeployScript is Script {
         console2.log("   Number of selectors:", metaVaultReaderSelectors.length);
         vault.addFunctions(metaVaultReaderSelectors, address(metaVaultReader), false);
         console2.log("   MetaVaultReader functions added to vault");
+
+        console2.log("7. Deploying MetaVaultAdmin...");
+        metaVaultAdmin = new MetaVaultAdmin();
+        bytes4[] memory metaVaultAdminSelectors = metaVaultAdmin.selectors();
+        console2.log("   MetaVaultAdmin deployed at:", address(metaVaultAdmin));
+        console2.log("   Number of selectors:", metaVaultAdminSelectors.length);
+        vault.addFunctions(metaVaultAdminSelectors, address(metaVaultAdmin), false);
+        console2.log("   MetaVaultAdmin functions added to vault");
+
+        console2.log("-------------------------------------------------------");
+        console2.log("Setting gateway in MetaVault...");
+        vault.setGateway(address(gateway));
+        console2.log("Gateway set successfully in MetaVault");
+
+          console2.log("-------------------------------------------------------");
+        console2.log("Adding function selectors to SuperformGateway...");
+
+        console2.log("1. Adding InvestSuperform functions...");
+        bytes4[] memory investSelectors = invest.selectors();
+        console2.log("   Number of selectors:", investSelectors.length);
+        for (uint256 i = 0; i < investSelectors.length; i++) {
+            console2.log("   - Selector:", uint32(investSelectors[i]));
+        }
+        _gateway.addFunctions(investSelectors, address(invest), false);
+        console2.log("   InvestSuperform functions added successfully");
+
+        console2.log("2. Adding DivestSuperform functions...");
+        bytes4[] memory divestSelectors = divest.selectors();
+        console2.log("   Number of selectors:", divestSelectors.length);
+        for (uint256 i = 0; i < divestSelectors.length; i++) {
+            console2.log("   - Selector:", uint32(divestSelectors[i]));
+        }
+        _gateway.addFunctions(divestSelectors, address(divest), false);
+        console2.log("   DivestSuperform functions added successfully");
+
+        console2.log("3. Adding LiquidateSuperform functions...");
+        bytes4[] memory liquidateSelectors = liquidate.selectors();
+        console2.log("   Number of selectors:", liquidateSelectors.length);
+        for (uint256 i = 0; i < liquidateSelectors.length; i++) {
+            console2.log("   - Selector:", uint32(liquidateSelectors[i]));
+        }
+        _gateway.addFunctions(liquidateSelectors, address(liquidate), false);
+        console2.log("   LiquidateSuperform functions added successfully");
 
         console2.log("-------------------------------------------------------");
         console2.log("Setting up roles...");
