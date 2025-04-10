@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import { IBaseRouter } from "./IBaseRouter.sol";
-
+import { IERC20 } from "./IERC20.sol";
 import { IERC4626 } from "./IERC4626.sol";
 
 import { ISharePriceOracle, VaultReport } from "./ISharePriceOracle.sol";

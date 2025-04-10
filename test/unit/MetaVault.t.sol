@@ -76,7 +76,7 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         admin = new MetaVaultAdmin();
         bytes4[] memory adminSelectors = admin.selectors();
         vault.addFunctions(adminSelectors, address(admin), false);
-        
+
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
@@ -87,7 +87,6 @@ contract MetaVaultTest is BaseVaultTest, SuperformActions, MetaVaultEvents {
         manager = new AssetsManager();
         bytes4[] memory managerSelectors = manager.selectors();
         vault.addFunctions(managerSelectors, address(manager), false);
-
 
         oracle = new MockERC4626Oracle();
         vault.grantRoles(users.alice, vault.MANAGER_ROLE());

@@ -5,7 +5,7 @@ import { SuperPositionsReceiverWrapper } from "../helpers/mock/SuperPositionsRec
 import { IERC1155A } from "src/interfaces/IERC1155A.sol";
 
 import { BaseVaultTest } from "../base/BaseVaultTest.t.sol";
-import {MetaVaultAdmin} from "src/modules/Lib.sol";
+import { MetaVaultAdmin } from "src/modules/Lib.sol";
 
 import { SuperPositionsReceiverEvents } from "../helpers/SuperPositionsReceiverEvents.sol";
 import { DAI_BASE, USDCE_BASE, _1_USDCE } from "../helpers/Tokens.sol";
@@ -42,7 +42,7 @@ contract SuperPositionsReceiverTest is BaseVaultTest, SuperPositionsReceiverEven
         config.signerRelayer = relayer;
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         admin = new MetaVaultAdmin();
-        vault.addFunctions(admin.selectors(), address(admin),false);
+        vault.addFunctions(admin.selectors(), address(admin), false);
         gateway = deployGatewayBase(address(vault), users.alice);
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());

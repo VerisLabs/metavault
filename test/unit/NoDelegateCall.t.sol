@@ -43,6 +43,8 @@ import {
 } from "src/helpers/AddressBook.sol";
 
 import { NoDelegateCall } from "src/lib/Lib.sol";
+
+import { MetaVaultAdmin } from "src/modules/Lib.sol";
 import {
     LiqRequest,
     MultiDstMultiVaultStateReq,
@@ -53,7 +55,6 @@ import {
     SingleXChainSingleVaultStateReq,
     VaultReport
 } from "src/types/Lib.sol";
-import {MetaVaultAdmin} from "src/modules/Lib.sol";
 
 contract MetaVaultInvestTest is BaseVaultTest {
     using SafeTransferLib for address;
@@ -71,7 +72,7 @@ contract MetaVaultInvestTest is BaseVaultTest {
         vault = IMetaVault(address(new MetaVaultWrapper(config)));
         gateway = deployGatewayBase(address(vault), users.alice);
         admin = new MetaVaultAdmin();
-        vault.addFunctions(admin.selectors(), address(admin),false);
+        vault.addFunctions(admin.selectors(), address(admin), false);
         vault.setGateway(address(gateway));
         gateway.grantRoles(users.alice, gateway.RELAYER_ROLE());
 
