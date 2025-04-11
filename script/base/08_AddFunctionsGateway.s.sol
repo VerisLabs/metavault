@@ -15,11 +15,16 @@ contract AddFunctionsScript is Script {
     ISuperformGateway public gateway;
 
     function run() public {
+        console2.log("Starting gateway function addition process...");
+
         adminPrivateKey = vm.envUint("ADMIN_PRIVATE_KEY");
         gateway = ISuperformGateway(payable(vm.envAddress("SUPERFORM_GATEWAY_ADDRESS")));
 
+        console2.log("Adding functions to Gateway at:", address(gateway));
+
         vm.startBroadcast(adminPrivateKey);
 
+        console2.log("Deploying new Superform modules...");
         InvestSuperform invest = new InvestSuperform();
         DivestSuperform divest = new DivestSuperform();
         LiquidateSuperform liquidate = new LiquidateSuperform();
@@ -28,13 +33,33 @@ contract AddFunctionsScript is Script {
         bytes4[] memory divestSelectors = divest.selectors();
         bytes4[] memory liquidateSelectors = liquidate.selectors();
 
+        console2.log("Adding InvestSuperform functions...");
+        console2.log("Number of selectors:", investSelectors.length);
+        for (uint256 i = 0; i < investSelectors.length; i++) {
+            console2.log(" - Selector:", uint32(investSelectors[i]));
+        }
         gateway.addFunctions(investSelectors, address(invest), false);
-        gateway.addFunctions(divestSelectors, address(divest), false);
-        gateway.addFunctions(liquidateSelectors, address(liquidate), false);
+        console2.log("InvestSuperform functions added successfully");
 
-        console2.log("InvestSuperform address: ", address(invest));
-        console2.log("DivestSuperform address: ", address(divest));
-        console2.log("LiquidateSuperform address: ", address(liquidate));
+        console2.log("Adding DivestSuperform functions...");
+        console2.log("Number of selectors:", divestSelectors.length);
+        for (uint256 i = 0; i < divestSelectors.length; i++) {
+            console2.log(" - Selector:", uint32(divestSelectors[i]));
+        }
+        gateway.addFunctions(divestSelectors, address(divest), false);
+        console2.log("DivestSuperform functions added successfully");
+
+        console2.log("Adding LiquidateSuperform functions...");
+        console2.log("Number of selectors:", liquidateSelectors.length);
+        for (uint256 i = 0; i < liquidateSelectors.length; i++) {
+            console2.log(" - Selector:", uint32(liquidateSelectors[i]));
+        }
+        gateway.addFunctions(liquidateSelectors, address(liquidate), false);
+        console2.log("LiquidateSuperform functions added successfully");
+
+        console2.log("InvestSuperform deployed at:", address(invest));
+        console2.log("DivestSuperform deployed at:", address(divest));
+        console2.log("LiquidateSuperform deployed at:", address(liquidate));
 
         vm.stopBroadcast();
     }
