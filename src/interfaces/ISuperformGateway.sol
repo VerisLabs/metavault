@@ -40,7 +40,10 @@ interface ISuperformGateway {
 
     function balanceOf(address account, uint256 superformId) external view returns (uint256);
 
-    function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req) external payable;
+    function investSingleXChainSingleVault(SingleXChainSingleVaultStateReq calldata req)
+        external
+        payable
+        returns (uint256 amount);
 
     function investSingleXChainMultiVault(SingleXChainMultiVaultStateReq calldata req)
         external
